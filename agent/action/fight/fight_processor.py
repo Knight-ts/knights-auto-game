@@ -532,6 +532,16 @@ def process_single_month(context: Context) -> bool:
         return False
     EnableGrothTrial = context.get_node_data("Flag_GrowthTrialMode").get("enabled")
     if EnableGrothTrial:
+        month = check_current_month(context)
+        if month is None:
+            logger.error("成长试炼模式无法识别当前月份")
+            return False
+        if not handle_festival_by_month(context, month):
+            logger.error(f"成长试炼模式下 {month} 月节日处理失败")
+            return False
+        if not fight_utils.ensure_at_bigmap(context):
+            logger.error("节日结束后无法回到大地图界面")
+            return False
         logger.info("成长试炼模式已开启：执行 GrowthTrial_Start")
         growth_result = context.run_task("GrowthTrial_Start")
         if not fight_utils._task_succeeded(growth_result):

@@ -687,10 +687,24 @@ class ChildRec(CustomAction):
         # 7. 非好苗子或好苗子但关闭弹窗，自动输入命名
         delay = perf["step_delay_ms"]
         timeout = perf["timeout_ms"]
+        step_started = time.time()
         context.run_task(
             "BackButton_500ms",
             pipeline_override={"BackButton_500ms": {"post_delay": delay, "timeout": timeout}},
         )
+        logger.info(f"返回出生页耗时 {time.time() - step_started:.1f}s")
+
+        # 详情页的返回键不一定回到出生页，没看到名字输入框就补按一次系统返回键
+        img = context.tasker.controller.post_screencap().wait().get()
+        if not context.run_recognition("PannelChildSetName", img).hit:
+            logger.warning("未看到名字输入框，按一次返回键重试")
+            try:
+                context.tasker.controller.post_click_key(4).wait()
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(0.5)
+
+        step_started = time.time()
         context.run_task(
             "PannelChildSetName",
             pipeline_override={
@@ -703,10 +717,15 @@ class ChildRec(CustomAction):
                 "PannelChildSetNameConfirm": {"post_delay": delay, "timeout": timeout},
             },
         )
+        logger.info(f"输入并确认名字耗时 {time.time() - step_started:.1f}s")
 
         # 8.识别是否无效
         if context.run_recognition("CheckNameInvalid",context.tasker.controller.post_screencap().wait().get()):
             context.run_task("CheckNameInvalid")
+
+        img = context.tasker.controller.post_screencap().wait().get()
+        if context.run_recognition("Event_MercenaryBaby", img).hit:
+            logger.warning("改名后出生页仍在，可能输入未生效")
 
         logger.info(f"孩子命名流程耗时 {time.time() - started:.1f}s")
         return CustomAction.RunResult(success=True)
