@@ -81,7 +81,7 @@
                 "- 开启3月启航节购买：3月启航节是否自动进入节日页面并购买物品",
                 "- 开启好娃提醒：检测到优质子女时弹窗提醒并暂停任务",
                 "- 开启生娃自动起名：佣兵生娃事件后是否自动识别属性并起名（关闭则保留游戏默认名字，不做属性识别）",
-                "- 开启自动接受佣兵：佣兵申请加入时是否自动接受（关闭则直接拒绝）",
+                "- 开启自动接受佣兵：佣兵申请加入时全部接受 / 智能接受（按名字规则）/ 直接拒绝",
                 "- 选择刷取任务国家：设置年度任务执行的目标城市（选择'暮角城成长试炼'可启动特殊战斗任务流程）",
                 "- 选择成长试炼难度：成长试炼的难度等级（仅在'暮角城成长试炼'模式下生效）",
                 "- 相亲模式：姓名相亲（按血统匹配姓名）/ 聊天相亲（按特性匹配） 标记星星的不相亲",
@@ -369,13 +369,30 @@
             "default_case": "Yes"
         },
         "开启自动接受佣兵": {
-            "type": "switch",
-            "description": "是否自动接受加入的佣兵（关闭则直接拒绝）",
+            "type": "select",
+            "description": "自动接受加入的佣兵：全部接受 / 智能接受（按名字规则） / 不自动接受",
             "cases": [
                 {
-                    "name": "Yes",
-                    "description": "自动接受：直接点确认",
+                    "name": "No",
+                    "description": "不自动接受：直接点取消",
                     "pipeline_override": {
+                        "Flag_SmartMercenary": {
+                            "enabled": false
+                        },
+                        "Event_MercenaryJoin": {
+                            "next": [
+                                "Event_MercenaryJoinCancel"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Yes",
+                    "description": "全部接受：直接点招募",
+                    "pipeline_override": {
+                        "Flag_SmartMercenary": {
+                            "enabled": false
+                        },
                         "Event_MercenaryJoin": {
                             "next": [
                                 "Event_MercenaryJoinConfirm"
@@ -384,9 +401,12 @@
                     }
                 },
                 {
-                    "name": "No",
-                    "description": "自动拒绝：直接点取消",
+                    "name": "智能",
+                    "description": "智能接受：佣兵名字命中 table/mercenary_rules.json 才接受",
                     "pipeline_override": {
+                        "Flag_SmartMercenary": {
+                            "enabled": true
+                        },
                         "Event_MercenaryJoin": {
                             "next": [
                                 "Event_MercenaryJoinCancel"

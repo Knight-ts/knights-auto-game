@@ -22,6 +22,7 @@
     <button data-tab="logs">日志</button>
     <button data-tab="alerts">好娃提醒</button>
     <button data-tab="records">孩子记录</button>
+    <button data-tab="mercs">佣兵记录</button>
     <button data-tab="notify">通知</button>
   </nav>
 </header>
@@ -45,6 +46,7 @@
         <div class="kv"><span>资源</span><span id="homeResource">-</span></div>
         <div class="kv"><span>Agent</span><span id="homeAgent">-</span></div>
         <div class="kv"><span>任务</span><span id="homeTask">空闲</span></div>
+        <div class="kv"><span>游戏时间</span><span id="homeGameTime">-</span></div>
         <div class="row" style="margin-top:10px">
           <button class="btn" id="btnAgentStart">启动 Agent</button>
           <button class="btn danger" id="btnAgentStop">停止 Agent</button>
@@ -168,6 +170,39 @@
           <tr><th>时间</th><th>序号</th><th>名字</th><th>血脉</th><th>特性</th><th>好娃提醒</th><th>匹配条件</th><th>招募状态</th><th></th></tr>
         </thead>
         <tbody id="recordBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 佣兵记录 -->
+  <section id="tab-mercs" class="hidden">
+    <div class="card" style="margin-bottom:14px">
+      <div class="row">
+        <span>智能接受规则</span>
+        <select id="mercMode">
+          <option value="whitelist">白名单（名字命中才接受）</option>
+          <option value="blacklist">黑名单（名字命中则拒绝）</option>
+        </select>
+        <button class="btn primary" id="btnMercSave">保存</button>
+        <span class="hint" id="mercHint"></span>
+      </div>
+      <div style="margin-top:8px">
+        <textarea id="mercNames" placeholder="每行一个名字关键字，例如：&#10;卡尔&#10;塞尔"></textarea>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        任务里「开启自动接受佣兵」选“智能”后生效；名字 OCR 区域在 table/mercenary_rules.json 的 name_roi，可手动校准。
+      </div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <button class="btn" id="btnMercReload">刷新</button>
+        <span class="hint">记录写入 table/mercenary_records.csv；游戏年月来自 table/game_state.json</span>
+      </div>
+      <table style="margin-top:10px">
+        <thead>
+          <tr><th>时间</th><th>游戏年</th><th>游戏月</th><th>佣兵名字</th><th>结果</th><th>规则</th><th>备注</th></tr>
+        </thead>
+        <tbody id="mercBody"></tbody>
       </table>
     </div>
   </section>

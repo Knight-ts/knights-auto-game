@@ -44,6 +44,9 @@ alert_store = _load_module(
 child_records = _load_module("child_records", ROOT / "agent" / "utils" / "child_records.py")
 notifier = _load_module("notifier", ROOT / "agent" / "utils" / "notifier.py")
 child_perf = _load_module("child_perf", ROOT / "agent" / "utils" / "child_perf.py")
+mercenary_records = _load_module("mercenary_records", ROOT / "agent" / "utils" / "mercenary_records.py")
+mercenary_rules = _load_module("mercenary_rules", ROOT / "agent" / "utils" / "mercenary_rules.py")
+game_state = _load_module("game_state", ROOT / "agent" / "utils" / "game_state.py")
 
 runtime = Runtime()
 
@@ -143,6 +146,7 @@ class Handler(BaseHTTPRequestHandler):
                 state = runtime.status()
                 state["devices"] = runtime.list_devices()
                 state["config"] = load_config()
+                state["game"] = game_state.load()
                 self._json(200, state)
             elif path == "/api/tasks":
                 self._json(200, runtime.tasks())
@@ -155,6 +159,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, alert_store.load_state(ROOT))
             elif path == "/api/records":
                 self._json(200, {"records": child_records.recent(100)})
+            elif path == "/api/mercenary-records":
+                self._json(200, {"records": mercenary_records.recent(200)})
+            elif path == "/api/mercenary-rules":
+                self._json(200, mercenary_rules.load())
             elif path == "/api/child-name-config":
                 self._json(
                     200,
@@ -236,6 +244,14 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(400, {"ok": False, "error": str(exc)})
                 else:
                     self._json(200, {"ok": True, "speed": speed})
+            elif path == "/api/mercenary-rules/save":
+                rules = mercenary_rules.load()
+                if payload.get("mode") in ("whitelist", "blacklist"):
+                    rules["mode"] = payload["mode"]
+                if isinstance(payload.get("names"), list):
+                    rules["names"] = payload["names"]
+                saved = mercenary_rules.save(rules)
+                self._json(200, {"ok": True, "rules": saved})
             elif path == "/api/notify/save":
                 config = save_notify_config(payload)
                 effective = notifier.effective_webhook()

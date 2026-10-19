@@ -86,6 +86,9 @@
     "Flag_GrowthTrialMode": {
         "enabled": false
     },
+    "Flag_SmartMercenary": {
+        "enabled": false
+    },
     "Auto_WeddingTask": {
         "recognition": "DirectHit",
         "action": "Custom",

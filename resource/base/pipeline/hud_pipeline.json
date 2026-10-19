@@ -67,5 +67,18 @@
             120
         ],
         "timeout": 2000
+    },
+    "HUD_Year": {
+        "recognition": "OCR",
+        "expected": [
+            "[0-9]{4}"
+        ],
+        "roi": [
+            180,
+            0,
+            360,
+            60
+        ],
+        "timeout": 2000
     }
 }

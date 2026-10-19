@@ -319,7 +319,12 @@ def detect_and_manage_event(context: Context, screenshot) -> str:
     """检测事件类型"""
     if context.run_recognition("Event_MercenaryJoin", screenshot).hit:
         logger.info("检测到佣兵加入事件")
-        context.run_task("Event_MercenaryJoin")
+        if context.get_node_data("Flag_SmartMercenary").get("enabled"):
+            from utils.mercenary import handle_join
+
+            handle_join(context, screenshot)
+        else:
+            context.run_task("Event_MercenaryJoin")
         return "mercenary_join"
     elif context.run_recognition("Event_MercenaryBaby", screenshot).hit:
         logger.info("检测到佣兵生娃事件")

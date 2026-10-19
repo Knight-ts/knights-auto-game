@@ -29,6 +29,19 @@
         "post_delay": 500,
         "timeout": 2000
     },
+    "Event_MercenaryName": {
+        "recognition": "OCR",
+        "expected": [
+            "[一-龥·]{2,5}"
+        ],
+        "roi": [
+            80,
+            300,
+            560,
+            420
+        ],
+        "timeout": 2000
+    },
     "Event_MercenaryJoinConfirm": {
         "recognition": "OCR",
         "expected": "招募",

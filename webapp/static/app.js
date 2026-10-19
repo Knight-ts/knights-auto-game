@@ -44,7 +44,7 @@ function banner(kind, lines) {
 function switchTab(name) {
   state.activeTab = name;
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  ["home", "tasks", "shot", "logs", "alerts", "records", "notify"].forEach((tab) => {
+  ["home", "tasks", "shot", "logs", "alerts", "records", "mercs", "notify"].forEach((tab) => {
     $("tab-" + tab).classList.toggle("hidden", tab !== name);
   });
   clearInterval(timers.shot);
@@ -57,6 +57,7 @@ function switchTab(name) {
     loadChildSpeed();
   }
   if (name === "records") loadRecords();
+  if (name === "mercs") { loadMercRules(); loadMercRecords(); }
   if (name === "notify") loadNotify();
 }
 
@@ -82,6 +83,8 @@ async function refreshState() {
     $("chip-task").textContent = "任务：" + (task.state === "running" ? (task.name || "进行中") : task.state === "failed" ? "失败" : task.state === "done" ? "已完成" : "空闲");
     $("chip-task").className = "chip " + (task.state === "running" ? "warn" : task.state === "failed" ? "bad" : task.state === "done" ? "ok" : "");
     $("homeTask").textContent = task.name ? `${task.name}（${task.state}）` : "空闲";
+    const game = data.game || {};
+    $("homeGameTime").textContent = game.year ? `${game.year}年${game.month || "?"}月` : "未识别";
     $("homeState").textContent = connected ? (task.state === "running" ? "任务运行中" : "已就绪") : "未连接设备";
     $("homeState").className = "big " + (connected ? "ok" : "bad");
     $("homeResource").textContent = data.resource ? "已加载" : "未加载";
@@ -601,6 +604,51 @@ async function saveChildSpeed() {
   }
 }
 
+/* ------------------------------------------------------------ 佣兵记录 */
+
+async function loadMercRules() {
+  try {
+    const rules = await api("/api/mercenary-rules");
+    $("mercMode").value = rules.mode || "whitelist";
+    $("mercNames").value = (rules.names || []).join("\n");
+    $("mercHint").textContent =
+      `当前：${rules.mode === "blacklist" ? "黑名单" : "白名单"}，${(rules.names || []).length} 个关键字`;
+  } catch (error) {
+    $("mercHint").textContent = "读取失败：" + error.message;
+  }
+}
+
+async function saveMercRules() {
+  try {
+    const names = $("mercNames").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    const data = await post("/api/mercenary-rules/save", { mode: $("mercMode").value, names });
+    $("mercHint").textContent = `已保存：${data.rules.names.length} 个关键字`;
+    banner("ok", ["佣兵规则已保存"]);
+  } catch (error) {
+    banner("err", ["保存失败：" + error.message]);
+  }
+}
+
+async function loadMercRecords() {
+  try {
+    const data = await api("/api/mercenary-records");
+    const rows = (data.records || []).slice().reverse();
+    $("mercBody").innerHTML = rows.length
+      ? rows.map((r) => `<tr>
+          <td class="mono">${esc(r["时间"])}</td>
+          <td>${esc(r["游戏年"])}</td>
+          <td>${esc(r["游戏月"])}</td>
+          <td>${esc(r["佣兵名字"])}</td>
+          <td class="${r["结果"] === "接受" ? "ok" : "bad"}">${esc(r["结果"])}</td>
+          <td>${esc(r["匹配规则"])}</td>
+          <td>${esc(r["备注"])}</td>
+        </tr>`).join("")
+      : '<tr><td colspan="7" class="empty">还没有佣兵记录</td></tr>';
+  } catch (error) {
+    banner("err", ["读取佣兵记录失败：" + error.message]);
+  }
+}
+
 /* ------------------------------------------------------------ 事件绑定 */
 
 document.getElementById("tabs").addEventListener("click", (e) => {
@@ -630,6 +678,8 @@ $("btnChildSpeedSave").addEventListener("click", saveChildSpeed);
 $("btnAlertSave").addEventListener("click", saveAlerts);
 $("btnAlertAdd").addEventListener("click", () => { state.alerts.push(emptyAlert(state.alerts.length)); renderAlerts(); });
 $("btnRecordReload").addEventListener("click", loadRecords);
+$("btnMercSave").addEventListener("click", saveMercRules);
+$("btnMercReload").addEventListener("click", loadMercRecords);
 $("btnNotifySave").addEventListener("click", saveNotify);
 $("btnNotifyTest").addEventListener("click", testNotify);
 

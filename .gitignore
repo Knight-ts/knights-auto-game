@@ -16,6 +16,8 @@ config/config.json
 config/webapp.json
 config/instances/
 table/child_records.*
+table/mercenary_records.*
+table/game_state.json
 *.bak
 
 # 打包产物

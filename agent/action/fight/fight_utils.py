@@ -1,10 +1,12 @@
 from maa.agent.agent_server import AgentServer
 from maa.context import Context
 from maa.custom_action import CustomAction
+import re
 import time
 from typing import Any, Optional, Set
 
 from utils import logger
+from utils.game_state import update as update_game_state
 from action.zshg.battle_world_map import BattleSessionRegistry, session_key
 from action.zshg.task_hud_recognizer import TaskHudRecognizer
 
@@ -42,9 +44,25 @@ def Map_CheckCurrentMonth(context: Context) -> int:
     if candidates:
         score, month = max(candidates)
         logger.info(f"当前游戏月份为：{month}月 (模板得分={score:.3f})")
+        year = _read_game_year(context, screenshot)
+        state = update_game_state(year=year, month=month)
+        logger.info(f"当前游戏时间：{state['year']}年{state['month']}月")
         return month
     logger.error("未识别到当前游戏月份")
     return -1
+
+
+def _read_game_year(context: Context, screenshot) -> int:
+    """从大地图顶部 OCR 年份（C.E.1790），失败返回 0。"""
+    try:
+        detail = context.run_recognition("HUD_Year", screenshot)
+        if not detail.hit or detail.best_result is None:
+            return 0
+        match = re.search(r"(\d{4})", detail.best_result.text or "")
+        return int(match.group(1)) if match else 0
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"识别游戏年份失败：{exc}")
+        return 0
 
 
 def ensure_at_bigmap(

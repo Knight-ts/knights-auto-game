@@ -4,6 +4,7 @@ from maa.context import Context
 from maa.custom_action import CustomAction
 from utils import logger
 from utils.child_records import append_record
+from utils.game_state import year_month
 from utils.notifier import notify
 
 import re
@@ -504,6 +505,7 @@ class ChildRec(CustomAction):
         values = dict(self.potential.values) if self.potential else {}
         bloodlines = dict(self.bloodline.bloodlines) if self.bloodline else {}
         feature_names = [feature.name for feature in self.features] if self.features else []
+        game_year, game_month = year_month()
 
         record = {
             "时间": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -522,6 +524,8 @@ class ChildRec(CustomAction):
             "匹配条件": condition_name or "",
             # 出生时无法判断是否被招募，留给人/后续流程填写
             "招募状态": "未记录",
+            "游戏年": game_year or "",
+            "游戏月": game_month or "",
         }
 
         try:

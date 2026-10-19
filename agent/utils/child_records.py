@@ -29,6 +29,8 @@ HEADERS = [
     "好娃提醒",
     "匹配条件",
     "招募状态",
+    "游戏年",
+    "游戏月",
 ]
 
 TABLE_DIR = Path("table")
@@ -36,7 +38,7 @@ JSONL_PATH = TABLE_DIR / "child_records.jsonl"
 XLSX_PATH = TABLE_DIR / "child_records.xlsx"
 CSV_PATH = TABLE_DIR / "child_records.csv"
 
-_COL_WIDTHS = [20, 10, 18, 10, 8, 8, 8, 8, 8, 8, 28, 32, 10, 18, 12]
+_COL_WIDTHS = [20, 10, 18, 10, 8, 8, 8, 8, 8, 8, 28, 32, 10, 18, 12, 8, 6]
 
 
 # ---------------------------------------------------------------- 读写
