@@ -60,6 +60,18 @@ UPSTREAM.md      来源、上游与第三方说明
 - table/notify_config.json：平台推送；默认关闭，webhook 留空时复用 config/config.json 的飞书地址
 - config/webapp.json：上次设备 / 任务 / 选项（自动生成，不要提交）
 
+## 孩子命名速度（可调）
+
+网页「好娃提醒 → 孩子命名速度」或 `table/child_name_config.json`：
+
+| 档位 | 特性滑动上限 | 步骤等待 | 适用 |
+|---|---|---|---|
+| fast | 2 | 200 ms | 最快，可能漏掉需要滑动的特性 |
+| normal | 5 | 500 ms | 默认 |
+| slow | 8 | 800 ms | 模拟器卡顿/识别不稳时 |
+
+日志会打印每步耗时：`角色信息识别耗时 X.Xs`、`孩子命名流程耗时 X.Xs`。
+
 ## 二次开发
 
 - webapp/runtime.py：ADB 控制器、资源、Tasker、Agent 启动与任务执行

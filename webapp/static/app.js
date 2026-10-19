@@ -52,7 +52,10 @@ function switchTab(name) {
   if (name === "shot") { refreshShot(); timers.shot = setInterval(() => { if ($("shotAuto").checked) refreshShot(); }, 2000); }
   if (name === "logs") { loadLogs(); timers.logs = setInterval(() => { if ($("logAuto").checked) loadLogs(); }, 1500); }
   if (name === "tasks") loadTasks();
-  if (name === "alerts" && !state.alerts.length) loadAlerts();
+  if (name === "alerts") {
+    if (!state.alerts.length) loadAlerts();
+    loadChildSpeed();
+  }
   if (name === "records") loadRecords();
   if (name === "notify") loadNotify();
 }
@@ -576,6 +579,28 @@ async function testNotify() {
   }
 }
 
+/* ------------------------------------------------------------ 孩子命名速度 */
+
+async function loadChildSpeed() {
+  try {
+    const data = await api("/api/child-name-config");
+    $("childSpeed").value = data.speed || "normal";
+    $("childSpeedHint").textContent = (data.profiles && data.profiles[data.speed]) || "";
+  } catch (error) {
+    $("childSpeedHint").textContent = "读取失败：" + error.message;
+  }
+}
+
+async function saveChildSpeed() {
+  try {
+    const data = await post("/api/child-name-config/save", { speed: $("childSpeed").value });
+    $("childSpeedHint").textContent = "已保存：" + data.speed;
+    banner("ok", ["孩子命名速度已保存：" + data.speed]);
+  } catch (error) {
+    banner("err", ["保存失败：" + error.message]);
+  }
+}
+
 /* ------------------------------------------------------------ 事件绑定 */
 
 document.getElementById("tabs").addEventListener("click", (e) => {
@@ -601,6 +626,7 @@ $("btnLogClear").addEventListener("click", async () => {
   }
 });
 $("btnAlertReload").addEventListener("click", loadAlerts);
+$("btnChildSpeedSave").addEventListener("click", saveChildSpeed);
 $("btnAlertSave").addEventListener("click", saveAlerts);
 $("btnAlertAdd").addEventListener("click", () => { state.alerts.push(emptyAlert(state.alerts.length)); renderAlerts(); });
 $("btnRecordReload").addEventListener("click", loadRecords);

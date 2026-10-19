@@ -131,6 +131,21 @@
   <section id="tab-alerts" class="hidden">
     <div class="card" style="margin-bottom:14px">
       <div class="row">
+        <span>孩子命名速度</span>
+        <select id="childSpeed">
+          <option value="fast">快速（少滑动，200ms 等待）</option>
+          <option value="normal">标准（默认）</option>
+          <option value="slow">慢速（卡顿的模拟器）</option>
+        </select>
+        <button class="btn" id="btnChildSpeedSave">保存</button>
+        <span class="hint" id="childSpeedHint"></span>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        只影响孩子命名时的特性滑动次数与点名/输入/确认的等待；不影响截图帧率（截图由模拟器 extras 决定，约 13ms/帧）。
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="row">
         <span class="hint">保存会写入条件表、检测节点和界面选项，保存后开始的任务生效。</span>
         <span style="flex:1"></span>
         <button class="btn" id="btnAlertReload">重新读取</button>

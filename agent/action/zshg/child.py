@@ -615,6 +615,14 @@ class ChildRec(CustomAction):
         self, context: Context, argv: CustomAction.RunArg
     ) -> CustomAction.RunResult:
         # 0.佣兵生娃
+        from utils.child_perf import get_profile
+
+        perf = get_profile()
+        logger.info(
+            f"孩子命名速度：{perf['label']}（特性滑动≤{perf['feature_max_swipe']} 次，"
+            f"步骤间隔 {perf['step_delay_ms']}ms）"
+        )
+        started = time.time()
 
         # 1.识别父母信息
         father_info = self.extract_parent_info(context, is_father=True)
@@ -642,7 +650,11 @@ class ChildRec(CustomAction):
 
         # 2. 提取天赋属性、血脉、特性（完整识别流程）
         context.run_task("PannelChildInfoButton")
-        self.potential, self.bloodline, self.features = extract_all_role_info(context)
+        extract_started = time.time()
+        self.potential, self.bloodline, self.features = extract_all_role_info(
+            context, feature_max_swipe=perf["feature_max_swipe"]
+        )
+        logger.info(f"角色信息识别耗时 {time.time() - extract_started:.1f}s")
 
         if not self.potential.values or all(
             v == 0.0 for v in self.potential.values.values()
@@ -665,17 +677,32 @@ class ChildRec(CustomAction):
         if self._check_and_show_good_child_alert(
             context, child_name, highest_title, child_index
         ):
+            logger.info(f"孩子命名流程耗时 {time.time() - started:.1f}s（命中好苗子，暂停）")
             return CustomAction.RunResult(success=True)
 
         # 7. 非好苗子或好苗子但关闭弹窗，自动输入命名
-        context.run_task("BackButton_500ms")
+        delay = perf["step_delay_ms"]
+        timeout = perf["timeout_ms"]
+        context.run_task(
+            "BackButton_500ms",
+            pipeline_override={"BackButton_500ms": {"post_delay": delay, "timeout": timeout}},
+        )
         context.run_task(
             "PannelChildSetName",
-            pipeline_override={"PannelChildSetNameCopy": {"input_text": child_name}},
+            pipeline_override={
+                "PannelChildSetName": {"post_delay": delay, "timeout": timeout},
+                "PannelChildSetNameCopy": {
+                    "input_text": child_name,
+                    "post_delay": delay,
+                    "timeout": timeout,
+                },
+                "PannelChildSetNameConfirm": {"post_delay": delay, "timeout": timeout},
+            },
         )
 
         # 8.识别是否无效
         if context.run_recognition("CheckNameInvalid",context.tasker.controller.post_screencap().wait().get()):
             context.run_task("CheckNameInvalid")
 
+        logger.info(f"孩子命名流程耗时 {time.time() - started:.1f}s")
         return CustomAction.RunResult(success=True)

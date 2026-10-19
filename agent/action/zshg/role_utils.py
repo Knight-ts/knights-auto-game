@@ -401,13 +401,14 @@ def get_potential_grade(value: float) -> str:
     return "E"
 
 
-def extract_all_role_info(context: Context) -> tuple:
+def extract_all_role_info(context: Context, feature_max_swipe: int = 5) -> tuple:
     """
     完整识别角色信息（潜力 + 血脉 + 特性）
     这是一个通用的识别流程，适用于孩子检测和相亲苗子检测
 
     Args:
         context: MAA 上下文
+        feature_max_swipe: 特性面板最多滑动次数（速度档位控制）
 
     Returns:
         (potential, bloodline, features) 三元组
@@ -440,7 +441,7 @@ def extract_all_role_info(context: Context) -> tuple:
 
     # 3. 识别特性信息（特性面板在血脉面板下方）
     logger.info("开始识别特性信息...")
-    features = extract_features(context)
+    features = extract_features(context, max_swipe_count=feature_max_swipe)
     if not features:
         logger.info("未识别到特性")
 

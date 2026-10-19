@@ -43,6 +43,7 @@ alert_store = _load_module(
 )
 child_records = _load_module("child_records", ROOT / "agent" / "utils" / "child_records.py")
 notifier = _load_module("notifier", ROOT / "agent" / "utils" / "notifier.py")
+child_perf = _load_module("child_perf", ROOT / "agent" / "utils" / "child_perf.py")
 
 runtime = Runtime()
 
@@ -154,6 +155,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, alert_store.load_state(ROOT))
             elif path == "/api/records":
                 self._json(200, {"records": child_records.recent(100)})
+            elif path == "/api/child-name-config":
+                self._json(
+                    200,
+                    {
+                        "speed": child_perf.load_speed(),
+                        "profiles": {
+                            key: profile["label"]
+                            for key, profile in child_perf.SPEED_PROFILES.items()
+                        },
+                    },
+                )
             elif path == "/api/notify":
                 config = notifier.load_config()
                 effective = notifier.effective_webhook()
@@ -217,6 +229,13 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/records/recruited":
                 changed = child_records.mark_recruited(payload.get("name") or "", payload.get("value") or "已招募")
                 self._json(200, {"ok": bool(changed), "changed": changed})
+            elif path == "/api/child-name-config/save":
+                try:
+                    speed = child_perf.save_speed(payload.get("speed") or "normal")
+                except ValueError as exc:
+                    self._json(400, {"ok": False, "error": str(exc)})
+                else:
+                    self._json(200, {"ok": True, "speed": speed})
             elif path == "/api/notify/save":
                 config = save_notify_config(payload)
                 effective = notifier.effective_webhook()
