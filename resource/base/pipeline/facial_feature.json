@@ -1,0 +1,88 @@
+{
+    "精灵面部特征_专注之瞳": {
+        "recognition": "ColorMatch",
+        "upper": [
+            30,
+            174,
+            254
+        ],
+        "lower": [
+            20,
+            147,
+            203
+        ],
+        "method": 40,
+        "count": 50,
+        "roi": [
+            336,
+            139,
+            330,
+            240
+        ]
+    },
+    "精灵面部特征_上古灵性": {
+        "recognition": "NeuralNetworkClassify",
+        "model": "long_ear.onnx",
+        "labels": [
+            "non-ear",
+            "ear"
+        ],
+        "expected": 1,
+        "roi": [
+            336,
+            139,
+            330,
+            240
+        ],
+        "timeout": 2000
+    },
+    "塞宁面部特征_太阳之子": {
+        "recognition": "ColorMatch",
+        "upper": [
+            23,
+            137,
+            211
+        ],
+        "lower": [
+            15,
+            102,
+            13
+        ],
+        "method": 40,
+        "count": 5000,
+        "roi": [
+            336,
+            139,
+            330,
+            240
+        ],
+        "timeout": 2000
+    },
+    "佩尔面部特征_科内塔之怒": {
+        "recognition": "NeuralNetworkDetect",
+        "model": "feature_face.onnx",
+        "labels": [
+            "ear",
+            "eyebrow_forked",
+            "eye",
+            "chin"
+        ],
+        "expected": [
+            1
+        ],
+        "roi": [
+            336,
+            139,
+            330,
+            240
+        ],
+        "target": [
+            111,
+            94,
+            262,
+            246
+        ],
+        "threshold": 0.6,
+        "timeout": 2000
+    }
+}

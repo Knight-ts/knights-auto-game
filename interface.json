@@ -1,0 +1,806 @@
+{
+    "interface_version": 2,
+    "name": "MaaGC",
+    "description": "这是一个使用 MaaFramework 创建的新项目。",
+    "contact": "QQ群: 123456789",
+    "license": "MIT",
+    "welcome": "首次使用！欢迎使用 MaaGC!",
+    "github": "https://github.com/KhazixW2/MAAGC",
+    "version": "v1.6.1",
+    "mirrorchyan_rid": "MAAGC",
+    "mirrorchyan_multiplatform": true,
+    "controller": [
+        {
+            "name": "ADB",
+            "type": "Adb",
+            "label": "模拟器",
+            "display_short_side": 720
+        }
+    ],
+    "resource": [
+        {
+            "name": "官服",
+            "path": [
+                "./resource/base"
+            ],
+            "controller": [
+                "ADB"
+            ]
+        }
+    ],
+    "agent": {
+        "child_exec": "./python/python.exe",
+        "child_args": [
+            "-u",
+            "./agent/main.py"
+        ]
+    },
+    "task": [
+        {
+            "name": "启动游戏",
+            "entry": "GameStartUp",
+            "description": "启动游戏客户端并完成登录流程"
+        },
+        {
+            "name": "每日礼包和密令",
+            "entry": "Auto_DailyTask",
+            "option": [
+                "DailyTaskSubTaskSwitch"
+            ],
+            "description": "自动处理每日礼包、市场折扣、商城礼包和悬赏令领取"
+        },
+        {
+            "name": "推年计划",
+            "entry": "Auto_YearlyTask",
+            "option": [
+                "开启5月城堡相亲",
+                "开启3月启航节购买",
+                "开启好娃提醒",
+                "开启生娃自动起名",
+                "开启自动接受佣兵",
+                "选择刷取任务国家",
+                "选择成长试炼难度",
+                "相亲模式",
+                "选择年度任务月份数",
+                "自定义任务黑名单"
+            ],
+            "description": "自动执行年度任务流程并推进游戏时间，聊天相亲目前只能识别 科内塔之怒和太阳之子其他都无法识别, 可以使用聊天模式 并 相亲指定目标种族相亲来获取特性脸的图片等并上传到群文件等待群主训练神经网络模型",
+            "doc": [
+                "### 推年计划",
+                "",
+                "自动执行年度任务流程并推进游戏时间。",
+                "",
+                "**功能说明：**",
+                "- 自动推进游戏月份",
+                "- 自动处理每月事件（节日、相亲等）",
+                "- 自动执行战斗/任务系统",
+                "- 支持好娃检测与弹窗提醒",
+                "",
+                "**选项说明：**",
+                "- 开启5月城堡相亲：5月是否自动处理城堡相亲事件",
+                "- 开启3月启航节购买：3月启航节是否自动进入节日页面并购买物品",
+                "- 开启好娃提醒：检测到优质子女时弹窗提醒并暂停任务",
+                "- 开启生娃自动起名：佣兵生娃事件后是否自动识别属性并起名（关闭则保留游戏默认名字，不做属性识别）",
+                "- 开启自动接受佣兵：佣兵申请加入时是否自动接受（关闭则直接拒绝）",
+                "- 选择刷取任务国家：设置年度任务执行的目标城市（选择'暮角城成长试炼'可启动特殊战斗任务流程）",
+                "- 选择成长试炼难度：成长试炼的难度等级（仅在'暮角城成长试炼'模式下生效）",
+                "- 相亲模式：姓名相亲（按血统匹配姓名）/ 聊天相亲（按特性匹配） 标记星星的不相亲",
+                "- 选择年度任务月份数：设置执行任务的月份数量",
+                "- 自定义任务黑名单：屏蔽不需要执行的任务名称",
+                "",
+                "**使用场景：**",
+                "- 长期培养：用于长期推进角色培养进度",
+                "- 节省时间：自动处理重复性月度任务"
+            ]
+        },
+        {
+            "name": "自动孩子取名字——小工具",
+            "entry": "Auto_PannelCheck",
+            "doc": [
+                "### 自动孩子取名字",
+                "",
+                "识别子项信息并自动生成名字的小工具。",
+                "",
+                "**功能说明：**",
+                "- 识别父母信息（姓名、爵位、佣兵团）",
+                "- 识别潜力面板（六维属性：力量、体质、技巧、感知、敏捷、意志）",
+                "- 识别血脉面板（血统名称及百分比）",
+                "- 识别特性面板（特性列表）",
+                "- 自动生成子孙名字",
+                "",
+                "**命名规则：**",
+                "- 格式：`最高属性 + 次高属性 + 特性 + 爵位`",
+                "- 示例：`力 ss 技 ss 太科公`",
+                "",
+                "**属性等级：**",
+                "- SS: > 0.93",
+                "- S: 0.74-0.93",
+                "- A: 0.55-0.74",
+                "- B: 0.35-0.55",
+                "- C: 0.20-0.35",
+                "- D: 0.10-0.20",
+                "- E: < 0.10",
+                "",
+                "**使用场景：**",
+                "- 佣兵生娃事件后自动触发",
+                "- 手动执行进行孩子命名"
+            ],
+            "description": "识别孩子信息并自动生成名字的工具"
+        },
+        {
+            "name": "好娃提醒",
+            "entry": "Auto_ChildAlertWindow",
+            "description": "打开原生「好娃提醒」窗口（不用浏览器）：增删改类型、特性、属性门槛",
+            "doc": [
+                "### 好娃提醒（窗口版）",
+                "",
+                "在 MaaGC 里点一下就会弹出一个原生窗口，像普通桌面程序一样管理好娃提醒，**不需要浏览器**。",
+                "",
+                "**窗口里能做什么：**",
+                "- 左侧列出所有提醒类型，右侧编辑：显示名、内部 ID、条件名、检测节点、说明",
+                "- 必需特性（一行一个）、六维属性等级与最小值、或条件（如 `敏捷>=0.3`）、默认勾选",
+                "- 新增 / 删除类型；「保存并同步」写入条件表、检测节点、界面选项",
+                "- 「同步勾选到 MaaGC」把默认勾选写进当前实例，重启 MaaGC 后按此勾选",
+                "",
+                "**说明：**",
+                "- 修改的是 `table/child_alert_conditions.json` 等三处配置，保存后重启 MaaGC 生效",
+                "- 同名功能还有浏览器版：任务「网页控制台」或 `tools\\打开控制台.bat`",
+                "- 需要 MaaGC 的 Agent 正常运行（即先能正常连接模拟器）"
+            ]
+        },
+        {
+            "name": "网页控制台",
+            "entry": "Auto_ChildAlertManager",
+            "description": "打开本机网页控制台：主页 / 总控台 / 截图 / 好娃提醒",
+            "doc": [
+                "### 网页控制台",
+                "",
+                "打开一个只监听本机的网页控制台（`http://127.0.0.1:8790/`），Agent 启动时也会自动拉起。",
+                "",
+                "**四个页面：**",
+                "- 主页：模拟器连接状态、MuMu 状态、MaaGC 进程、提醒类型数量、最近日志",
+                "- 总控台：一键连接 / 断开 / 重启 ADB、设备列表、返回/主页等常用按键",
+                "- 截图：实时画面，可暂停、可下载当前帧",
+                "- 好娃提醒：增删改提醒类型，保存时同步条件表、检测节点、界面选项",
+                "",
+                "**使用方式：**",
+                "- 选中本任务并启动，会自动打开控制台",
+                "- 不连模拟器时，也可以双击 `tools\\打开控制台.bat` 单独使用",
+                "- 连不上模拟器时，双击 `tools\\启动MaaGC.bat`：先 adb connect，再启动 MaaGC",
+                "",
+                "**注意：**",
+                "- 保存好娃提醒后需要重启 MaaGC，新类型才会出现在勾选列表里",
+                "- 重命名显示名会让老实例的勾选失效，需要重新勾一次",
+                "- 删除类型会同时移除对应检测节点和界面选项"
+            ]
+        },
+        {
+            "name": "自动相亲——小工具",
+            "entry": "Auto_MarryTask",
+            "option": [
+                "相亲范围",
+                "相亲模式",
+                "相亲种族"
+            ],
+            "doc": [
+                "### 自动相亲",
+                "",
+                "自动处理相亲事件，匹配高血统姓名。",
+                "",
+                "**功能说明：**",
+                "- 自动进入联姻大厅",
+                "- 检测相亲对象数量和回信数量",
+                "- 遍历所有可相亲对象",
+                "- 识别角色血统信息（潜力、血脉、特性）",
+                "- 根据血统匹配国家和种族",
+                "- 在姓名库中查找匹配的高血统姓名",
+                "- 自动确认相亲或切换下一个对象",
+                "",
+                "**配置说明：**",
+                "- high_blood_names.json: 高血统姓名表",
+                "- 可通过 child_alert_enabled 参数开启好苗子提醒"
+            ],
+            "description": "自动处理相亲事件并匹配高血统姓名， 聊天相亲目前只能识别 科内塔之怒和太阳之子其他都无法识别, 可以使用聊天模式 并 相亲指定目标种族相亲来获取特性脸的图片等并上传到群文件等待群主训练神经网络模型"
+        },
+        {
+            "name": "战斗任务主动",
+            "entry": "AutoFight_Start",
+            "description": "混合战斗入口：所有任务先完整坚守20回合，第21回合起切换为威胁建图、八方向追击和攻击"
+        }
+    ],
+    "option": {
+        "DailyTaskSubTaskSwitch": {
+            "type": "checkbox",
+            "description": "是否自动处理每日任务",
+            "cases": [
+                {
+                    "name": "购买市场折扣物品",
+                    "description": "是否自动购买市场折扣物品",
+                    "pipeline_override": {
+                        "BigMapMarket": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "商城免费礼包",
+                    "description": "是否自动购买商城免费礼包",
+                    "pipeline_override": {
+                        "BigMapMall": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "悬赏令领取",
+                    "description": "是否自动领取悬赏令",
+                    "pipeline_override": {
+                        "BigMapRewardToken": {
+                            "enabled": true
+                        }
+                    }
+                }
+            ],
+            "default_case": [
+                "购买市场折扣物品",
+                "商城免费礼包",
+                "悬赏令领取"
+            ]
+        },
+        "开启5月城堡相亲": {
+            "type": "switch",
+            "description": "是否开启5月自动相亲",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "description": "开启5月城堡相亲",
+                    "pipeline_override": {
+                        "Flag_EnableMarryTask": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "description": "关闭5月城堡相亲",
+                    "pipeline_override": {
+                        "Flag_EnableMarryTask": {
+                            "enabled": false
+                        }
+                    }
+                }
+            ],
+            "default_case": "Yes"
+        },
+        "开启3月启航节购买": {
+            "type": "switch",
+            "description": "是否开启3月启航节自动购买物品",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "description": "开启3月启航节自动购买",
+                    "pipeline_override": {
+                        "Flag_EnableSailingFestivalPurchase": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "description": "关闭3月启航节自动购买",
+                    "pipeline_override": {
+                        "Flag_EnableSailingFestivalPurchase": {
+                            "enabled": false
+                        }
+                    }
+                }
+            ],
+            "default_case": "Yes"
+        },
+        "开启好娃提醒": {
+            "type": "checkbox",
+            "description": "是否开启好娃提醒,提醒时弹窗并结束任务",
+            "cases": [
+                {
+                    "name": "科内塔之怒",
+                    "description": "技巧SS + 力量S + 意志或敏捷有一个0.3以上 + 科内塔之怒",
+                    "pipeline_override": {
+                        "检测_科内塔之怒": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "太阳+科内塔之怒",
+                    "description": "技巧SS + 力量S + 意志或敏捷有一个0.3以上 + 太阳之子 + 科内塔之怒",
+                    "pipeline_override": {
+                        "检测_太阳+科内塔之怒": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "上自专",
+                    "description": "高等精灵顶级三特性：上古灵性 + 自然共感 + 专注之眸，不看属性",
+                    "pipeline_override": {
+                        "检测_上自专": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "欧里克神力+同类相食",
+                    "description": "欧里克的神力 + 同类相食，高力技兼顾偏斜生存，不看属性",
+                    "pipeline_override": {
+                        "检测_欧里克神力+同类相食": {
+                            "enabled": true
+                        }
+                    }
+                }
+            ],
+            "default_case": [
+                "科内塔之怒",
+                "太阳+科内塔之怒"
+            ]
+        },
+        "开启生娃自动起名": {
+            "type": "switch",
+            "description": "佣兵生娃事件后是否自动识别属性并起名（关闭则保留游戏默认名字）",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "description": "开启自动起名：识别属性 + 命名 + 好苗子检测",
+                    "pipeline_override": {
+                        "Flag_AutoNameChild": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "description": "关闭自动起名：直接点确认，保留游戏默认名字",
+                    "pipeline_override": {
+                        "Flag_AutoNameChild": {
+                            "enabled": false
+                        }
+                    }
+                }
+            ],
+            "default_case": "Yes"
+        },
+        "开启自动接受佣兵": {
+            "type": "switch",
+            "description": "是否自动接受加入的佣兵（关闭则直接拒绝）",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "description": "自动接受：直接点确认",
+                    "pipeline_override": {
+                        "Event_MercenaryJoin": {
+                            "next": [
+                                "Event_MercenaryJoinConfirm"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "description": "自动拒绝：直接点取消",
+                    "pipeline_override": {
+                        "Event_MercenaryJoin": {
+                            "next": [
+                                "Event_MercenaryJoinCancel"
+                            ]
+                        }
+                    }
+                }
+            ],
+            "default_case": "No"
+        },
+        "选择刷取任务国家": {
+            "type": "select",
+            "description": "选择要刷取任务的目标城市",
+            "default_case": "雄月城",
+            "cases": [
+                {
+                    "name": "王座堡",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "王座堡"
+                        }
+                    }
+                },
+                {
+                    "name": "圣盾堡",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "圣盾堡"
+                        }
+                    }
+                },
+                {
+                    "name": "雄月城",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "雄月城"
+                        }
+                    }
+                },
+                {
+                    "name": "翠庭",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "翠庭"
+                        }
+                    }
+                },
+                {
+                    "name": "银风堡",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "银风堡"
+                        }
+                    }
+                },
+                {
+                    "name": "暮角城",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "暮角城"
+                        }
+                    }
+                },
+                {
+                    "name": "巴索罗姆",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "巴索罗姆"
+                        }
+                    }
+                },
+                {
+                    "name": "奥克尼尼",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "奥克尼尼"
+                        }
+                    }
+                },
+                {
+                    "name": "成长试炼",
+                    "description": "在暮角城北边寻找'成长试炼'入口并进入（特殊战斗任务）",
+                    "pipeline_override": {
+                        "EnterCity": {
+                            "expected": "暮角城"
+                        },
+                        "Flag_GrowthTrialMode": {
+                            "enabled": true
+                        }
+                    }
+                }
+            ]
+        },
+        "选择成长试炼难度": {
+            "type": "select",
+            "description": "选择成长试炼的难度等级（仅在'暮角城成长试炼'模式下生效）",
+            "default_case": "噩梦",
+            "cases": [
+                {
+                    "name": "简单",
+                    "pipeline_override": {
+                        "GrowthTrial_Difficulty_Select": {
+                            "expected": [
+                                "简单"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "普通",
+                    "pipeline_override": {
+                        "GrowthTrial_Difficulty_Select": {
+                            "expected": [
+                                "普通"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "困难",
+                    "pipeline_override": {
+                        "GrowthTrial_Difficulty_Select": {
+                            "expected": [
+                                "困难"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "噩梦",
+                    "pipeline_override": {
+                        "GrowthTrial_Difficulty_Select": {
+                            "expected": [
+                                "噩梦"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "选择年度任务月份数": {
+            "type": "select",
+            "description": "选择年度任务的执行月份数",
+            "default_case": "12个月",
+            "cases": [
+                {
+                    "name": "6个月",
+                    "pipeline_override": {
+                        "YearlyTaskMonths": {
+                            "expected": [
+                                "6"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "12个月",
+                    "pipeline_override": {
+                        "YearlyTaskMonths": {
+                            "expected": [
+                                "12"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "24个月",
+                    "pipeline_override": {
+                        "YearlyTaskMonths": {
+                            "expected": [
+                                "24"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "36个月",
+                    "pipeline_override": {
+                        "YearlyTaskMonths": {
+                            "expected": [
+                                "36"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "60个月",
+                    "pipeline_override": {
+                        "YearlyTaskMonths": {
+                            "expected": [
+                                "60"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "120个月",
+                    "pipeline_override": {
+                        "YearlyTaskMonths": {
+                            "expected": [
+                                "120"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "240个月",
+                    "pipeline_override": {
+                        "YearlyTaskMonths": {
+                            "expected": [
+                                "240"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "自定义任务黑名单": {
+            "type": "input",
+            "label": "自定义任务黑名单",
+            "description": "输入要屏蔽的任务名称，被屏蔽的任务在年度任务中会自动跳过。\n\n**注意：**\n- 输入的任务名称会保存到本地文件 `assets/table/task_blacklist.json`\n- 重启后仍然生效，无需重新输入\n- 如需删除，请手动编辑 `assets/table/task_blacklist.json` 文件，从 blacklist 数组中移除对应名称",
+            "inputs": [
+                {
+                    "name": "任务名称",
+                    "description": "要屏蔽的任务名称（单个任务名称）",
+                    "default": "",
+                    "pipeline_type": "string",
+                    "verify": "^[^,，]*$",
+                    "pattern_msg": "任务名称不能包含逗号，请输入单个任务名称，留空则不添加黑名单"
+                }
+            ],
+            "pipeline_override": {
+                "CustomTaskBlacklist": {
+                    "expected": [
+                        "{任务名称}"
+                    ]
+                }
+            }
+        },
+        "相亲范围": {
+            "type": "select",
+            "description": "选择是单角色还是多角色相亲",
+            "default_case": "多角色相亲",
+            "cases": [
+                {
+                    "name": "多角色相亲",
+                    "description": "一次检测识别多位角色进行相亲，每个角色平分相亲次数",
+                    "pipeline_override": {
+                        "MarryMultiSelect": {
+                            "expected": "multi"
+                        }
+                    }
+                },
+                {
+                    "name": "单角色相亲",
+                    "description": "一次一位，当前选择角色直接相亲，一人所有次数",
+                    "pipeline_override": {
+                        "MarryMultiSelect": {
+                            "expected": "single"
+                        }
+                    }
+                }
+            ]
+        },
+        "相亲模式": {
+            "type": "select",
+            "description": "选择相亲模式",
+            "default_case": "聊天相亲",
+            "cases": [
+                {
+                    "name": "姓名相亲",
+                    "pipeline_override": {
+                        "MarryModeSelect": {
+                            "expected": "high_blood"
+                        }
+                    }
+                },
+                {
+                    "name": "聊天相亲",
+                    "pipeline_override": {
+                        "MarryModeSelect": {
+                            "expected": "trait"
+                        }
+                    }
+                }
+            ]
+        },
+        "相亲种族": {
+            "type": "select",
+            "description": "选择相亲种族，将会默认找到对应国家",
+            "default_case": "佩尔弗因王族",
+            "cases": [
+                {
+                    "name": "佩尔弗因王族",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "佩尔弗因王族"
+                        }
+                    }
+                },
+                {
+                    "name": "塞宁王族",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "塞宁王族"
+                        }
+                    }
+                },
+                {
+                    "name": "高阶精灵",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "高阶精灵"
+                        }
+                    }
+                },
+                {
+                    "name": "弗莱德里王族",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "弗莱德里王族"
+                        }
+                    }
+                },
+                {
+                    "name": "希尔王族",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "希尔王族"
+                        }
+                    }
+                },
+                {
+                    "name": "切瓦利王族",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "切瓦利王族"
+                        }
+                    }
+                },
+                {
+                    "name": "祖扎尔达王族",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "祖扎尔达王族"
+                        }
+                    }
+                },
+                {
+                    "name": "黑暗精灵",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "黑暗精灵"
+                        }
+                    }
+                },
+                {
+                    "name": "瓦诺遗族",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "瓦诺遗族"
+                        }
+                    }
+                },
+                {
+                    "name": "萨尼德罕",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "萨尼德罕"
+                        }
+                    }
+                },
+                {
+                    "name": "宏朝贵胄",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "宏朝贵胄"
+                        }
+                    }
+                },
+                {
+                    "name": "法拉希尔血裔",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "法拉希尔血裔"
+                        }
+                    }
+                },
+                {
+                    "name": "古特雅尔",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "古特雅尔"
+                        }
+                    }
+                },
+                {
+                    "name": "玛夏贵族",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "玛夏贵族"
+                        }
+                    }
+                },
+                {
+                    "name": "瑞格王室",
+                    "pipeline_override": {
+                        "MarryRaceSelect": {
+                            "expected": "瑞格王室"
+                        }
+                    }
+                }
+            ]
+        }
+    },
+    "title": "MaaGC v1.6.1 | 百年骑士团小助手"
+}

@@ -1,0 +1,104 @@
+{
+    // 角色详情
+    "LongPressRole": {
+        "recognition": "DirectHit",
+        "action": "LongPress",
+        "target": [
+            37,
+            698,
+            110,
+            112
+        ],
+        "duration": 1000,
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "RolePanel_DetailPage": {
+        "recognition": "OCR",
+        "roi": [
+            49,
+            371,
+            596,
+            300
+        ],
+        "expected": [
+            "属性",
+            "装备"
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "RolePanel_BloodPage": {
+        "recognition": "OCR",
+        "roi": [
+            49,
+            371,
+            596,
+            300
+        ],
+        "expected": [
+            "血统"
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "RolePanel_FamilyPage": {
+        "recognition": "OCR",
+        "roi": [
+            49,
+            371,
+            596,
+            300
+        ],
+        "expected": [
+            "家庭"
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "RolePanel_GirlCheck": {
+        "recognition": "OCR",
+        "roi": [
+            23,
+            271,
+            128,
+            53
+        ],
+        "expected": [
+            "女"
+        ],
+        "timeout": 2000
+    },
+    "RolePanel_AgeCheck": {
+        "recognition": "OCR",
+        "roi": [
+            427,
+            255,
+            127,
+            59
+        ],
+        "expected": [
+            "[0-9]"
+        ],
+        "timeout": 2000
+    },
+    "RolePanel_LevelCheck": {
+        "recognition": "OCR",
+        "roi": [
+            432,
+            303,
+            122,
+            65
+        ],
+        "expected": [
+            "[0-9]"
+        ],
+        "timeout": 2000
+    }
+}

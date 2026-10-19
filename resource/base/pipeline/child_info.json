@@ -1,0 +1,411 @@
+{
+    "PanelPropertyCheck": {
+        "recognition": "OCR",
+        "expected": [
+            "力量"
+        ],
+        "roi": [
+            11,
+            574,
+            699,
+            478
+        ],
+        "order_by": "Vertical",
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PannelFatherTitle": {
+        "recognition": "OCR",
+        "expected": [
+            "[\u4E00-\u9FFF]+"
+        ],
+        "roi": [
+            13,
+            340,
+            227,
+            152
+        ],
+        "rate_limit": 300
+    },
+    "PannelMotherTitle": {
+        "recognition": "OCR",
+        "expected": [
+            "[\u4E00-\u9FFF]+"
+        ],
+        "roi": [
+            497,
+            330,
+            211,
+            154
+        ]
+    },
+    "PannelGetChildIndex": {
+        "recognition": "OCR",
+        "expected": [
+            "第[0-9]+个孩子"
+        ],
+        "roi": [
+            56,
+            480,
+            604,
+            97
+        ],
+        "timeout": 2000
+    },
+    "PropertyPanelSwipeUp": {
+        "action": "Swipe",
+        "begin": [
+            366,
+            623,
+            1,
+            1
+        ],
+        "end": [
+            364,
+            800,
+            1,
+            1
+        ],
+        "duration": 500,
+        "post_delay": 500
+    },
+    "PropertyPanelSwipeDown": {
+        "action": "Swipe",
+        "begin": [
+            364,
+            800,
+            1,
+            1
+        ],
+        "end": [
+            366,
+            640,
+            1,
+            1
+        ],
+        "duration": 500,
+        "post_delay": 500
+    },
+    "PannelChildInfoButton": {
+        "recognition": "TemplateMatch",
+        "template": "DetailButton.png",
+        "roi": [
+            135,
+            1004,
+            142,
+            139
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "PanelPropertyInit": {
+        "recognition": "OCR",
+        "expected": [
+            "潜力"
+        ],
+        "roi": [
+            15,
+            462,
+            206,
+            797
+        ],
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PanelPropertyItemCheck": {
+        "recognition": "OCR",
+        "expected": [
+            "力量"
+        ],
+        "roi": [
+            150,
+            650,
+            150,
+            75
+        ],
+        "order_by": "Vertical",
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PanelPropertyNumCheck": {
+        "recognition": "OCR",
+        "expected": [
+            "-?[0-9]+\\.[0-9]+"
+        ],
+        "roi": [
+            150,
+            650,
+            150,
+            75
+        ],
+        "order_by": "Vertical",
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PanelBloodInit": {
+        "recognition": "OCR",
+        "expected": [
+            "血统"
+        ],
+        "roi": [
+            15,
+            462,
+            206,
+            797
+        ],
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PanelBloodNameCheck": {
+        "recognition": "OCR",
+        "expected": [
+            "[\u4E00-\u9FFF]+"
+        ],
+        "roi": [
+            95,
+            673,
+            200,
+            234
+        ],
+        "threshold": 0.6,
+        "order_by": "Vertical",
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PanelBloodPercentCheck": {
+        "recognition": "OCR",
+        "expected": [
+            "[0-9]+%"
+        ],
+        "roi": [
+            603,
+            644,
+            95,
+            216
+        ],
+        "order_by": "Vertical",
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PanelFeatureInit": {
+        "recognition": "OCR",
+        "expected": [
+            "特性"
+        ],
+        "roi": [
+            15,
+            462,
+            206,
+            797
+        ],
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PanelFeatureCheck": {
+        "recognition": "OCR",
+        "expected": [
+            ""
+        ],
+        "roi": [
+            50,
+            650,
+            600,
+            400
+        ],
+        "order_by": "Vertical",
+        "post_delay": 200,
+        "timeout": 2000
+    },
+    "PannelCollect": {
+        "recognition": "TemplateMatch",
+        "template": "StarIcon.png",
+        "roi": [
+            123,
+            1065,
+            156,
+            149
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 200,
+        "timeout": 2000,
+        "next": [
+            "PopUpWindowConfirm"
+        ]
+    },
+    "PannelChildSetName": {
+        "recognition": "OCR",
+        "expected": [
+            "[\u4E00-\u9FFF]+"
+        ],
+        "roi": [
+            253,
+            1051,
+            255,
+            111
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "PannelChildSetNameCopy"
+        ]
+    },
+    "PannelChildSetNameCopy": {
+        "recognition": "DirectHit",
+        "action": "InputText",
+        "input_text": "无名",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "PannelChildSetNameConfirm"
+        ]
+    },
+    "PannelChildSetNameConfirm": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            169,
+            1176,
+            385,
+            98
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "CheckNameGood": {
+        "recognition": "OCR",
+        "expected": [
+            "第[0-9]+个孩子"
+        ],
+        "roi": [
+            56,
+            480,
+            604,
+            97
+        ]
+    },
+    "CheckNameInvalid": {
+        "recognition": "OCR",
+        "expected": [
+            "重新取名",
+            "不规范",
+            "不能超过"
+        ],
+        "roi": [
+            36,
+            455,
+            640,
+            332
+        ],
+        "next": [
+            "CheckNameInvalidConfirm"
+        ]
+    },
+    "CheckNameInvalidConfirm": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            36,
+            455,
+            640,
+            332
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "CheckNameInvalidClickRandom"
+        ]
+    },
+    "CheckNameInvalidClickRandom": {
+        "recognition": "TemplateMatch",
+        "template": [
+            "Marry/random_baby_name.png"
+        ],
+        "roi": [
+            606,
+            1051,
+            92,
+            103
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 800,
+        "timeout": 2000,
+        "next": [
+            "CheckNameInvalidConfirmRandom"
+        ]
+    },
+    "CheckNameInvalidConfirmRandom": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            169,
+            1176,
+            385,
+            98
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Auto_PannelCheck": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "ChildRec",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Auto_ChildAlertManager": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "ChildAlertManager",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Auto_ChildAlertWindow": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "ChildAlertWindow",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "检测_科内塔之怒": {
+        "recognition": "OCR",
+        "expected": [
+            "koneita"
+        ],
+        "enabled": false
+    },
+    "检测_太阳+科内塔之怒": {
+        "recognition": "OCR",
+        "expected": [
+            "sun_and_koneita"
+        ],
+        "enabled": false
+    },
+    "检测_上自专": {
+        "recognition": "OCR",
+        "expected": [
+            "shang_zi_zhuan"
+        ],
+        "enabled": false
+    },
+    "检测_欧里克神力+同类相食": {
+        "recognition": "OCR",
+        "expected": [
+            "oulike_and_tonglei"
+        ],
+        "enabled": false
+    }
+}

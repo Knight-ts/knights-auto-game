@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MaaGC 网页版</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">MaaGC 网页版</div>
+  <div class="chips">
+    <span class="chip" id="chip-device">设备：未连接</span>
+    <span class="chip" id="chip-resource">资源：-</span>
+    <span class="chip" id="chip-agent">Agent：-</span>
+    <span class="chip" id="chip-task">任务：空闲</span>
+  </div>
+  <nav id="tabs">
+    <button data-tab="home" class="active">主页</button>
+    <button data-tab="tasks">任务</button>
+    <button data-tab="shot">截图</button>
+    <button data-tab="logs">日志</button>
+    <button data-tab="alerts">好娃提醒</button>
+    <button data-tab="records">孩子记录</button>
+    <button data-tab="notify">通知</button>
+  </nav>
+</header>
+
+<main>
+  <!-- 主页 -->
+  <section id="tab-home">
+    <div class="grid">
+      <div class="card">
+        <h3>模拟器</h3>
+        <select id="deviceSelect" style="width:100%"></select>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btnScan">重新搜索</button>
+          <button class="btn primary" id="btnConnect">连接设备</button>
+        </div>
+        <div class="kv" style="margin-top:8px"><span>当前</span><span class="mono" id="homeDevice">-</span></div>
+      </div>
+      <div class="card">
+        <h3>运行状态</h3>
+        <div class="big" id="homeState">未就绪</div>
+        <div class="kv"><span>资源</span><span id="homeResource">-</span></div>
+        <div class="kv"><span>Agent</span><span id="homeAgent">-</span></div>
+        <div class="kv"><span>任务</span><span id="homeTask">空闲</span></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btnAgentStart">启动 Agent</button>
+          <button class="btn danger" id="btnAgentStop">停止 Agent</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>常用操作</h3>
+        <div class="row">
+          <button class="btn" onclick="switchTab('tasks')">去任务</button>
+          <button class="btn" onclick="switchTab('shot')">看画面</button>
+          <button class="btn" onclick="switchTab('alerts')">好娃提醒</button>
+        </div>
+        <div class="hint" style="margin-top:10px">
+          网页版直接驱动 MaaFramework，无需 MFAAvalonia。配置在 interface.json，孩子记录在 table/child_records.xlsx。
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>最近日志</h3>
+      <pre id="homeLogs">尚未连接设备</pre>
+    </div>
+  </section>
+
+  <!-- 任务 -->
+  <section id="tab-tasks" class="hidden">
+    <div class="task-layout">
+      <div class="card">
+        <h3>任务列表</h3>
+        <div class="task-list" id="taskList"></div>
+      </div>
+      <div class="card">
+        <div class="row">
+          <div class="big" id="taskTitle">选择一个任务</div>
+          <span style="flex:1"></span>
+          <button class="btn primary" id="btnRun">开始任务</button>
+          <button class="btn danger" id="btnStop">停止</button>
+        </div>
+        <div class="task-doc" id="taskDoc"></div>
+        <div id="taskOptions" style="margin-top:12px"></div>
+        <div class="hint" id="taskHint"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>最近任务</h3>
+      <table>
+        <thead><tr><th>时间</th><th>任务</th><th>状态</th><th>耗时</th><th>错误</th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 截图 -->
+  <section id="tab-shot" class="hidden">
+    <div class="card">
+      <div class="row">
+        <button class="btn primary" id="btnShot">刷新截图</button>
+        <label class="row" style="gap:6px"><input type="checkbox" id="shotAuto" checked> 每 2 秒自动刷新</label>
+        <a class="btn" id="shotDownload" download="maa-shot.png" href="#">下载当前帧</a>
+        <span class="hint" id="shotHint"></span>
+      </div>
+    </div>
+    <div class="shot-wrap" style="margin-top:14px">
+      <img id="shotImg" alt="" style="display:none">
+      <div id="shotEmpty" class="empty">暂无画面，先到主页连接设备</div>
+    </div>
+  </section>
+
+  <!-- 日志 -->
+  <section id="tab-logs" class="hidden">
+    <div class="card">
+      <div class="row">
+        <label class="row" style="gap:6px"><input type="checkbox" id="logAuto" checked> 自动刷新</label>
+        <button class="btn" id="btnLogRefresh">刷新</button>
+        <button class="btn" id="btnLogClear">清空显示</button>
+        <span class="hint">包含 Agent 的 stdout 与调度日志</span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <pre id="logView" style="max-height:calc(100vh - 250px)"></pre>
+    </div>
+  </section>
+
+  <!-- 好娃提醒 -->
+  <section id="tab-alerts" class="hidden">
+    <div class="card" style="margin-bottom:14px">
+      <div class="row">
+        <span class="hint">保存会写入条件表、检测节点和界面选项，保存后开始的任务生效。</span>
+        <span style="flex:1"></span>
+        <button class="btn" id="btnAlertReload">重新读取</button>
+        <button class="btn" id="btnAlertAdd">＋ 新增类型</button>
+        <button class="btn primary" id="btnAlertSave">保存并同步</button>
+      </div>
+    </div>
+    <div id="alertList"></div>
+  </section>
+
+  <!-- 孩子记录 -->
+  <section id="tab-records" class="hidden">
+    <div class="card">
+      <div class="row">
+        <button class="btn" id="btnRecordReload">刷新</button>
+        <span class="hint">数据来自 table/child_records.xlsx（同目录还有 .csv 与 .jsonl）</span>
+      </div>
+      <table style="margin-top:10px">
+        <thead>
+          <tr><th>时间</th><th>序号</th><th>名字</th><th>血脉</th><th>特性</th><th>好娃提醒</th><th>匹配条件</th><th>招募状态</th><th></th></tr>
+        </thead>
+        <tbody id="recordBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 通知 -->
+  <section id="tab-notify" class="hidden">
+    <div class="card">
+      <div class="row">
+        <label class="row" style="gap:6px"><input type="checkbox" id="notifyEnabled"> 启用推送</label>
+        <label class="field">格式
+          <select id="notifyFormat">
+            <option value="feishu">飞书</option>
+            <option value="json">通用 JSON</option>
+          </select>
+        </label>
+        <label class="field grow">Webhook
+          <input type="text" id="notifyWebhook" placeholder="留空则复用 config/config.json 里的飞书地址">
+        </label>
+        <label class="field">超时（秒）
+          <input type="number" id="notifyTimeout" min="1" max="60" value="8">
+        </label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="btnNotifySave">保存</button>
+        <button class="btn" id="btnNotifyTest">发送测试</button>
+        <span class="hint" id="notifyStatus"></span>
+      </div>
+      <div class="hint" style="margin-top:10px">
+        好娃提醒触发时会推送一条消息（默认关闭）。留空 webhook 时自动复用 config/config.json 里的飞书机器人地址。
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="banner" class="banner hidden"></div>
+<datalist id="catalog"></datalist>
+<script src="app.js"></script>
+</body>
+</html>

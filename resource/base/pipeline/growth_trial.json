@@ -1,0 +1,134 @@
+{
+    "GrowthTrial_Start": {
+        "next": [
+            "GrowthTrial_TeamReady",
+            "[JumpBack]GrowthTrial_Difficulty_Select",
+            "[JumpBack]GrowthTrial_Enter"
+        ],
+        "timeout": 10000
+    },
+    "GrowthTrial_Enter": {
+        "next": [
+            "GrowthTrial_Enter_Click",
+            "[JumpBack]BigMap_Activity_Resident",
+            "[JumpBack]BigMap_Activity"
+        ],
+        "timeout": 10000
+    },
+    "GrowthTrial_Enter_Click": {
+        "recognition": "OCR",
+        "roi": [
+            30,
+            190,
+            252,
+            1054
+        ],
+        "expected": [
+            "成长试炼"
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "GrowthTrial_Difficulty_Select": {
+        "recognition": "OCR",
+        "expected": [
+            "噩梦"
+        ],
+        "roi": [
+            82,
+            523,
+            360,
+            605
+        ],
+        "action": "Click",
+        "target_offset": [
+            270,
+            0,
+            0,
+            0
+        ],
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "GrowthTrial_TeamReady": {
+        "recognition": "OCR",
+        "expected": [
+            "进入战斗"
+        ],
+        "action": "Click",
+        "roi": [
+            50,
+            900,
+            600,
+            200
+        ],
+        "post_delay": 2000,
+        "timeout": 2000
+    },
+    "GrowthTrial_EnterBattle": {
+        "recognition": "OCR",
+        "expected": [
+            "进入战斗"
+        ],
+        "roi": [
+            50,
+            950,
+            350,
+            200
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "GrowthTrial_FightStart",
+            "[JumpBack]GrowthTrial_TravelSelect_Boat",
+            "[JumpBack]GrowthTrial_TravelSelect_Walk"
+        ]
+    },
+    "GrowthTrial_TravelSelect_Boat": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            490,
+            740,
+            100,
+            80
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "GrowthTrial_TravelSelect_Walk": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            490,
+            590,
+            100,
+            80
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "GrowthTrial_FightStart": {
+        "recognition": "OCR",
+        "expected": [
+            "战斗开始"
+        ],
+        "action": "DoNothing",
+        "roi": [
+            213,
+            1155,
+            296,
+            119
+        ],
+        "post_delay": 500,
+        "timeout": 2000
+    }
+}

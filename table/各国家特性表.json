@@ -1,0 +1,994 @@
+{
+  "bloodlines": [
+    {
+      "name": "佩尔弗因王族",
+      "region": "佩里亚诺王国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "佩尔弗因王族圣痕",
+          "position": "圣痕",
+          "description": "力+5，技巧+9",
+          "lifespan": "+25"
+        },
+        {
+          "level": "普通橙",
+          "name": "科内塔之怒",
+          "position": "眉毛",
+          "description": "技巧+5%，命中+10%，暴击+10%",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "虎牙",
+          "position": "嘴唇",
+          "description": "暴击+15%",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "平衡感",
+          "position": "耳朵",
+          "description": "命中+20%",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "鹰眉",
+          "position": "眉毛",
+          "description": "技巧+3",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "潜伏兽性",
+          "position": "嘴唇",
+          "description": "意志-9攻击+2",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "SS~S~0.9",
+          "constitution": "A~B~0.5",
+          "skill": "SSS~SSS~1.2",
+          "perception": "S~A~0.7",
+          "agility": "B~C~0.3",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "S~S~0.8",
+          "constitution": "B~B~0.4",
+          "skill": "SSS~SSS~1.3",
+          "perception": "S~S~0.8",
+          "agility": "B~C~0.4",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "切瓦利王族",
+      "region": "威弗提亚王国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "切瓦利王族圣痕",
+          "position": "圣痕",
+          "description": "力量+9，体质+5",
+          "lifespan": "+25"
+        },
+        {
+          "level": "普通橙",
+          "name": "欧里克的神力",
+          "position": "脸型",
+          "description": "力量+10%，攻击+3",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "欧里克的祝福",
+          "position": "鼻子",
+          "description": "生命+8，负重+6",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "雄狮之力",
+          "position": "发色",
+          "description": "力量+5",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "非凡气质",
+          "position": "眉毛",
+          "description": "力量+3",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "哮喘",
+          "position": "鼻子",
+          "description": "体质-3，最大负重-3",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "SS~SS~1.1",
+          "constitution": "SS~S~0.9",
+          "skill": "B~B~0.7",
+          "perception": "B~C~0.3",
+          "agility": "B~C~0.3",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "SS~SS~1",
+          "constitution": "S~S~0.8",
+          "skill": "B~B~0.8",
+          "perception": "B~B~0.4",
+          "agility": "B~B~0.4",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "古特雅尔",
+      "region": "诺迪尔群岛",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "烂脸",
+          "position": "脸型",
+          "description": "力量+9，敏捷+5",
+          "lifespan": "-5"
+        },
+        {
+          "level": "普通橙",
+          "name": "同类相食",
+          "position": "嘴唇",
+          "description": "力量+10%，敏捷+5%",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "邪神之血",
+          "position": "眼睛",
+          "description": "暴击+15%，抗爆-7%",
+          "lifespan": "-5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "嗜血本性",
+          "position": "嘴唇",
+          "description": "攻击+4",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "海神诅咒",
+          "position": "肤色",
+          "description": "偏斜+10%，攻击+8",
+          "lifespan": "-5"
+        },
+        {
+          "level": "负面",
+          "name": "静脉曲张",
+          "position": "脸型",
+          "description": "力量+7，抗爆-10%，生命-5",
+          "lifespan": "-5"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "SSS~SSS~1.2",
+          "constitution": "S~A~0.7",
+          "skill": "B~C~0.3",
+          "perception": "B~C~0.3",
+          "agility": "SS~S~0.9",
+          "will": "A~B~0.5"
+        },
+        "female": {
+          "strength": "SSS~SS~1.1",
+          "constitution": "A~A~0.6",
+          "skill": "B~B~0.4",
+          "perception": "B~B~0.4",
+          "agility": "SS~SS~1.0",
+          "will": "B~B~0.4"
+        }
+      }
+    },
+    {
+      "name": "塞宁王族",
+      "region": "塞尼斯特定国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "塞宁王族圣痕",
+          "position": "圣痕",
+          "description": "力量+7，技巧+7，体质+3",
+          "lifespan": "+25"
+        },
+        {
+          "level": "普通橙",
+          "name": "太阳之子",
+          "position": "发色",
+          "description": "力量+5%，技巧+10%",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "金眼",
+          "position": "眼睛",
+          "description": "命中+30%",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "弱点感应",
+          "position": "耳朵",
+          "description": "暴击+10%",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "王者气质",
+          "position": "眉毛",
+          "description": "意志+3",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "白化病",
+          "position": "发色",
+          "description": "体质-9，感知+3",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "SS~SS~1.0",
+          "constitution": "S~S~0.8",
+          "skill": "SS~SS~1.0",
+          "perception": "B~C~0.3",
+          "agility": "A~B~0.5",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "SS~S~0.9",
+          "constitution": "S~A~0.7",
+          "skill": "SSS~SS~1.1",
+          "perception": "B~B~0.4",
+          "agility": "A~A~0.6",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "宏朝贵胄",
+      "region": "宏朝",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "天神转世",
+          "position": "圣痕",
+          "description": "力量+6，技巧+6，敏捷+6",
+          "lifespan": "+60"
+        },
+        {
+          "level": "普通橙",
+          "name": "吉人天相",
+          "position": "眉毛",
+          "description": "敏捷+10%，感知+5%",
+          "lifespan": "+40"
+        },
+        {
+          "level": "蓝特性",
+          "name": "福相",
+          "position": "脸型",
+          "description": "偏斜+45%",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "风的伙伴",
+          "position": "耳朵",
+          "description": "力量+5，命中+25%，偏斜+25%",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "聪慧",
+          "position": "眼睛",
+          "description": "技巧+3，经验获取+15%",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "大智若愚",
+          "position": "脸型",
+          "description": "敏捷-3，偏斜-30%，经验获取+15%",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "S~A~0.7",
+          "constitution": "B~C~0.3",
+          "skill": "SS~SS~1.0",
+          "perception": "A~B~0.5",
+          "agility": "SS~SS~1.1",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "A~A~0.6",
+          "constitution": "C~C~0.2",
+          "skill": "SSS~SS~1.1",
+          "perception": "A~A~0.6",
+          "agility": "SSS~SS~1.2",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "希尔王族",
+      "region": "赫雷斯特王国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "希尔王族圣痕",
+          "position": "圣痕",
+          "description": "技巧+5，体质+9",
+          "lifespan": "+25"
+        },
+        {
+          "level": "普通橙",
+          "name": "超人体格",
+          "position": "脸型",
+          "description": "体质+10%，生命+7",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "高地人的自傲",
+          "position": "嘴唇",
+          "description": "生命+12，负重+3",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "高地人的体格",
+          "position": "脸型",
+          "description": "体质+5",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "高地人的耐力",
+          "position": "鼻子",
+          "description": "体质+3，最大负重+6",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "高地人的鲁莽",
+          "position": "嘴唇",
+          "description": "命中-30%，生命+7",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "S~A~0.7",
+          "constitution": "SSS~SS~1.1",
+          "skill": "SS~SS~0.9",
+          "perception": "B~C~0.3",
+          "agility": "B~C~0.3",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "A~A~0.6",
+          "constitution": "SS~SS~1",
+          "skill": "SS~SS~1",
+          "perception": "B~B~0.4",
+          "agility": "B~B~0.4",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "弗莱德里王族",
+      "region": "瓦斯特亚王国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "弗莱德里王族圣痕",
+          "position": "圣痕",
+          "description": "体质+12",
+          "lifespan": "+25"
+        },
+        {
+          "level": "普通橙",
+          "name": "瓦斯特亚后裔",
+          "position": "鼻子",
+          "description": "体质+10%，意志+5%",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "紫弗利夫的坚毅",
+          "position": "脸型",
+          "description": "生命+15",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "铜肺",
+          "position": "鼻子",
+          "description": "体质+3，负重+3",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "严肃",
+          "position": "嘴唇",
+          "description": "感知-3，意志+5，抗爆+10%",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "血友病",
+          "position": "肤色",
+          "description": "生命-10",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "SS~SS~1.0",
+          "constitution": "SSS~SSS~1.2",
+          "skill": "A~B~0.5",
+          "perception": "B~C~0.3",
+          "agility": "B~C~0.3",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "SS~S~0.9",
+          "constitution": "SSS~SSS~1.1",
+          "skill": "A~A~0.6",
+          "perception": "B~B~0.4",
+          "agility": "B~B~0.4",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "法拉希尔血统",
+      "region": "法拉希尔",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "森林之子",
+          "position": "发色",
+          "description": "技巧+9，敏捷+5",
+          "lifespan": "+15"
+        },
+        {
+          "level": "普通橙",
+          "name": "自然之灵",
+          "position": "眉毛",
+          "description": "技巧+10%，偏斜+21%",
+          "lifespan": "+30"
+        },
+        {
+          "level": "蓝特性",
+          "name": "洞察万物",
+          "position": "眼睛",
+          "description": "远程命中+35%",
+          "lifespan": "+20"
+        },
+        {
+          "level": "蓝特性",
+          "name": "自然灵巧",
+          "position": "发色",
+          "description": "技巧+5",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "贤者气度",
+          "position": "眉毛",
+          "description": "感知+3",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "多毛症",
+          "position": "脸型",
+          "description": "暴击-3%",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "A~B~0.5",
+          "constitution": "B~C~0.3",
+          "skill": "SS~SS~1.1",
+          "perception": "A~A~0.6",
+          "agility": "SS~S~0.9",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "B~B~0.4",
+          "constitution": "C~B~0.2",
+          "skill": "SSS~SS~1.2",
+          "perception": "S~C~0.7",
+          "agility": "SS~SS~1.0",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "玛夏审判军",
+      "region": "玛夏帝国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "燃烧意志",
+          "position": "脸型",
+          "description": "体质+7，意志+9",
+          "lifespan": "+15"
+        },
+        {
+          "level": "普通橙",
+          "name": "审判之眼",
+          "position": "眼睛",
+          "description": "体质+5%，意志+10%",
+          "lifespan": "+25"
+        },
+        {
+          "level": "蓝特性",
+          "name": "炎发",
+          "position": "发色",
+          "description": "攻击+3，生命+10",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "霸气",
+          "position": "眉毛",
+          "description": "体质+3",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "炯炯有神",
+          "position": "眼睛",
+          "description": "意志+5",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "早衰",
+          "position": "脸型",
+          "description": "力量-3",
+          "lifespan": "-15"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "S~S~0.8",
+          "constitution": "SS~S~1.0",
+          "skill": "B~C~0.3",
+          "perception": "B~C~0.3",
+          "agility": "B~C~0.3",
+          "will": "SS~SSS~1.2"
+        },
+        "female": {
+          "strength": "S~A~0.7",
+          "constitution": "SS~S~0.9",
+          "skill": "B~B~0.4",
+          "perception": "B~B~0.4",
+          "agility": "B~B~0.4",
+          "will": "SSS~SSS~1.1"
+        }
+      }
+    },
+    {
+      "name": "瑞格王室",
+      "region": "瑞格群岛",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "天空馈赠",
+          "position": "鼻子",
+          "description": "技巧+5，敏捷+9",
+          "lifespan": "+15"
+        },
+        {
+          "level": "普通橙",
+          "name": "共感之眼",
+          "position": "眼睛",
+          "description": "技巧+5%，敏捷+5%，意志+5%",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "火之威严",
+          "position": "眉毛",
+          "description": "暴击+10%，抗爆+10%",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "大地之力",
+          "position": "脸型",
+          "description": "体质+3，生命+7",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "游说家",
+          "position": "嘴唇",
+          "description": "技巧+3",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "畸形",
+          "position": "脸型",
+          "description": "技巧-3",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "B~C~0.3",
+          "constitution": "S~A~0.7",
+          "skill": "SS~SS~1.0",
+          "perception": "B~C~0.3",
+          "agility": "SS~SS~1.0",
+          "will": "A~A~0.6"
+        },
+        "female": {
+          "strength": "C~C~0.2",
+          "constitution": "C~A~0.6",
+          "skill": "SSS~SS~1.1",
+          "perception": "B~B~0.4",
+          "agility": "SSS~SS~1.1",
+          "will": "A~B~0.5"
+        }
+      }
+    },
+    {
+      "name": "瓦诺遗族",
+      "region": "瓦诺王国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "恶魔交易",
+          "position": "鼻子",
+          "description": "意志+12",
+          "lifespan": "+15"
+        },
+        {
+          "level": "普通橙",
+          "name": "神秘庇佑",
+          "position": "圣痕",
+          "description": "感知+5%，意志+10%",
+          "lifespan": "+25"
+        },
+        {
+          "level": "蓝特性",
+          "name": "复仇之眼",
+          "position": "眼睛",
+          "description": "技巧+5，感知+9",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "恶魔低语",
+          "position": "鼻子",
+          "description": "感知+5",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "坚韧体质",
+          "position": "发色",
+          "description": "抗爆+15%",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "高度近视",
+          "position": "眼睛",
+          "description": "偏斜-30%",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "A~B~0.3",
+          "constitution": "A~B~0.5",
+          "skill": "S~S~0.8",
+          "perception": "S~S~0.8",
+          "agility": "B~C~0.3",
+          "will": "SS~SS~1.0"
+        },
+        "female": {
+          "strength": "C~C~0.2",
+          "constitution": "B~B~0.4",
+          "skill": "SS~S~0.9",
+          "perception": "SS~S~0.9",
+          "agility": "B~B~0.4",
+          "will": "SS~SS~0.9"
+        }
+      }
+    },
+    {
+      "name": "祖扎尔达王族",
+      "region": "祖扎尔达王国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "豹神",
+          "position": "眼睛",
+          "description": "敏捷+12",
+          "lifespan": "+15"
+        },
+        {
+          "level": "普通橙",
+          "name": "猎豹印记",
+          "position": "圣痕",
+          "description": "敏捷+10%，近战偏斜26%",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "夜色肌肤",
+          "position": "肤色",
+          "description": "偏斜+15%，抗爆+15%",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "猫瞳",
+          "position": "眼睛",
+          "description": "命中+15%，偏斜+15%",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "黑豹化身",
+          "position": "鼻子",
+          "description": "敏捷+5",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "并指",
+          "position": "嘴唇",
+          "description": "技巧-7",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "B~C~0.3",
+          "constitution": "S~S~0.8",
+          "skill": "S~A~0.7",
+          "perception": "B~C~0.3",
+          "agility": "SSS~SSS~1.2",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "C~C~0.2",
+          "constitution": "S~A~0.7",
+          "skill": "B~B~0.8",
+          "perception": "C~B~0.4",
+          "agility": "SSS~SSS~1.3",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "萨尼德罕",
+      "region": "哈苏汗国",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "顺风耳",
+          "position": "耳朵",
+          "description": "力量+5，敏捷+9",
+          "lifespan": "+15"
+        },
+        {
+          "level": "普通橙",
+          "name": "哈苏汉之子",
+          "position": "肤色",
+          "description": "暴击+10%，攻击力+4",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "草原之子",
+          "position": "发色",
+          "description": "抗爆+15%，生命+7",
+          "lifespan": "+10"
+        },
+        {
+          "level": "蓝特性",
+          "name": "游牧人的自傲",
+          "position": "脸型",
+          "description": "技巧-3，敏捷+5，抗爆+10%",
+          "lifespan": "+5"
+        },
+        {
+          "level": "蓝特性",
+          "name": "天生善战",
+          "position": "肤色",
+          "description": "攻击+2，生命+5",
+          "lifespan": "+5"
+        },
+        {
+          "level": "负面",
+          "name": "耳聋",
+          "position": "耳朵",
+          "description": "远程偏斜-45%",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "S~S~0.8",
+          "constitution": "S~S~0.8",
+          "skill": "B~C~0.3",
+          "perception": "B~C~0.3",
+          "agility": "SSS~SS~1.1",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "S~A~0.7",
+          "constitution": "S~A~0.7",
+          "skill": "B~B~0.4",
+          "perception": "B~B~0.4",
+          "agility": "SSS~SS~1.2",
+          "will": "C~C~0.2"
+        }
+      }
+    },
+    {
+      "name": "高等精灵",
+      "region": "咏雾山脉",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "自然共感",
+          "position": "眉毛",
+          "description": "感知+12",
+          "lifespan": "+30"
+        },
+        {
+          "level": "高级橙",
+          "name": "上古灵性",
+          "position": "耳朵",
+          "description": "感知+15%",
+          "lifespan": "+75"
+        },
+        {
+          "level": "普通橙",
+          "name": "专注之眸",
+          "position": "眼睛",
+          "description": "感知+7，意志+7",
+          "lifespan": "+45"
+        },
+        {
+          "level": "蓝特性",
+          "name": "听风",
+          "position": "耳朵",
+          "description": "远程偏斜+30%",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "神秘气质",
+          "position": "眉毛",
+          "description": "敏捷+3",
+          "lifespan": "+15"
+        },
+        {
+          "level": "负面",
+          "name": "弱视",
+          "position": "眼睛",
+          "description": "感知+5，命中-40%",
+          "lifespan": "+15"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "S~C~0.3",
+          "constitution": "B~C~0.3",
+          "skill": "A~B~0.5",
+          "perception": "SSS~SSS~1.2",
+          "agility": "S~A~0.7",
+          "will": "SS~S~0.9"
+        },
+        "female": {
+          "strength": "C~C~0.2",
+          "constitution": "C~C~0.2",
+          "skill": "A~A~0.6",
+          "perception": "SSS~SSS~1.3",
+          "agility": "S~S~0.8",
+          "will": "S~S~0.8"
+        }
+      }
+    },
+    {
+      "name": "黑暗精灵",
+      "region": "禁忌之地",
+      "features": [
+        {
+          "level": "高级橙",
+          "name": "背叛烙印",
+          "position": "眼睛",
+          "description": "力量+7，感知+9",
+          "lifespan": "+60"
+        },
+        {
+          "level": "普通橙",
+          "name": "死亡讯息",
+          "position": "耳朵",
+          "description": "力量+5%，感知+10%",
+          "lifespan": "+30"
+        },
+        {
+          "level": "蓝特性",
+          "name": "自然密码",
+          "position": "嘴唇",
+          "description": "偏斜+30%，远程偏斜+30%",
+          "lifespan": "+30"
+        },
+        {
+          "level": "蓝特性",
+          "name": "潜伏的杀手",
+          "position": "脸型",
+          "description": "敏捷+5，感知+5",
+          "lifespan": "+15"
+        },
+        {
+          "level": "蓝特性",
+          "name": "狩猎本能",
+          "position": "鼻子",
+          "description": "力量+3，攻击+5",
+          "lifespan": "+15"
+        },
+        {
+          "level": "负面",
+          "name": "退化",
+          "position": "眼睛",
+          "description": "感知+3，命中-20%",
+          "lifespan": "0"
+        }
+      ],
+      "stats": {
+        "male": {
+          "strength": "S~S~0.8",
+          "constitution": "A~B~0.5",
+          "skill": "B~C~0.3",
+          "perception": "SSS~SSS~1.2",
+          "agility": "S~S~0.8",
+          "will": "B~C~0.3"
+        },
+        "female": {
+          "strength": "S~A~0.7",
+          "constitution": "B~B~0.4",
+          "skill": "B~B~0.4",
+          "perception": "SSS~SSS~1.3",
+          "agility": "SS~S~0.9",
+          "will": "C~C~0.2"
+        }
+      }
+    }
+  ]
+}

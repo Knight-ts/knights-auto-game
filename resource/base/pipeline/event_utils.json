@@ -1,0 +1,798 @@
+{
+    "Event_MercenaryJoin": {
+        "recognition": "OCR",
+        "expected": [
+            "加入",
+            "加入佣兵"
+        ],
+        "roi": [
+            194,
+            330,
+            403,
+            121
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_MercenaryJoinCancel"
+        ]
+    },
+    "Event_MercenaryJoinCancel": {
+        "recognition": "OCR",
+        "expected": "取消",
+        "roi": [
+            118,
+            786,
+            500,
+            146
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_MercenaryJoinConfirm": {
+        "recognition": "OCR",
+        "expected": "招募",
+        "roi": [
+            118,
+            786,
+            500,
+            146
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_MercenaryBaby": {
+        "recognition": "OCR",
+        "expected": "孩子出生",
+        "roi": [
+            46,
+            480,
+            640,
+            96
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_MercenaryBabyConfirm"
+        ]
+    },
+    "Event_MercenaryBabyConfirm": {
+        "recognition": "OCR",
+        "expected": "确",
+        "roi": [
+            179,
+            1164,
+            361,
+            106
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_MercenaryBabyName": {
+        "recognition": "TemplateMatch",
+        "template": "UI/Event_ChildDetail.png",
+        "roi": [
+            22,
+            1003,
+            507,
+            168
+        ],
+        "action": "Click",
+        "target": true,
+        "target_offset": [
+            130,
+            55,
+            0,
+            0
+        ],
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "Event_MercenaryBabyTypeName"
+        ]
+    },
+    "Event_MercenaryBabyTypeName": {
+        "recognition": "DirectHit",
+        "action": "InputText",
+        "input_text": "宝宝名字",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": []
+    },
+    "Event_Launch": {
+        "recognition": "OCR",
+        "expected": "启航节",
+        "roi": [
+            184,
+            203,
+            349,
+            162
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_LaunchEnter": {
+        "recognition": "OCR",
+        "expected": "前去",
+        "roi": [
+            79,
+            442,
+            577,
+            444
+        ],
+        "order_by": "Vertical",
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_LaunchLongDistance": {
+        "recognition": "OCR",
+        "expected": "距离过远",
+        "roi": [
+            83,
+            290,
+            583,
+            600
+        ],
+        "timeout": 2000
+    },
+    "Event_LaunchPage": {
+        "recognition": "OCR",
+        "expected": "启航节",
+        "roi": [
+            76,
+            230,
+            573,
+            495
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_LaunchPageShopping": {
+        "recognition": "DirectHit",
+        "custom_action": "LaunchShopping",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_LaunchGoods": {
+        "recognition": "OCR",
+        "expected": "剩余",
+        "roi": [
+            279,
+            440,
+            161,
+            725
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_LaunchGoodsBuy": {
+        "recognition": "OCR",
+        "expected": "兑换",
+        "roi": [
+            515,
+            1128,
+            189,
+            139
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_LaunchGoodsBuyMax": {
+        "recognition": "TemplateMatch",
+        "template": "UI/Event_LaunchGoodsMax.png",
+        "roi": [
+            420,
+            585,
+            187,
+            280
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_LaunchGoodsBuyConfirm": {
+        "recognition": "OCR",
+        "expected": [
+            "确认",
+            "确定"
+        ],
+        "roi": [
+            395,
+            613,
+            229,
+            273
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "ClickCenter_500ms"
+        ]
+    },
+    "Event_LaunchGoodsBuySuccessSkip": {
+        "recognition": "OCR",
+        "expected": "任意处",
+        "roi": [
+            395,
+            613,
+            229,
+            273
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_HarvestFestival": {
+        "recognition": "OCR",
+        "expected": "丰收节",
+        "roi": [
+            133,
+            234,
+            402,
+            166
+        ],
+        "action": "Click",
+        "target": [
+            244,
+            813,
+            287,
+            261
+        ],
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_HarvestFestivalDealWith": {
+        "next": [
+            "UI_MainWindows",
+            "[JumpBack]Event_HarvestFestivalWorship",
+            "[JumpBack]Event_HarvestFestivalPrePay",
+            "[JumpBack]Event_HarvestFestivalAnnuaClosing",
+            "[JumpBack]Event_HarvestFestival"
+        ]
+    },
+    "Event_HarvestFestivalAnnuaClosing": {
+        "recognition": "OCR",
+        "expected": "年度结算",
+        "roi": [
+            42,
+            70,
+            121,
+            332
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_HarvestFestivalConfirm"
+        ]
+    },
+    "Event_HarvestFestivalPrePay": {
+        "recognition": "OCR",
+        "expected": "口粮预交",
+        "roi": [
+            28,
+            266,
+            153,
+            144
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_HarvestFestivalConfirm"
+        ]
+    },
+    "Event_HarvestFestivalConfirm": {
+        "recognition": "OCR",
+        "expected": "确定",
+        "roi": [
+            266,
+            564,
+            199,
+            575
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_HarvestFestivalWorship": {
+        "recognition": "OCR",
+        "expected": "祈祷",
+        "roi": [
+            227,
+            1142,
+            266,
+            130
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "Event_HarvestFestivalWorshipConfirm"
+        ]
+    },
+    "Event_HarvestFestivalWorshipConfirm": {
+        "recognition": "OCR",
+        "expected": "确定",
+        "roi": [
+            417,
+            469,
+            217,
+            516
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_ConfessionSuccess": {
+        "recognition": "OCR",
+        "roi": [
+            112,
+            163,
+            441,
+            180
+        ],
+        "expected": [
+            "表白成功"
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "Auto_WeddingTask"
+        ]
+    },
+    "Event_WeddingPage": {
+        "recognition": "OCR",
+        "expected": [
+            "婚礼"
+        ],
+        "roi": [
+            245,
+            0,
+            240,
+            124
+        ],
+        "timeout": 2000
+    },
+    "Event_WeddingTitleCheckLeft": {
+        "recognition": "OCR",
+        "expected": [
+            "公",
+            "伯",
+            "男",
+            "骑"
+        ],
+        "roi": [
+            7,
+            420,
+            282,
+            142
+        ],
+        "timeout": 2000
+    },
+    "Event_WeddingTitleCheckRight": {
+        "recognition": "OCR",
+        "expected": [
+            "公",
+            "伯",
+            "男",
+            "骑"
+        ],
+        "roi": [
+            455,
+            358,
+            265,
+            210
+        ],
+        "timeout": 2000
+    },
+    "Event_WeddingTitleButton": {
+        "recognition": "DirectHit",
+        "next": [
+            "Event_WeddingTitleEntry",
+            "[JumpBack]Event_WeddingSweepDown"
+        ]
+    },
+    "Event_WeddingTitleEntry": {
+        "recognition": "OCR",
+        "expected": [
+            "祝福"
+        ],
+        "roi": [
+            24,
+            573,
+            278,
+            633
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_WeddingSweepDown": {
+        "recognition": "DirectHit",
+        "action": "Swipe",
+        "begin": [
+            374,
+            1000,
+            1,
+            1
+        ],
+        "end": [
+            383,
+            850,
+            1,
+            1
+        ],
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_WeddingSweepUp": {
+        "recognition": "DirectHit",
+        "action": "Swipe",
+        "begin": [
+            383,
+            850,
+            1,
+            1
+        ],
+        "end": [
+            374,
+            1000,
+            1,
+            1
+        ],
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_ConfessionFail": {
+        "recognition": "OCR",
+        "roi": [
+            195,
+            176,
+            351,
+            164
+        ],
+        "expected": [
+            "表白失败"
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_ConfessionFailGiveUp": {
+        "recognition": "OCR",
+        "roi": [
+            82,
+            1060,
+            574,
+            155
+        ],
+        "expected": [
+            "放弃"
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_MercenarieRetire": {
+        "recognition": "OCR",
+        "expected": [
+            "我觉得累了",
+            "累了"
+        ],
+        "roi": [
+            123,
+            623,
+            470,
+            198
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "focus": "不好, 佣兵退休啦！！！！",
+        "next": [
+            "Event_MercenarieRetire_Agree"
+        ]
+    },
+    "Event_MercenarieRetire_Agree": {
+        "recognition": "OCR",
+        "expected": [
+            "同意"
+        ],
+        "roi": [
+            29,
+            472,
+            408,
+            270
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "Event_MercenarieRetire_Finish",
+            "[JumpBack]ClickCenter_500ms"
+        ]
+    },
+    "Event_MercenarieRetire_Finish": {
+        "recognition": "OCR",
+        "expected": [
+            "发放退休金"
+        ],
+        "roi": [
+            258,
+            553,
+            213,
+            507
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "Event_MercenarieRetire_Finish_Confirm"
+        ]
+    },
+    "Event_MercenarieRetire_Finish_Confirm": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            221,
+            534,
+            271,
+            559
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_PirateRaid": {
+        "recognition": "OCR",
+        "expected": [
+            "海盗正在袭扰"
+        ],
+        "roi": [
+            180,
+            195,
+            360,
+            170
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_PirateRaid_Dispatch"
+        ]
+    },
+    "Event_PirateRaid_Dispatch": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "PirateRaidProcessor",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_PirateRaid_ClickBanner": {
+        "recognition": "OCR",
+        "expected": [
+            "海盗正在袭扰"
+        ],
+        "roi": [
+            180,
+            195,
+            360,
+            170
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_PirateRaid_PreparePage": {
+        "recognition": "OCR",
+        "expected": [
+            "海盗侵袭"
+        ],
+        "roi": [
+            270,
+            488,
+            320,
+            60
+        ],
+        "timeout": 2000
+    },
+    "Event_PirateRaid_EnterBattle": {
+        "recognition": "OCR",
+        "expected": [
+            "进入战斗"
+        ],
+        "roi": [
+            200,
+            960,
+            320,
+            100
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_PirateRaid_SailingDialog": {
+        "recognition": "OCR",
+        "expected": [
+            "瑞格群岛"
+        ],
+        "roi": [
+            200,
+            570,
+            350,
+            100
+        ],
+        "max_hit": 6,
+        "timeout": 2000
+    },
+    "Event_PirateRaid_SailingConfirm": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            450,
+            650,
+            220,
+            120
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_PirateRaid_BattlePage": {
+        "recognition": "OCR",
+        "expected": [
+            "战斗开始"
+        ],
+        "roi": [
+            200,
+            1180,
+            320,
+            100
+        ],
+        "timeout": 2000
+    },
+    "Event_PirateRaid_BattleStart": {
+        "recognition": "OCR",
+        "expected": [
+            "战斗开始"
+        ],
+        "roi": [
+            200,
+            1180,
+            320,
+            100
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_PirateRaid_VictoryConfirm": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            180,
+            850,
+            360,
+            330
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "Event_PirateRaid_VictoryConfirm",
+            "[JumpBack]Event_PirateRaid_ArchipelagoBack"
+        ]
+    },
+    "Event_PirateRaid_ArchipelagoBack": {
+        "recognition": "OCR",
+        "expected": [
+            "前往大陆"
+        ],
+        "roi": [
+            297,
+            1228,
+            125,
+            52
+        ],
+        "timeout": 2000,
+        "next": [
+            "ClickGoToContinent"
+        ]
+    },
+    "Event_PirateRaid_TravelDialog": {
+        "recognition": "OCR",
+        "expected": [
+            "瑞格群岛"
+        ],
+        "roi": [
+            200,
+            540,
+            320,
+            120
+        ],
+        "timeout": 2000
+    },
+    "Event_PirateRaid_ChooseEstate": {
+        "recognition": "OCR",
+        "expected": [
+            "庄园传送"
+        ],
+        "roi": [
+            100,
+            690,
+            220,
+            70
+        ],
+        "order_by": "Vertical",
+        "target": true,
+        "target_offset": [
+            360,
+            55,
+            0,
+            0
+        ],
+        "action": "Click",
+        "post_delay": 2500,
+        "timeout": 2000
+    },
+    "Event_PirateRaid_ChooseSailSingle": {
+        "doc": "海盗事件切群岛时的单行航海弹窗；调用前必须已命中 Event_PirateRaid_TravelDialog 且没有庄园传送选项",
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [
+            470,
+            670,
+            140,
+            100
+        ],
+        "post_delay": 2500,
+        "timeout": 2000
+    },
+    "事件_孩子夭折了": {
+        "recognition": "OCR",
+        "expected": [
+            "夭折"
+        ],
+        "replace": [
+            [
+                "天",
+                "夭"
+            ]
+        ],
+        "roi": [
+            172,
+            736,
+            373,
+            148
+        ],
+        "action": "Click",
+        "post_delay": 50,
+        "timeout": 2000,
+        "next": [
+            "事件_孩子夭折了_确认"
+        ]
+    },
+    "事件_孩子夭折了_确认": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            247,
+            1155,
+            213,
+            111
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    }
+}

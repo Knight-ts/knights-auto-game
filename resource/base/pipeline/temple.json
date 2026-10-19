@@ -1,0 +1,404 @@
+{
+    // ============================================
+    // 神殿 - 入口
+    // ============================================
+    // 从城堡进入神殿（使用 DirectHit 点击右下角导航的"城堡"按钮）
+    "Temple_Entry": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [
+            506,
+            1265,
+            60,
+            30
+        ],
+        "post_delay": 1000,
+        "timeout": 2000,
+        "next": [
+            "Temple_Main"
+        ]
+    },
+    // 神殿主界面
+    "Temple_Main": {
+        "recognition": "OCR",
+        "roi": [
+            326,
+            6,
+            72,
+            42
+        ],
+        "expected": "神殿",
+        "timeout": 2000,
+        "next": [
+            "Temple_Ancestor_Entry"
+        ]
+    },
+    // ============================================
+    // 祭拜先祖流程
+    // ============================================
+    // 进入祭拜先祖
+    "Temple_Ancestor_Entry": {
+        "recognition": "OCR",
+        "expected": [
+            "祭拜先祖"
+        ],
+        "roi": [
+            296,
+            576,
+            126,
+            37
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 2000,
+        "next": [
+            "Temple_Ancestor_List"
+        ]
+    },
+    // 祭拜先祖 - 先祖列表
+    "Temple_Ancestor_List": {
+        "recognition": "OCR",
+        "expected": [
+            "祭拜先祖"
+        ],
+        "roi": [
+            150,
+            906,
+            307,
+            30
+        ],
+        "timeout": 2000,
+        "next": [
+            "Temple_Ancestor_Select"
+        ]
+    },
+    // 祭拜先祖 - 选择先祖（具体哪个通过 pipeline_override 指定）
+    "Temple_Ancestor_Select": {
+        "recognition": "OCR",
+        "roi": [
+            148,
+            249,
+            500,
+            500
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 2000,
+        "next": [
+            "Temple_Ancestor_Detail"
+        ]
+    },
+    // 祭拜先祖 - 详情
+    "Temple_Ancestor_Detail": {
+        "recognition": "OCR",
+        "expected": [
+            "角色属性"
+        ],
+        "roi": [
+            296,
+            8,
+            127,
+            38
+        ],
+        "timeout": 2000,
+        "next": [
+            "Temple_Ancestor_Equip",
+            "Temple_Ancestor_Skill",
+            "Temple_Ancestor_Blood",
+            "Temple_Ancestor_Family"
+        ]
+    },
+    // 详情 - 装备和属性
+    "Temple_Ancestor_Equip": {
+        "recognition": "OCR",
+        "expected": [
+            "装备和属性"
+        ],
+        "roi": [
+            71,
+            417,
+            135,
+            33
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    // 详情 - 技能
+    "Temple_Ancestor_Skill": {
+        "recognition": "OCR",
+        "expected": [
+            "技能"
+        ],
+        "roi": [
+            80,
+            894,
+            60,
+            38
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "Temple_Ancestor_SkillDetail"
+        ]
+    },
+    // 详情 - 技能详细
+    "Temple_Ancestor_SkillDetail": {
+        "recognition": "OCR",
+        "roi": [
+            115,
+            946,
+            565,
+            300
+        ],
+        "timeout": 2000
+    },
+    // 详情 - 血统
+    "Temple_Ancestor_Blood": {
+        "recognition": "OCR",
+        "expected": [
+            "血统"
+        ],
+        "roi": [
+            329,
+            414,
+            62,
+            38
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    // 详情 - 家庭
+    "Temple_Ancestor_Family": {
+        "recognition": "OCR",
+        "expected": [
+            "家庭"
+        ],
+        "roi": [
+            547,
+            416,
+            64,
+            34
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    // ============================================
+    // 神祇雕像流程
+    // ============================================
+    // 进入神祇雕像
+    "Temple_Statue_Entry": {
+        "recognition": "OCR",
+        "expected": [
+            "神祇雕像"
+        ],
+        "roi": [
+            299,
+            442,
+            121,
+            34
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 2000,
+        "next": [
+            "Temple_Statue_List"
+        ]
+    },
+    // 神祇雕像 - 神像列表
+    "Temple_Statue_List": {
+        "recognition": "OCR",
+        "expected": [
+            "神识状态"
+        ],
+        "roi": [
+            83,
+            332,
+            110,
+            28
+        ],
+        "timeout": 2000,
+        "next": [
+            "Temple_Statue_Select"
+        ]
+    },
+    // 神祇雕像 - 选择神像
+    "Temple_Statue_Select": {
+        "recognition": "OCR",
+        "roi": [
+            296,
+            98,
+            60,
+            40
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 2000,
+        "next": [
+            "Temple_Statue_Detail"
+        ]
+    },
+    // 神祇雕像 - 神像详情
+    "Temple_Statue_Detail": {
+        "recognition": "OCR",
+        "expected": [
+            "信仰等级"
+        ],
+        "roi": [
+            360,
+            222,
+            109,
+            28
+        ],
+        "timeout": 2000,
+        "next": [
+            "Temple_Statue_Offering",
+            "Temple_Statue_Auto"
+        ]
+    },
+    // 神祇雕像 - 供奉次数
+    "Temple_Statue_Offering": {
+        "recognition": "OCR",
+        "expected": [
+            "剩余供奉次数"
+        ],
+        "roi": [
+            82,
+            401,
+            160,
+            27
+        ],
+        "timeout": 2000
+    },
+    // 神祇雕像 - 自动供奉
+    "Temple_Statue_Auto": {
+        "recognition": "OCR",
+        "expected": [
+            "自动供奉"
+        ],
+        "roi": [
+            131,
+            1205,
+            90,
+            29
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    // ============================================
+    // 升级神殿流程
+    // ============================================
+    // 进入升级神殿
+    "Temple_Upgrade_Entry": {
+        "recognition": "OCR",
+        "expected": [
+            "升级神殿"
+        ],
+        "roi": [
+            296,
+            305,
+            127,
+            37
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 2000,
+        "next": [
+            "Temple_Upgrade_Confirm"
+        ]
+    },
+    // 升级神殿 - 确认
+    "Temple_Upgrade_Confirm": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            175,
+            646,
+            436,
+            148
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    // ============================================
+    // 神器流程
+    // ============================================
+    // 进入神器
+    "Temple_Artifact_Entry": {
+        "recognition": "OCR",
+        "expected": [
+            "神器"
+        ],
+        "roi": [
+            325,
+            709,
+            69,
+            41
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 2000
+    },
+    // ============================================
+    // 通用返回
+    // ============================================
+    // 返回按钮（使用DirectHit避免图片路径问题）
+    "Temple_Return": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [
+            655,
+            11,
+            52,
+            43
+        ],
+        "post_delay": 500,
+        "timeout": 2000,
+        "next": [
+            "Temple_Main"
+        ]
+    },
+    // 关闭按钮（先祖列表/详情界面）
+    "Temple_Close": {
+        "recognition": "OCR",
+        "expected": [
+            "X"
+        ],
+        "roi": [
+            248,
+            652,
+            41,
+            42
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    // 返回神殿主界面
+    "Temple_Exit": {
+        "recognition": "OCR",
+        "expected": [
+            "神殿"
+        ],
+        "roi": [
+            321,
+            5,
+            76,
+            45
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 2000,
+        "next": [
+            "Temple_Main"
+        ]
+    }
+}

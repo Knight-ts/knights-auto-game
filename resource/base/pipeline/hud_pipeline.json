@@ -1,0 +1,71 @@
+{
+    "Hud_TaskIconMatch": {
+        "recognition": "TemplateMatch",
+        "template": "Task/斩杀任务.png",
+        "roi": [
+            10,
+            350,
+            700,
+            900
+        ],
+        "timeout": 2000
+    },
+    "Hud_TaskNameOcr": {
+        "recognition": "OCR",
+        "expected": ".*",
+        "roi": [
+            110,
+            430,
+            350,
+            50
+        ],
+        "timeout": 2000
+    },
+    "Hud_TaskLevelOcr": {
+        "recognition": "OCR",
+        "expected": "(敌人|任务)等级[：:]",
+        "roi": [
+            570,
+            430,
+            140,
+            90
+        ],
+        "timeout": 2000
+    },
+    "Hud_TaskDescOcr": {
+        "recognition": "OCR",
+        "expected": ".*",
+        "roi": [
+            110,
+            536,
+            570,
+            110
+        ],
+        "timeout": 2000
+    },
+    "Hud_RewardOcr": {
+        "recognition": "OCR",
+        "expected": "x\\d+",
+        "roi": [
+            110,
+            680,
+            350,
+            120
+        ],
+        "timeout": 2000
+    },
+    "Hud_AcceptButtonOcr": {
+        "recognition": "OCR",
+        "expected": [
+            "接受",
+            "放弃"
+        ],
+        "roi": [
+            520,
+            685,
+            180,
+            120
+        ],
+        "timeout": 2000
+    }
+}

@@ -1,0 +1,6 @@
+{
+  "enabled": false,
+  "format": "feishu",
+  "webhook": "",
+  "timeout": 8.0
+}

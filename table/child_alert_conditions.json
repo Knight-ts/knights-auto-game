@@ -1,0 +1,96 @@
+{
+  "conditions": [
+    {
+      "id": "koneita",
+      "name": "科内塔之怒组合",
+      "description": "技巧SS + 力量S + 意志或敏捷有一个0.3以上 + 科内塔之怒",
+      "enabled": true,
+      "detection_node": "检测_科内塔之怒",
+      "case_name": "科内塔之怒",
+      "default_checked": true,
+      "features": [
+        "科内塔之怒"
+      ],
+      "potential": {
+        "力量": {
+          "grade": "S"
+        },
+        "技巧": {
+          "grade": "SS"
+        },
+        "or_attributes": [
+          {
+            "意志": {
+              "min_value": 0.3
+            }
+          },
+          {
+            "敏捷": {
+              "min_value": 0.3
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sun_and_koneita",
+      "name": "太阳+科内塔组合",
+      "description": "技巧SS + 力量S + 意志或敏捷有一个0.3以上 + 太阳之子 + 科内塔之怒",
+      "enabled": true,
+      "detection_node": "检测_太阳+科内塔之怒",
+      "case_name": "太阳+科内塔之怒",
+      "default_checked": true,
+      "features": [
+        "科内塔之怒",
+        "太阳之子"
+      ],
+      "potential": {
+        "力量": {
+          "grade": "S"
+        },
+        "技巧": {
+          "grade": "SS"
+        },
+        "or_attributes": [
+          {
+            "意志": {
+              "min_value": 0.3
+            }
+          },
+          {
+            "敏捷": {
+              "min_value": 0.3
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "shang_zi_zhuan",
+      "name": "上自专（上古灵性+自然共感+专注之眸）",
+      "description": "高等精灵顶级三特性：上古灵性 + 自然共感 + 专注之眸，不看属性",
+      "enabled": true,
+      "detection_node": "检测_上自专",
+      "case_name": "上自专",
+      "default_checked": false,
+      "features": [
+        "上古灵性",
+        "自然共感",
+        "专注之眸"
+      ]
+    },
+    {
+      "id": "oulike_and_tonglei",
+      "name": "欧里克神力+同类相食",
+      "description": "欧里克的神力 + 同类相食，高力技兼顾偏斜生存，不看属性",
+      "enabled": true,
+      "detection_node": "检测_欧里克神力+同类相食",
+      "case_name": "欧里克神力+同类相食",
+      "default_checked": false,
+      "features": [
+        "欧里克的神力",
+        "同类相食"
+      ]
+    }
+  ]
+}

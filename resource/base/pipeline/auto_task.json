@@ -1,0 +1,111 @@
+{
+    "StartCityTask": {
+        "next": [
+            "OpenCityTaskPanel"
+        ],
+        "timeout": 2000
+    },
+    "OpenCityTaskPanel": {
+        "next": [
+            "InTaskPannel",
+            "[JumpBack]FindCityTask_OCR",
+            "[JumpBack]SwitchInnerCity",
+            "[JumpBack]EnterCity"
+        ],
+        "timeout": 3000
+    },
+    "InTaskPannel": {
+        "recognition": "OCR",
+        "roi": [
+            284,
+            6,
+            149,
+            108
+        ],
+        "expected": [
+            "任务",
+            "放弃",
+            "接受",
+            "一键接受",
+            "一键"
+        ],
+        "pre_delay": 500,
+        "rate_limit": 500,
+        "timeout": 2000
+    },
+    "Auto_FightTask": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "TaskProcessor",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Auto_SingleFightTask": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "SingleFightTaskProcessor",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Auto_YearlyTask": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "YearlyTaskProcessor",
+        "post_delay": 500,
+        "timeout": 3000
+    },
+    "YearlyTaskMonths": {
+        "recognition": "OCR",
+        "enabled": true,
+        "expected": [
+            "12"
+        ]
+    },
+    "CustomTaskBlacklist": {
+        "recognition": "OCR",
+        "expected": [
+            ""
+        ]
+    },
+    "Auto_MarryTask": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "MarryProcessor",
+        "post_delay": 500,
+        "timeout": 3000
+    },
+    "Flag_EnableMarryTask": {
+        "enabled": true
+    },
+    "Flag_EnableSailingFestivalPurchase": {
+        "enabled": true
+    },
+    "Flag_AutoNameChild": {
+        "enabled": true
+    },
+    "Flag_GrowthTrialMode": {
+        "enabled": false
+    },
+    "Auto_WeddingTask": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "WeddingProcessor",
+        "post_delay": 500,
+        "timeout": 3000
+    },
+    "Auto_DailyTask": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "DailyTaskProcessor",
+        "post_delay": 500,
+        "timeout": 3000
+    },
+    "Auto_TestFunc": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "TestFunc",
+        "post_delay": 500,
+        "timeout": 3000,
+        "enabled": true
+    }
+}
