@@ -815,5 +815,19 @@
         "action": "Click",
         "post_delay": 500,
         "timeout": 2000
+    },
+    "Event_MercenaryDialogButton": {
+        "recognition": "OCR",
+        "expected": [
+            "取消",
+            "招募"
+        ],
+        "roi": [
+            40,
+            480,
+            640,
+            700
+        ],
+        "timeout": 2000
     }
 }
