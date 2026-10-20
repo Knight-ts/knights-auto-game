@@ -29,8 +29,8 @@ class XxxProcessor(CustomAction):
 | `ChildRec` | [`agent/action/zshg/child.py:326`](../../../agent/action/zshg/child.py) | 识别子项：父母姓名/爵位/佣兵团、六维属性、血脉、特性；可选好苗子提醒 | `child_info.json:283` |
 | `ChildAlertManager` | [`agent/action/zshg/child_alert_manager.py`](../../../agent/action/zshg/child_alert_manager.py) | 打开本机网页控制台（主页 / 总控台 / 截图 / 好娃提醒），[`web_console.py`](../../../agent/action/zshg/web_console.py) 提供 HTTP 与 ADB 操作 | `child_info.json` 的 `Auto_ChildAlertManager` |
 | `DailyTaskProcessor` | [`agent/action/zshg/daily_task.py:11`](../../../agent/action/zshg/daily_task.py) | 每日任务调度：遍历 `BigMapMarket` / `BigMapMall` / `BigMapRewardToken` 按 `enabled` 标志执行 | `event_utils.json` 多处 |
-| `MarryProcessor` | [`agent/action/zshg/marry.py:33`](../../../agent/action/zshg/marry.py) | 联姻/相亲主流程：进大厅、识别血统、姓名库匹配、自动确认或换下一个 | `marry.json` 多处 |
-| `WeddingProcessor` | [`agent/action/zshg/marry.py:903`](../../../agent/action/zshg/marry.py) | 婚礼流程：OCR 爵位、按爵位优先级处理、确认婚礼 | `marry.json` |
+| `MarryProcessor` | [`agent/action/zshg/marry.py:33`](../../../agent/action/zshg/marry.py) | 联姻/相亲主流程：进大厅、识别血统、姓名库匹配、自动确认或换下一个；被拒时按选项金币挽留/放弃 | `marry.json` 多处 |
+| `WeddingProcessor` | [`agent/action/zshg/marry.py:1141`](../../../agent/action/zshg/marry.py) | 婚礼流程：OCR 爵位、按「婚礼宴会档位」或爵位优先级选宴会、确认婚礼 | `auto_task.json` 的 `Auto_WeddingTask` |
 | `TestFunc` | [`agent/action/zshg/daily_task.py:49`](../../../agent/action/zshg/daily_task.py) | **调试用** —— cv2 读本地 `1.jpg`，**生产请勿在 Pipeline 中调用** | — |
 
 ## TODO：已声明未实现

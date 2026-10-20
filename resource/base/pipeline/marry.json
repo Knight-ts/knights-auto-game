@@ -511,5 +511,104 @@
         ],
         "timeout": 1000,
         "enabled": true
+    },
+    "MarryBanquetSelect": {
+        "attach": {
+            "description": "婚礼宴会档位（auto 按爵位 / 乡村宴会 / 祝福婚宴）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "auto"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "MarryRejectGoldSelect": {
+        "attach": {
+            "description": "相亲被拒处理（keep 花金币挽留 / giveup 放弃）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "giveup"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "CastleMarryRejectDialog": {
+        "attach": {
+            "description": "相亲回信：被对方拒绝的弹窗（只识别不点击）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "还没活够",
+            "算了",
+            "很遗憾",
+            "没有人",
+            "比起",
+            "结婚",
+            "伙计",
+            "拒绝"
+        ],
+        "roi": [
+            120,
+            520,
+            560,
+            380
+        ],
+        "timeout": 2000,
+        "enabled": true
+    },
+    "CastleMarryRejectGold": {
+        "attach": {
+            "description": "被拒后花金币挽留：按钮文字含「金币」或「挽留」"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "金币",
+            "挽留"
+        ],
+        "roi": [
+            40,
+            940,
+            640,
+            340
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 1000,
+        "timeout": 2000
+    },
+    "CastleMarryRejectGiveUp": {
+        "attach": {
+            "description": "被拒后放弃该候选人：点「放弃 / 离开」类按钮"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "放弃",
+            "离开",
+            "不了"
+        ],
+        "roi": [
+            40,
+            940,
+            640,
+            340
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 800,
+        "timeout": 2000
     }
 }

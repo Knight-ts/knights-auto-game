@@ -794,5 +794,64 @@
                 }
             }
         ]
+    },
+    "婚礼宴会档位": {
+        "type": "select",
+        "description": "告白成功后的婚礼用哪个宴会档位。默认按双方最高爵位自动选（公爵→乡村宴会，伯爵及以下→祝福婚宴）；指定档位则固定用该档，找不到时自动回退。",
+        "default_case": "自动（按爵位）",
+        "cases": [
+            {
+                "name": "自动（按爵位）",
+                "description": "公爵办乡村宴会，伯爵及以下办祝福婚宴",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "auto"
+                    }
+                }
+            },
+            {
+                "name": "乡村宴会",
+                "description": "无论爵位都用最高档的乡村宴会",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "乡村宴会"
+                    }
+                }
+            },
+            {
+                "name": "祝福婚宴",
+                "description": "无论爵位都用祝福婚宴",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "祝福婚宴"
+                    }
+                }
+            }
+        ]
+    },
+    "相亲被拒处理": {
+        "type": "select",
+        "description": "相亲回信被对方拒绝时怎么处理。选「金币挽留」会按弹窗里的金币按钮挽留该对象（会花金币）；选「放弃」直接结束这次相亲。",
+        "default_case": "放弃（换下一位）",
+        "cases": [
+            {
+                "name": "放弃（换下一位）",
+                "description": "不花金币，直接放弃该候选人",
+                "pipeline_override": {
+                    "MarryRejectGoldSelect": {
+                        "expected": "giveup"
+                    }
+                }
+            },
+            {
+                "name": "金币挽留",
+                "description": "被拒后花金币把对方留下来（需要界面有含「金币/挽留」的按钮）",
+                "pipeline_override": {
+                    "MarryRejectGoldSelect": {
+                        "expected": "keep"
+                    }
+                }
+            }
+        ]
     }
 }

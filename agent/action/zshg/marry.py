@@ -102,6 +102,7 @@ class MarryProcessor(CustomAction):
         self._target_title = "公爵"
         self._age_pref = "older"
         self._feature_mode = "orange"
+        self._reject_gold_mode = "giveup"  # 被拒处理：giveup 放弃 / keep 花金币挽留
 
     def _load_blood_names(self) -> None:
         """
@@ -181,6 +182,7 @@ class MarryProcessor(CustomAction):
         self._target_title = self._get_selected_title(context)
         self._age_pref = self._get_selected_age_pref(context)
         self._feature_mode = self._get_selected_feature_mode(context)
+        self._reject_gold_mode = self._get_selected_reject_mode(context)
 
         # 前处理：检查联姻资格
         candidates = self._pre_process(context)
@@ -206,6 +208,7 @@ class MarryProcessor(CustomAction):
         self._target_title = self._get_selected_title(context)
         self._age_pref = self._get_selected_age_pref(context)
         self._feature_mode = self._get_selected_feature_mode(context)
+        self._reject_gold_mode = self._get_selected_reject_mode(context)
 
         # 检查联姻资格（界面进入、对象数量、回信数量）
         if not self._check_marriage_eligibility(context):
@@ -222,6 +225,9 @@ class MarryProcessor(CustomAction):
         logger.info(
             f"选择的相亲种族: {self._target_race}，对应的国家: {self._target_country}"
         )
+
+        # 点「联姻」进候选人窗口之前，先清掉可能残留的被拒弹窗
+        self._handle_marry_reject(context)
 
         context.run_task(
             "CastleMarrySelectStart",
@@ -339,6 +345,67 @@ class MarryProcessor(CustomAction):
         logger.info(f"选择的相亲范围: {'多角色相亲' if is_multi else '单角色相亲'}")
         return is_multi
 
+    def _get_selected_reject_mode(self, context: Context) -> str:
+        """被拒处理：giveup（放弃，换下一位）/ keep（准备金币挽留）。"""
+        data = context.get_node_data("MarryRejectGoldSelect")
+        mode = "giveup"
+        if data:
+            expected = data.get("recognition", {}).get("param", {}).get(
+                "expected", ["giveup"]
+            )
+            if isinstance(expected, list) and expected:
+                mode = expected[0]
+            elif isinstance(expected, str) and expected:
+                mode = expected
+        logger.info(f"相亲被拒处理: {'金币挽留' if mode == 'keep' else '放弃'}")
+        return mode
+
+    # ==================== 被拒处理 ====================
+
+    @staticmethod
+    def _task_ok(result) -> bool:
+        """run_task 的返回是否真的命中了节点。"""
+        status = getattr(result, "status", None)
+        return bool(status is not None and getattr(status, "succeeded", False))
+
+    def _handle_marry_reject(self, context: Context) -> str:
+        """处理「相亲被对方拒绝」弹窗。
+
+        Returns:
+            none（没有弹窗）/ kept（已花金币挽留）/ gaveup（已放弃该候选人）
+        """
+        if context.tasker.stopping:
+            return "none"
+
+        img = context.tasker.controller.post_screencap().wait().get()
+        if not context.run_recognition("CastleMarryRejectDialog", img).hit:
+            return "none"
+
+        logger.info("检测到相亲被拒绝弹窗")
+        if getattr(self, "_reject_gold_mode", "giveup") == "keep":
+            if self._try_keep_with_gold(context):
+                return "kept"
+            logger.warning("金币挽留按钮未找到，回退到放弃该候选人")
+
+        if not self._task_ok(context.run_task("CastleMarryRejectGiveUp")):
+            logger.warning("未找到「放弃/离开」按钮，尝试点屏幕中心关闭弹窗")
+            context.run_task("ClickCenter_500ms")
+        return "gaveup"
+
+    def _try_keep_with_gold(self, context: Context) -> bool:
+        """点「金币挽留」按钮，必要时补一次确认。"""
+        if not self._task_ok(context.run_task("CastleMarryRejectGold")):
+            return False
+
+        time.sleep(0.8)
+        img = context.tasker.controller.post_screencap().wait().get()
+        # 部分版本点完会再弹一次确认框；没有就不点，避免误触别的按钮
+        if context.run_recognition("PopUpWindowConfirm", img).hit:
+            context.run_task("PopUpWindowConfirm")
+
+        logger.info("已选择金币挽留，保留该相亲对象")
+        return True
+
     # ==================== 前处理阶段 ====================
 
     def _pre_process(self, context: Context) -> list:
@@ -381,6 +448,9 @@ class MarryProcessor(CustomAction):
             if context.tasker.stopping:
                 logger.info("任务正在停止，中断联姻资格检查")
                 return False
+
+            # 上一轮被拒的弹窗可能还挂在界面上，先按用户选项处理掉
+            self._handle_marry_reject(context)
 
             img = context.tasker.controller.post_screencap().wait().get()
             if context.run_recognition("CastleMarryWindow", img).hit:
@@ -730,6 +800,7 @@ class MarryProcessor(CustomAction):
                         context.run_task("CastleMarryJustThisButton")
                         context.run_task("PopUpWindowConfirm")
                         self._email_current += 1
+                        self._handle_marry_reject(context)
                         return
                     else:
                         if getattr(self, "_feature_mode", "orange") == "any":
@@ -740,6 +811,7 @@ class MarryProcessor(CustomAction):
                             context.run_task("CastleMarryJustThisButton")
                             context.run_task("PopUpWindowConfirm")
                             self._email_current += 1
+                            self._handle_marry_reject(context)
                             return
                         # 无橙色特征，尝试下一位
                         logger.info(
@@ -753,6 +825,7 @@ class MarryProcessor(CustomAction):
                         context.run_task("CastleMarryJustThisButton")
                         context.run_task("PopUpWindowConfirm")
                         self._email_current += 1
+                        self._handle_marry_reject(context)
                         return
                     # 未识别到照片就到了结束，直接尝试下一位
                     logger.info(f"第 {attempt} 次尝试未识别到照片，尝试下一位")
@@ -766,6 +839,7 @@ class MarryProcessor(CustomAction):
 
         # 5次都失败，拒绝并离开
         logger.info(f"经过 {max_attempts} 次尝试均无橙色特征，拒绝该候选人")
+        self._handle_marry_reject(context)
         context.run_task("CastleMarryLeave")
 
     def _execute_high_blood_matching(self, context: Context, target_race: str) -> None:
@@ -783,6 +857,7 @@ class MarryProcessor(CustomAction):
             logger.warning(
                 f"经过 {self._current_max_attempts} 次尝试，仍未找到匹配的姓名"
             )
+            self._handle_marry_reject(context)
             context.run_task("PopUpWindowCancel")
             context.run_task("CastleMarryLeave")
 
@@ -989,6 +1064,7 @@ class MarryProcessor(CustomAction):
                 )
                 context.run_task("PopUpWindowConfirm")
                 self._email_current += 1  # 约会人数 +1
+                self._handle_marry_reject(context)
                 return True
             else:
                 logger.info(f"姓名不匹配：{detected_name} 不在高血名单中，尝试下一个")
@@ -1151,23 +1227,58 @@ class WeddingProcessor(CustomAction):
 
         logger.info(f"当前双方最高爵位：{highest_title}")
 
-        # 2.2 计算当前用什么档位来结婚
-        target_banquet = self._get_target_banquet(highest_title)
-        logger.info(f"选择宴会档位：{target_banquet}")
+        # 2.2 计算当前用什么档位来结婚：用户指定优先，auto 才按爵位
+        chosen_banquet = self._get_selected_banquet(context)
+        if chosen_banquet and chosen_banquet != "auto":
+            target_banquet = chosen_banquet
+            logger.info(f"宴会档位：使用用户指定「{target_banquet}」")
+        else:
+            target_banquet = self._get_target_banquet(highest_title)
+            logger.info(f"宴会档位：按爵位自动选择「{target_banquet}」")
 
         # 3. 找到目标宴会的 button
-        context.run_task(
-            "Event_WeddingTitleButton",
-            pipeline_override={
-                "Event_WeddingTitleEntry": {"expected": [target_banquet[:2]]}
-            },
-        )
+        if not self._click_banquet(context, target_banquet):
+            fallback_banquet = self._get_target_banquet(highest_title)
+            if fallback_banquet != target_banquet:
+                logger.warning(
+                    f"未找到「{target_banquet}」档位按钮，回退到「{fallback_banquet}」"
+                )
+                self._click_banquet(context, fallback_banquet)
+            else:
+                logger.warning(f"未找到「{target_banquet}」档位按钮，继续尝试确认")
+
         context.run_task("PopUpWindowConfirm")
         # 3.1 确认婚礼 点击四次确认
         time.sleep(2)
         for _ in range(4):
             context.run_task("ClickCenter_500ms")
         return CustomAction.RunResult(success=True)
+
+    def _get_selected_banquet(self, context: Context) -> str:
+        """读取用户选择的宴会档位：auto（按爵位）/ 乡村宴会 / 祝福婚宴。"""
+        data = context.get_node_data("MarryBanquetSelect")
+        banquet = "auto"
+        if data:
+            expected = data.get("recognition", {}).get("param", {}).get(
+                "expected", ["auto"]
+            )
+            if isinstance(expected, list) and expected:
+                banquet = expected[0]
+            elif isinstance(expected, str) and expected:
+                banquet = expected
+        logger.info(f"宴会档位选项：{banquet}")
+        return banquet
+
+    def _click_banquet(self, context: Context, banquet: str) -> bool:
+        """在婚礼页面上点掉指定档位的宴会按钮，返回是否点中。"""
+        result = context.run_task(
+            "Event_WeddingTitleButton",
+            pipeline_override={
+                "Event_WeddingTitleEntry": {"expected": [banquet[:2]]}
+            },
+        )
+        status = getattr(result, "status", None)
+        return bool(status is not None and getattr(status, "succeeded", False))
 
     def _compare_titles(self, left_title: str, right_title: str) -> str:
         """
