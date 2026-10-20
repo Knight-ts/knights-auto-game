@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -168,20 +170,16 @@ def mumu_info() -> dict:
 
 
 def maagc_process() -> dict:
+    """网页版没有独立的 GUI 进程，控制台本身就运行在 Knights Auto Game 的 Python 进程里。
+
+    旧实现检查 MFAAvalonia.exe —— 网页版已不使用该 GUI，所以永远显示未运行。
+    """
     try:
-        proc = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH", "/FI", "IMAGENAME eq MFAAvalonia.exe"],
-            capture_output=True,
-            timeout=8,
-            text=True,
-            encoding="gbk",
-            errors="replace",
-        )
-        lines = [line for line in (proc.stdout or "").splitlines() if "MFAAvalonia" in line]
-        if not lines:
-            return {"running": False}
-        parts = [part.strip().strip('"') for part in lines[0].split(",")]
-        return {"running": True, "pid": parts[1] if len(parts) > 1 else ""}
+        return {
+            "running": True,
+            "pid": str(os.getpid()),
+            "exe": Path(sys.executable).name,
+        }
     except Exception:  # noqa: BLE001
         return {"running": False}
 

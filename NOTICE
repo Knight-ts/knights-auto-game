@@ -43,7 +43,15 @@ resource/base/image/ 与 table/*.json 中包含游戏《诸神皇冠 / 百年骑
 如需公开分发或商用，请自行评估并取得相应授权。
 
 
-5. 商标
+5. 识别模型（resource/base/model/）
+------------------------------------
+`det.onnx` / `rec.onnx` 为通用文字识别（OCR）模型，随 MaaFramework 生态资源分发；
+`feature_face.onnx`、`conetta.onnx`、`long_ear.onnx` 等为本项目（MAAGC 衍生）用于界面识别的模型文件。
+模型权重随本仓库以 MIT 许可证提供；训练所用游戏画面素材的著作权仍归游戏权利方，
+本声明不对其作出任何授权。
+
+
+6. 商标
 --------
 "MaaFramework"、"MAAGC" 等名称归各自权利人所有。本项目提及这些名称仅用于说明
 技术来源与衍生关系，不表示任何官方认可、赞助或关联。
