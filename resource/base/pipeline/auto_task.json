@@ -74,6 +74,13 @@
         "post_delay": 500,
         "timeout": 3000
     },
+    "CastleMarryTask": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "MarryProcessor",
+        "post_delay": 500,
+        "timeout": 3000
+    },
     "Flag_EnableMarryTask": {
         "enabled": true
     },
