@@ -22,7 +22,7 @@
 
 - Windows 10/11（x64）
 - Python 3.12
-- MuMu 模拟器 12（或任何可 adb connect 的设备）
+- **MuMu 模拟器 12（目前仅适配 MuMu）**：其他模拟器与真机未适配、未验证
 - 依赖见 requirements.txt（maafw 5.12.3、opencv-python、numpy、loguru、jsonschema）
 
 ## 快速开始
@@ -149,6 +149,7 @@ python tasks\CastleMarryTest\run.py --set 联姻方式=联姻
 
 ## 已知限制
 
+- **目前只适配 MuMu 模拟器 12**：依赖其 EmulatorExtras 扩展做高速截图与输入；雷电 / 夜神 / 蓝叠 / 逍遥 / 真机未测试，连接后大概率退回通用方式（截图约 250 ms），部分任务会失败
 - 仅支持 Windows（依赖 MaaFramework 的 Windows 运行时与 adb）
 - 同一时间只跑一个任务；没有多实例 / 定时任务
 - 好娃提醒触发时会弹窗并停止任务，需要手动处理后再启动

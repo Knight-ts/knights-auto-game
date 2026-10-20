@@ -1,7 +1,7 @@
 {
     "interface_version": 2,
     "name": "Knights Auto Game",
-    "description": "《诸神皇冠 / 百年骑士团》网页版自动化助手（借鉴 MAAGC，非官方）",
+    "description": "《诸神皇冠 / 百年骑士团》网页版自动化助手（借鉴 MAAGC，非官方；仅适配 MuMu 12）",
     "contact": "https://github.com/Knight-ts/Knights-web-windows/issues",
     "license": "MIT",
     "welcome": "首次使用！欢迎使用 Knights Auto Game。",
