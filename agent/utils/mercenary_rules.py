@@ -5,6 +5,9 @@ table/mercenary_rules.json：
     mode: whitelist（名字命中才接受） / blacklist（名字命中则拒绝）
     names: 名字关键字列表
     name_roi / name_regex / stopwords: 佣兵名字 OCR 的区域与过滤词
+
+    name_roi 只在弹窗锚点（“希望加入佣兵团”“年龄”）没识别到时兜底，
+    正常读名靠锚点之间那一行，不要再把区域往上方放大，否则会读到节日提示。
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ PATH = ROOT / "table" / "mercenary_rules.json"
 DEFAULT = {
     "mode": "whitelist",
     "names": [],
-    "name_roi": [40, 250, 640, 560],
+    "name_roi": [40, 290, 640, 500],
     "name_regex": "[一-龥·]{2,5}",
     "stopwords": ["佣兵", "加入", "确定", "取消", "招募", "队伍", "想要", "你的", "成为", "伙伴"],
 }

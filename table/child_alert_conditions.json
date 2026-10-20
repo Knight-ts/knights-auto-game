@@ -91,6 +91,19 @@
         "欧里克的神力",
         "同类相食"
       ]
+    },
+    {
+      "id": "type_5",
+      "name": "新组合 5",
+      "description": "",
+      "enabled": true,
+      "detection_node": "检测_新组合5",
+      "case_name": "新组合 5",
+      "default_checked": false,
+      "features": [
+        "同类相食",
+        "欧里克的神力"
+      ]
     }
   ]
 }

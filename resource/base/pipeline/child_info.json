@@ -17,7 +17,7 @@
     "PannelFatherTitle": {
         "recognition": "OCR",
         "expected": [
-            "[\u4E00-\u9FFF]+"
+            "[一-鿿]+"
         ],
         "roi": [
             13,
@@ -30,7 +30,7 @@
     "PannelMotherTitle": {
         "recognition": "OCR",
         "expected": [
-            "[\u4E00-\u9FFF]+"
+            "[一-鿿]+"
         ],
         "roi": [
             497,
@@ -161,7 +161,7 @@
     "PanelBloodNameCheck": {
         "recognition": "OCR",
         "expected": [
-            "[\u4E00-\u9FFF]+"
+            "[一-鿿]+"
         ],
         "roi": [
             95,
@@ -238,7 +238,7 @@
     "PannelChildSetName": {
         "recognition": "OCR",
         "expected": [
-            "[\u4E00-\u9FFF]+"
+            "[一-鿿]+"
         ],
         "roi": [
             253,
@@ -405,6 +405,13 @@
         "recognition": "OCR",
         "expected": [
             "oulike_and_tonglei"
+        ],
+        "enabled": false
+    },
+    "检测_新组合5": {
+        "recognition": "OCR",
+        "expected": [
+            "type_5"
         ],
         "enabled": false
     }
