@@ -52,7 +52,7 @@ function switchTab(name) {
   clearInterval(timers.logs);
   if (name === "shot") { refreshShot(); timers.shot = setInterval(() => { if ($("shotAuto").checked) refreshShot(); }, 2000); }
   if (name === "logs") { loadLogs(); timers.logs = setInterval(() => { if ($("logAuto").checked) loadLogs(); }, 1500); }
-  if (name === "tasks") loadTasks();
+  if (name === "tasks") { loadTasks(); loadTaskpack(); }
   if (name === "alerts") {
     if (window.AlertPanel) window.AlertPanel.load();
     loadChildSpeed();
@@ -355,6 +355,38 @@ async function stopTask() {
   }
 }
 
+/* ------------------------------------------------------------ 任务包 */
+
+async function loadTaskpack() {
+  try {
+    const data = await api("/api/taskpack");
+    $("taskpackStatus").textContent =
+      `${(data.folders || []).length} 个任务文件夹 · interface.json ${(data.interfaceTasks || []).length} 个任务` +
+      (data.consistent ? " · 一致" : " · 需要导出或重建");
+  } catch (error) {
+    $("taskpackStatus").textContent = "读取失败：" + error.message;
+  }
+}
+
+function showTaskpack(result) {
+  const lines = [...(result.messages || [])];
+  (result.errors || []).forEach((message) => lines.push("错误：" + message));
+  const box = $("taskpackLog");
+  box.style.display = lines.length ? "" : "none";
+  box.textContent = lines.join("\n");
+  banner(result.ok ? "ok" : "err", lines.length ? lines : ["完成"]);
+  loadTaskpack();
+  loadTasks();
+}
+
+async function runTaskpack(path, payload) {
+  try {
+    showTaskpack(await post(path, payload || {}));
+  } catch (error) {
+    banner("err", ["操作失败：" + error.message]);
+  }
+}
+
 /* ------------------------------------------------------------ 截图 / 日志 */
 
 function refreshShot() {
@@ -570,6 +602,26 @@ $("btnMercSave").addEventListener("click", saveMercRules);
 $("btnMercReload").addEventListener("click", loadMercRecords);
 $("btnNotifySave").addEventListener("click", saveNotify);
 $("btnNotifyTest").addEventListener("click", testNotify);
+
+$("btnTaskpackCheck").addEventListener("click", () => runTaskpack("/api/taskpack/check"));
+$("btnTaskpackExport").addEventListener("click", () => {
+  if (!confirm("会用 interface.json 覆盖 tasks/ 里同名的任务文件夹，继续？")) return;
+  runTaskpack("/api/taskpack/export", { force: true });
+});
+$("btnTaskpackBuild").addEventListener("click", () => {
+  if (!confirm("用 tasks/ 重建 interface.json？旧文件会备份为 .bak。")) return;
+  runTaskpack("/api/taskpack/build");
+});
+$("btnTaskpackPack").addEventListener("click", () => {
+  const task = state.tasks[state.selectedTask];
+  if (!task) { banner("err", ["先在左侧选择一个任务"]); return; }
+  runTaskpack("/api/taskpack/pack", { entry: task.entry });
+});
+$("btnTaskpackImport").addEventListener("click", () => {
+  const path = prompt("任务包 zip 路径（例如 dist\\tasks\\CastleMarryTest.zip）");
+  if (!path) return;
+  runTaskpack("/api/taskpack/unpack", { path: path.trim(), build: true });
+});
 
 $("taskList").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-i]");

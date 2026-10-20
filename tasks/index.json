@@ -1,0 +1,13 @@
+{
+    "order": [
+        "GameStartUp",
+        "Auto_DailyTask",
+        "Auto_YearlyTask",
+        "Auto_PannelCheck",
+        "Auto_ChildAlertWindow",
+        "Auto_ChildAlertManager",
+        "Auto_MarryTask",
+        "CastleMarryTest",
+        "AutoFight_Start"
+    ]
+}

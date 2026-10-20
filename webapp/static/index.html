@@ -101,6 +101,23 @@
       </div>
     </div>
     <div class="card" style="margin-top:14px">
+      <div class="row">
+        <h3 style="margin:0">任务包（tasks/）</h3>
+        <span class="hint" id="taskpackStatus">读取中…</span>
+        <span style="flex:1"></span>
+        <button class="btn" id="btnTaskpackCheck">检查</button>
+        <button class="btn" id="btnTaskpackExport">导出全部</button>
+        <button class="btn primary" id="btnTaskpackBuild">重建 interface.json</button>
+        <button class="btn" id="btnTaskpackPack">打包当前任务</button>
+        <button class="btn" id="btnTaskpackImport">导入 zip</button>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        每个任务在 tasks/&lt;entry&gt;/ 里：task.json（定义）+ run.py（可单独运行）。
+        改完点「重建 interface.json」，重启 MaaGC 后生效；「打包当前任务」会在 dist/tasks/ 生成 zip。
+      </div>
+      <pre id="taskpackLog" style="margin-top:10px;display:none"></pre>
+    </div>
+    <div class="card" style="margin-top:14px">
       <h3>最近任务</h3>
       <table>
         <thead><tr><th>时间</th><th>任务</th><th>状态</th><th>耗时</th><th>错误</th></tr></thead>

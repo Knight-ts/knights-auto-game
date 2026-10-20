@@ -48,8 +48,15 @@ child_perf = _load_module("child_perf", ROOT / "agent" / "utils" / "child_perf.p
 mercenary_records = _load_module("mercenary_records", ROOT / "agent" / "utils" / "mercenary_records.py")
 mercenary_rules = _load_module("mercenary_rules", ROOT / "agent" / "utils" / "mercenary_rules.py")
 game_state = _load_module("game_state", ROOT / "agent" / "utils" / "game_state.py")
+taskpack = _load_module("taskpack", ROOT / "tools" / "taskpack.py")
 
 runtime = Runtime()
+
+
+def reload_interface(result: dict) -> None:
+    """tasks/ 重建/导入后，让网页版立刻用新的 interface.json。"""
+    if result.get("ok"):
+        runtime.interfaces = runtime._load_interface()
 
 
 def load_config() -> dict:
@@ -163,6 +170,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, state)
             elif path == "/api/tasks":
                 self._json(200, runtime.tasks())
+            elif path == "/api/taskpack":
+                self._json(200, taskpack.status())
             elif path == "/api/screenshot":
                 self._send(200, runtime.screenshot(), "image/png")
             elif path == "/api/logs":
@@ -297,6 +306,34 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     message = "发送失败，请检查 webhook 地址与网络"
                 self._json(200, {"ok": ok, "message": message})
+            elif path == "/api/taskpack/export":
+                result = taskpack.export(payload.get("entry") or None, bool(payload.get("force")))
+                reload_interface(result)
+                self._json(200, result)
+            elif path == "/api/taskpack/build":
+                result = taskpack.build()
+                reload_interface(result)
+                self._json(200, result)
+            elif path == "/api/taskpack/check":
+                self._json(200, taskpack.check())
+            elif path == "/api/taskpack/pack":
+                entry = str(payload.get("entry") or "")
+                if not entry:
+                    self._json(400, {"ok": False, "error": "缺少 entry"})
+                    return
+                self._json(200, taskpack.pack(entry, payload.get("output")))
+            elif path == "/api/taskpack/unpack":
+                zip_path = str(payload.get("path") or "")
+                if not zip_path:
+                    self._json(400, {"ok": False, "error": "缺少 zip 路径"})
+                    return
+                result = taskpack.unpack(
+                    zip_path,
+                    bool(payload.get("force")),
+                    bool(payload.get("build", True)),
+                )
+                reload_interface(result)
+                self._json(200, result)
             else:
                 self._json(404, {"error": "not found"})
         except Exception as exc:  # noqa: BLE001

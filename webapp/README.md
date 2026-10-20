@@ -60,8 +60,13 @@ webapp/
 | GET/POST | `/api/records`、`/api/records/recruited` | 孩子记录与招募标记 |
 | GET/POST | `/api/notify`、`/api/notify/save`、`/api/notify/test` | 平台推送配置与测试发送 |
 | POST | `/api/logs/clear` | 清空内存日志 |
+| GET | `/api/taskpack` | 任务包状态（tasks/ 与 interface.json 是否一致） |
+| POST | `/api/taskpack/export` / `build` / `check` | 导出任务包 / 重建 interface.json / 检查 |
+| POST | `/api/taskpack/pack` | `{entry}` 打包任务为 `dist/tasks/<entry>.zip` |
+| POST | `/api/taskpack/unpack` | `{path, force?, build?}` 导入任务包 |
 
 ## 页面补充
 
 - 任务页会记住上次选的任务与各选项（`config/webapp.json`），并显示最近任务记录；
+- 任务页底部有「任务包」卡片：导出 tasks/、重建 interface.json、打包当前任务、导入 zip，改完不用命令行也能用；
 - 通知页可启用推送、选择飞书/通用 JSON、发送测试消息；webhook 留空时自动复用 `config/config.json` 的飞书地址。

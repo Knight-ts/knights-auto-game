@@ -1,0 +1,8 @@
+{
+    "name": "每日礼包和密令",
+    "entry": "Auto_DailyTask",
+    "option": [
+        "DailyTaskSubTaskSwitch"
+    ],
+    "description": "自动处理每日礼包、市场折扣、商城礼包和悬赏令领取"
+}

@@ -1,0 +1,5 @@
+{
+    "name": "启动游戏",
+    "entry": "GameStartUp",
+    "description": "启动游戏客户端并完成登录流程"
+}

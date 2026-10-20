@@ -52,15 +52,36 @@ webapp/          网页版后端与前端（runtime / server / static）
 agent/           MaaFramework Agent：自定义识别与动作（推年、相亲、战斗、好娃提醒等）
 resource/base/   Pipeline、图片模板、OCR/ONNX 模型
 table/           好娃提醒条件、姓名库、特性表、通知配置等
-tools/           好娃提醒窗口脚本、项目自带的 adb
+tasks/           任务包：每个任务一个文件夹（task.json + 可单独运行的 run.py）
+tools/           任务包工具、好娃提醒窗口脚本、项目自带的 adb
 docs/            项目与 MaaFramework 文档
-interface.json   任务与选项定义
+interface.json   任务与选项定义（由 tasks/ 重建）
 UPSTREAM.md      来源、上游与第三方说明
 ```
 
+## 任务包（tasks/）
+
+`interface.json` 里的每个任务在 `tasks/<entry>/` 有一个文件夹：
+
+- `task.json`：任务定义（名称、entry、勾选的选项、说明、文档）；
+- `run.py`：单独运行这个任务，方便改完立刻测试；
+- `index.json` 控制任务顺序，`_options.json` 存放所有选项定义。
+
+```bat
+python tools\taskpack.py export --force        :: interface.json -^> tasks\
+python tools\taskpack.py build                 :: tasks\ -^> interface.json
+python tools\taskpack.py check                 :: 检查任务/选项/pipeline 引用
+python tools\taskpack.py pack CastleMarryTest  :: 打成 dist\tasks\CastleMarryTest.zip
+python tools\taskpack.py unpack 路径.zip --build
+python tasks\CastleMarryTest\run.py --set 联姻方式=联姻
+```
+
+也可以双击 `tools\任务包.bat` 用菜单操作，或网页版「任务 → 任务包」点按钮。详细说明见 [tasks/README.md](tasks/README.md)。
+
 ## 配置
 
-- interface.json：任务列表与选项；网页版任务页直接读取
+- interface.json：任务列表与选项（由 `tasks/` 重建，网页版任务页直接读取）
+- tasks/：任务的源文件；改完运行 `build` 再重启 MaaGC 生效
 - table/child_alert_conditions.json：好娃提醒条件（也可在网页“好娃提醒”页编辑）
 - table/notify_config.json：平台推送；默认关闭，webhook 留空时复用 config/config.json 的飞书地址
 - config/webapp.json：上次设备 / 任务 / 选项（自动生成，不要提交）

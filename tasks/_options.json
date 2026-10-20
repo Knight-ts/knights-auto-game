@@ -1,0 +1,732 @@
+{
+    "DailyTaskSubTaskSwitch": {
+        "type": "checkbox",
+        "description": "是否自动处理每日任务",
+        "cases": [
+            {
+                "name": "购买市场折扣物品",
+                "description": "是否自动购买市场折扣物品",
+                "pipeline_override": {
+                    "BigMapMarket": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "商城免费礼包",
+                "description": "是否自动购买商城免费礼包",
+                "pipeline_override": {
+                    "BigMapMall": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "悬赏令领取",
+                "description": "是否自动领取悬赏令",
+                "pipeline_override": {
+                    "BigMapRewardToken": {
+                        "enabled": true
+                    }
+                }
+            }
+        ],
+        "default_case": [
+            "购买市场折扣物品",
+            "商城免费礼包",
+            "悬赏令领取"
+        ]
+    },
+    "开启5月城堡相亲": {
+        "type": "switch",
+        "description": "是否开启5月自动相亲",
+        "cases": [
+            {
+                "name": "Yes",
+                "description": "开启5月城堡相亲",
+                "pipeline_override": {
+                    "Flag_EnableMarryTask": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "No",
+                "description": "关闭5月城堡相亲",
+                "pipeline_override": {
+                    "Flag_EnableMarryTask": {
+                        "enabled": false
+                    }
+                }
+            }
+        ],
+        "default_case": "Yes"
+    },
+    "开启4月城堡相亲": {
+        "type": "switch",
+        "description": "4月是否前往城堡-城堡主厅-联姻",
+        "cases": [
+            {
+                "name": "Yes",
+                "description": "开启4月城堡相亲",
+                "pipeline_override": {
+                    "Flag_EnableAprCastleMarry": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "No",
+                "description": "关闭4月城堡相亲",
+                "pipeline_override": {
+                    "Flag_EnableAprCastleMarry": {
+                        "enabled": false
+                    }
+                }
+            }
+        ],
+        "default_case": "Yes"
+    },
+    "开启3月启航节购买": {
+        "type": "switch",
+        "description": "是否开启3月启航节自动购买物品",
+        "cases": [
+            {
+                "name": "Yes",
+                "description": "开启3月启航节自动购买",
+                "pipeline_override": {
+                    "Flag_EnableSailingFestivalPurchase": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "No",
+                "description": "关闭3月启航节自动购买",
+                "pipeline_override": {
+                    "Flag_EnableSailingFestivalPurchase": {
+                        "enabled": false
+                    }
+                }
+            }
+        ],
+        "default_case": "Yes"
+    },
+    "开启好娃提醒": {
+        "type": "checkbox",
+        "description": "是否开启好娃提醒,提醒时弹窗并结束任务",
+        "cases": [
+            {
+                "name": "科内塔之怒",
+                "description": "技巧SS + 力量S + 意志或敏捷有一个0.3以上 + 科内塔之怒",
+                "pipeline_override": {
+                    "检测_科内塔之怒": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "太阳+科内塔之怒",
+                "description": "技巧SS + 力量S + 意志或敏捷有一个0.3以上 + 太阳之子 + 科内塔之怒",
+                "pipeline_override": {
+                    "检测_太阳+科内塔之怒": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "上自专",
+                "description": "高等精灵顶级三特性：上古灵性 + 自然共感 + 专注之眸，不看属性",
+                "pipeline_override": {
+                    "检测_上自专": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "欧里克神力+同类相食",
+                "description": "欧里克的神力 + 同类相食，高力技兼顾偏斜生存，不看属性",
+                "pipeline_override": {
+                    "检测_欧里克神力+同类相食": {
+                        "enabled": true
+                    }
+                }
+            }
+        ],
+        "default_case": [
+            "科内塔之怒",
+            "太阳+科内塔之怒"
+        ]
+    },
+    "开启生娃自动起名": {
+        "type": "switch",
+        "description": "佣兵生娃事件后是否自动识别属性并起名（关闭则保留游戏默认名字）",
+        "cases": [
+            {
+                "name": "Yes",
+                "description": "开启自动起名：识别属性 + 命名 + 好苗子检测",
+                "pipeline_override": {
+                    "Flag_AutoNameChild": {
+                        "enabled": true
+                    }
+                }
+            },
+            {
+                "name": "No",
+                "description": "关闭自动起名：直接点确认，保留游戏默认名字",
+                "pipeline_override": {
+                    "Flag_AutoNameChild": {
+                        "enabled": false
+                    }
+                }
+            }
+        ],
+        "default_case": "Yes"
+    },
+    "开启自动接受佣兵": {
+        "type": "select",
+        "description": "自动接受加入的佣兵：全部接受 / 智能接受（按名字规则） / 不自动接受",
+        "cases": [
+            {
+                "name": "No",
+                "description": "不自动接受：直接点取消",
+                "pipeline_override": {
+                    "Flag_SmartMercenary": {
+                        "enabled": false
+                    },
+                    "Event_MercenaryJoin": {
+                        "next": [
+                            "Event_MercenaryJoinCancel"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "Yes",
+                "description": "全部接受：直接点招募",
+                "pipeline_override": {
+                    "Flag_SmartMercenary": {
+                        "enabled": false
+                    },
+                    "Event_MercenaryJoin": {
+                        "next": [
+                            "Event_MercenaryJoinConfirm"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "智能",
+                "description": "智能接受：佣兵名字命中 table/mercenary_rules.json 才接受",
+                "pipeline_override": {
+                    "Flag_SmartMercenary": {
+                        "enabled": true
+                    },
+                    "Event_MercenaryJoin": {
+                        "next": [
+                            "Event_MercenaryJoinCancel"
+                        ]
+                    }
+                }
+            }
+        ],
+        "default_case": "No"
+    },
+    "选择刷取任务国家": {
+        "type": "select",
+        "description": "选择要刷取任务的目标城市",
+        "default_case": "雄月城",
+        "cases": [
+            {
+                "name": "王座堡",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "王座堡"
+                    }
+                }
+            },
+            {
+                "name": "圣盾堡",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "圣盾堡"
+                    }
+                }
+            },
+            {
+                "name": "雄月城",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "雄月城"
+                    }
+                }
+            },
+            {
+                "name": "翠庭",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "翠庭"
+                    }
+                }
+            },
+            {
+                "name": "银风堡",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "银风堡"
+                    }
+                }
+            },
+            {
+                "name": "暮角城",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "暮角城"
+                    }
+                }
+            },
+            {
+                "name": "巴索罗姆",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "巴索罗姆"
+                    }
+                }
+            },
+            {
+                "name": "奥克尼尼",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "奥克尼尼"
+                    }
+                }
+            },
+            {
+                "name": "成长试炼",
+                "description": "在暮角城北边寻找'成长试炼'入口并进入（特殊战斗任务）",
+                "pipeline_override": {
+                    "EnterCity": {
+                        "expected": "暮角城"
+                    },
+                    "Flag_GrowthTrialMode": {
+                        "enabled": true
+                    }
+                }
+            }
+        ]
+    },
+    "选择成长试炼难度": {
+        "type": "select",
+        "description": "选择成长试炼的难度等级（仅在'暮角城成长试炼'模式下生效）",
+        "default_case": "噩梦",
+        "cases": [
+            {
+                "name": "简单",
+                "pipeline_override": {
+                    "GrowthTrial_Difficulty_Select": {
+                        "expected": [
+                            "简单"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "普通",
+                "pipeline_override": {
+                    "GrowthTrial_Difficulty_Select": {
+                        "expected": [
+                            "普通"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "困难",
+                "pipeline_override": {
+                    "GrowthTrial_Difficulty_Select": {
+                        "expected": [
+                            "困难"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "噩梦",
+                "pipeline_override": {
+                    "GrowthTrial_Difficulty_Select": {
+                        "expected": [
+                            "噩梦"
+                        ]
+                    }
+                }
+            }
+        ]
+    },
+    "选择年度任务月份数": {
+        "type": "select",
+        "description": "选择年度任务的执行月份数",
+        "default_case": "12个月",
+        "cases": [
+            {
+                "name": "6个月",
+                "pipeline_override": {
+                    "YearlyTaskMonths": {
+                        "expected": [
+                            "6"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "12个月",
+                "pipeline_override": {
+                    "YearlyTaskMonths": {
+                        "expected": [
+                            "12"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "24个月",
+                "pipeline_override": {
+                    "YearlyTaskMonths": {
+                        "expected": [
+                            "24"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "36个月",
+                "pipeline_override": {
+                    "YearlyTaskMonths": {
+                        "expected": [
+                            "36"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "60个月",
+                "pipeline_override": {
+                    "YearlyTaskMonths": {
+                        "expected": [
+                            "60"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "120个月",
+                "pipeline_override": {
+                    "YearlyTaskMonths": {
+                        "expected": [
+                            "120"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "240个月",
+                "pipeline_override": {
+                    "YearlyTaskMonths": {
+                        "expected": [
+                            "240"
+                        ]
+                    }
+                }
+            }
+        ]
+    },
+    "自定义任务黑名单": {
+        "type": "input",
+        "label": "自定义任务黑名单",
+        "description": "输入要屏蔽的任务名称，被屏蔽的任务在年度任务中会自动跳过。\n\n**注意：**\n- 输入的任务名称会保存到本地文件 `assets/table/task_blacklist.json`\n- 重启后仍然生效，无需重新输入\n- 如需删除，请手动编辑 `assets/table/task_blacklist.json` 文件，从 blacklist 数组中移除对应名称",
+        "inputs": [
+            {
+                "name": "任务名称",
+                "description": "要屏蔽的任务名称（单个任务名称）",
+                "default": "",
+                "pipeline_type": "string",
+                "verify": "^[^,，]*$",
+                "pattern_msg": "任务名称不能包含逗号，请输入单个任务名称，留空则不添加黑名单"
+            }
+        ],
+        "pipeline_override": {
+            "CustomTaskBlacklist": {
+                "expected": [
+                    "{任务名称}"
+                ]
+            }
+        }
+    },
+    "相亲范围": {
+        "type": "select",
+        "description": "选择是单角色还是多角色相亲",
+        "default_case": "多角色相亲",
+        "cases": [
+            {
+                "name": "多角色相亲",
+                "description": "一次检测识别多位角色进行相亲，每个角色平分相亲次数",
+                "pipeline_override": {
+                    "MarryMultiSelect": {
+                        "expected": "multi"
+                    }
+                }
+            },
+            {
+                "name": "单角色相亲",
+                "description": "一次一位，当前选择角色直接相亲，一人所有次数",
+                "pipeline_override": {
+                    "MarryMultiSelect": {
+                        "expected": "single"
+                    }
+                }
+            }
+        ]
+    },
+    "相亲模式": {
+        "type": "select",
+        "description": "选择相亲模式",
+        "default_case": "聊天相亲",
+        "cases": [
+            {
+                "name": "姓名相亲",
+                "pipeline_override": {
+                    "MarryModeSelect": {
+                        "expected": "high_blood"
+                    }
+                }
+            },
+            {
+                "name": "聊天相亲",
+                "pipeline_override": {
+                    "MarryModeSelect": {
+                        "expected": "trait"
+                    }
+                }
+            }
+        ]
+    },
+    "相亲种族": {
+        "type": "select",
+        "description": "选择相亲种族，将会默认找到对应国家",
+        "default_case": "高阶精灵",
+        "cases": [
+            {
+                "name": "佩尔弗因王族",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "佩尔弗因王族"
+                    }
+                }
+            },
+            {
+                "name": "塞宁王族",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "塞宁王族"
+                    }
+                }
+            },
+            {
+                "name": "高阶精灵",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "高阶精灵"
+                    }
+                }
+            },
+            {
+                "name": "弗莱德里王族",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "弗莱德里王族"
+                    }
+                }
+            },
+            {
+                "name": "希尔王族",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "希尔王族"
+                    }
+                }
+            },
+            {
+                "name": "切瓦利王族",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "切瓦利王族"
+                    }
+                }
+            },
+            {
+                "name": "祖扎尔达王族",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "祖扎尔达王族"
+                    }
+                }
+            },
+            {
+                "name": "黑暗精灵",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "黑暗精灵"
+                    }
+                }
+            },
+            {
+                "name": "瓦诺遗族",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "瓦诺遗族"
+                    }
+                }
+            },
+            {
+                "name": "萨尼德罕",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "萨尼德罕"
+                    }
+                }
+            },
+            {
+                "name": "宏朝贵胄",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "宏朝贵胄"
+                    }
+                }
+            },
+            {
+                "name": "法拉希尔血裔",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "法拉希尔血裔"
+                    }
+                }
+            },
+            {
+                "name": "古特雅尔",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "古特雅尔"
+                    }
+                }
+            },
+            {
+                "name": "玛夏贵族",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "玛夏贵族"
+                    }
+                }
+            },
+            {
+                "name": "瑞格王室",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "瑞格王室"
+                    }
+                }
+            }
+        ]
+    },
+    "相亲爵位": {
+        "type": "select",
+        "description": "优先选择哪个爵位的角色去相亲（默认公爵）",
+        "default_case": "公爵",
+        "cases": [
+            {
+                "name": "公爵",
+                "pipeline_override": {
+                    "MarryTitleSelect": {
+                        "expected": "公爵"
+                    }
+                }
+            },
+            {
+                "name": "侯爵",
+                "pipeline_override": {
+                    "MarryTitleSelect": {
+                        "expected": "侯爵"
+                    }
+                }
+            },
+            {
+                "name": "伯爵",
+                "pipeline_override": {
+                    "MarryTitleSelect": {
+                        "expected": "伯爵"
+                    }
+                }
+            },
+            {
+                "name": "不限",
+                "pipeline_override": {
+                    "MarryTitleSelect": {
+                        "expected": "不限"
+                    }
+                }
+            }
+        ]
+    },
+    "相亲年龄": {
+        "type": "select",
+        "description": "年龄偏好（不限年龄；列表按年龄从大到小，年龄越大越优先）",
+        "default_case": "年龄较大",
+        "cases": [
+            {
+                "name": "年龄较大",
+                "pipeline_override": {
+                    "MarryAgeSelect": {
+                        "expected": "older"
+                    }
+                }
+            },
+            {
+                "name": "年龄较小",
+                "pipeline_override": {
+                    "MarryAgeSelect": {
+                        "expected": "younger"
+                    }
+                }
+            },
+            {
+                "name": "不限",
+                "pipeline_override": {
+                    "MarryAgeSelect": {
+                        "expected": "any"
+                    }
+                }
+            }
+        ]
+    },
+    "联姻方式": {
+        "type": "select",
+        "description": "单项测试最后点击联姻还是速配联姻",
+        "default_case": "联姻",
+        "cases": [
+            {
+                "name": "联姻",
+                "pipeline_override": {
+                    "MarryActionSelect": {
+                        "expected": "联姻"
+                    }
+                }
+            },
+            {
+                "name": "速配联姻",
+                "pipeline_override": {
+                    "MarryActionSelect": {
+                        "expected": "速配联姻"
+                    }
+                }
+            }
+        ]
+    }
+}
