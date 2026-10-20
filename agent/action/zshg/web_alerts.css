@@ -148,7 +148,6 @@ input.min { width: 92px; }
 
 table.features { font-size: 12.5px; }
 table.features th {
-  position: sticky; top: 40px; z-index: 1;
   background: var(--panel); padding: 6px 8px;
 }
 table.features td { padding: 6px 8px; vertical-align: top; }

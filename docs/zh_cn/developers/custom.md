@@ -84,13 +84,15 @@ class XxxProcessor(CustomAction):
 
 ## 好苗子提醒：新增一个提醒类型
 
-**推荐做法**：打开网页控制台（任务列表里的「网页控制台」，或双击 `tools\打开控制台.bat`，默认 `http://127.0.0.1:8790/`），在「好娃提醒」页增删改类型；保存时会自动完成下面 1-3 步并做一致性校验（[`child_alert_store.py`](../../../agent/action/zshg/child_alert_store.py)）。
+**推荐做法**：打开网页控制台（任务列表里的「网页控制台」，或双击 `tools\打开控制台.bat`，默认 `http://127.0.0.1:8790/`），在「好娃提醒」页增删改类型；保存时会自动完成下面 1-3 步并做一致性校验（[`child_alert_store.py`](../../../agent/action/zshg/child_alert_store.py)）。同一套界面在独立网页版和原生窗口 `tools\好娃提醒.ps1` 里，三处共用同一个 `/api/state`。
+
+界面分两块：上面是**按种族分类的完整特性表**（血统 15 个、平民血 7 个、通用 4 类，共 214 项，见 [`child_feature_table.py`](../../../agent/action/zshg/child_feature_table.py)），点「＋ 加入」把特性加到当前组合；下面是**组合列表**，每行约 2cm，点「详情」展开填写界面显示名、内部 ID、条件名、检测节点、说明、备注、必需特性、属性门槛和或条件。备注（`note`）只给自己看，随条件表保存，不参与判定。
 
 连不上模拟器时双击 `tools\启动MaaGC.bat`：它先 `adb connect` 再启动 MaaGC，避免刷新设备时列表为空。
 
 需要手改时的三步（判定与开关都由表驱动，**不需要改 Python 代码**）：
 
-1. `table/child_alert_conditions.json`：加一条条件，必须带 `id` 和 `detection_node`（= 流水线开关节点名）；可选 `potential`（属性门槛：`grade` 是“≥”语义、`min_value` 是绝对数值、`or_attributes` 任一组满足即可）与 `features`（必需特性，子串匹配且**必须全部命中**）。两者都省略等于无条件命中，不要这么配。
+1. `table/child_alert_conditions.json`：加一条条件，必须带 `id` 和 `detection_node`（= 流水线开关节点名）；可选 `potential`（属性门槛：`grade` 是“≥”语义、`min_value` 是绝对数值、`or_attributes` 任一组满足即可）、`features`（必需特性，子串匹配且**必须全部命中**）与 `note`（备注，纯展示）。`features` 和 `potential` 都省略等于无条件命中，不要这么配。
 2. `resource/base/pipeline/child_info.json`：加一个开关节点，`recognition: "OCR"`、`expected: ["<id>"]`、`enabled: false`（节点本身不识别画面，只作为开关容器）。
 3. `interface.json` 的 `option["开启好娃提醒"].cases`：加一个 case，在 `pipeline_override` 里把该节点的 `enabled` 置为 `true`。
 

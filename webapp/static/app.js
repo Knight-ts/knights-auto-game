@@ -683,5 +683,11 @@ async function stopLoop() {
   $("loopStatus").textContent = "正在停止循环…";
 }
 
+// 支持 #alerts 之类的深链接，方便直接打开某一页
+const startTab = (location.hash || "").replace(/^#/, "");
+if (["home", "tasks", "shot", "logs", "alerts", "records", "mercs", "notify"].includes(startTab)) {
+  switchTab(startTab);
+}
+
 refreshState();
 setInterval(refreshState, 3000);

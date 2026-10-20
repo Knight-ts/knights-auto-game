@@ -807,11 +807,13 @@
       list.addEventListener("click", onListClick);
     }
 
-    load(false);
+    // 深链接（如 #alerts）可能在 init 之前就读过一次，避免重复请求
+    if (!data.loaded) load(false);
   }
 
   window.AlertPanel = {
-    load: () => load(false),
+    // 页面切到「好娃提醒」时调用：只读一次，避免把没保存的修改冲掉
+    load: () => (data.loaded ? Promise.resolve() : load(false)),
     reload: () => load(true),
     isLoaded: () => data.loaded,
   };

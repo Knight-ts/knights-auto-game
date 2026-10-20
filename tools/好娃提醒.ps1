@@ -1,4 +1,4 @@
-# 好娃提醒 - 原生窗口版（WinForms，不依赖浏览器）
+﻿# 好娃提醒 - 原生窗口版（WinForms，不依赖浏览器）
 # 数据通过本机控制台接口读写（默认 http://127.0.0.1:8790）
 
 param([string]$BaseUrl = "http://127.0.0.1:8790")
@@ -29,8 +29,11 @@ $grades = @("", "E", "D", "C", "B", "A", "S", "SS")
 
 function Get-State {
     $state = Invoke-RestMethod -Uri "$BaseUrl/api/state" -TimeoutSec 10
-    $script:conditions = @($state.conditions)
-    $script:groups = @($state.featureGroups)
+    if (-not ($state.PSObject.Properties.Name -contains 'conditions')) {
+        throw "这个地址不是网页控制台（/api/state 里没有 conditions）：$BaseUrl。请确认 MaaGC 的控制台在运行，端口没被网页版占用。"
+    }
+    $script:conditions = @(@($state.conditions) | Where-Object { $null -ne $_ })
+    $script:groups = @(@($state.featureGroups) | Where-Object { $null -ne $_ })
     return $state
 }
 
@@ -205,6 +208,7 @@ function Show-Item([int]$i) {
         $gradeBoxes[$attr].SelectedItem = [string]$c.grades.$attr
         $minBoxes[$attr].Text = [string]$c.mins.$attr
     }
+    $detailHeader.Text = "详情：$($c.caseName)（$(@($c.features).Count) 特性）"
     $status.Text = "编辑：$($c.caseName)　|　$(Format-Summary $c)"
 }
 
@@ -253,11 +257,188 @@ function Store-Item {
 function Refresh-List([int]$select = -1) {
     $list.Items.Clear()
     foreach ($c in $script:conditions) {
-        [void]$list.Items.Add("$($c.caseName)  ·  $(@($c.features).Count) 特性")
+        [void]$list.Items.Add([string]$c.caseName)
     }
     if ($select -ge 0 -and $select -lt $list.Items.Count) {
         $list.SelectedIndex = $select
     }
+}
+
+function Show-FeatureTable([string]$targetName, [string[]]$current) {
+    # 完整特性表（按种族分类）：左侧选种族，右侧勾选特性，应用后写回当前组合
+    $script:featurePicked = @{}
+    foreach ($name in @($current)) {
+        if ($name) { $script:featurePicked[[string]$name] = $true }
+    }
+    $script:featureView = @()
+
+    $dialog = New-Object System.Windows.Forms.Form
+    $dialog.Text = "完整特性表（按种族分类） - 加入：$targetName"
+    $dialog.Size = New-Object System.Drawing.Size(1040, 700)
+    $dialog.StartPosition = "CenterParent"
+    $dialog.FormBorderStyle = "FixedDialog"
+    $dialog.MinimizeBox = $false
+    $dialog.MaximizeBox = $false
+    $dialog.ShowInTaskbar = $false
+    $dialog.Font = $form.Font
+    $dialog.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
+
+    $hint = New-Object System.Windows.Forms.Label
+    $hint.Text = "左键点种族 → 右侧勾选特性 → 点「应用勾选」写回组合（取消勾选＝从组合移除）"
+    $hint.Location = New-Object System.Drawing.Point(14, 12)
+    $hint.AutoSize = $true
+    $hint.ForeColor = [System.Drawing.Color]::DimGray
+
+    $filterBox = New-Object System.Windows.Forms.TextBox
+    $filterBox.Location = New-Object System.Drawing.Point(396, 10)
+    $filterBox.Size = New-Object System.Drawing.Size(280, 24)
+    $filterBox.ForeColor = [System.Drawing.Color]::Gray
+    $filterBox.Text = "筛选特性名 / 效果"
+
+    $tree = New-Object System.Windows.Forms.TreeView
+    $tree.Location = New-Object System.Drawing.Point(14, 44)
+    $tree.Size = New-Object System.Drawing.Size(260, 520)
+    $tree.HideSelection = $false
+
+    $listView = New-Object System.Windows.Forms.ListView
+    $listView.Location = New-Object System.Drawing.Point(286, 44)
+    $listView.Size = New-Object System.Drawing.Size(738, 520)
+    $listView.View = "Details"
+    $listView.FullRowSelect = $true
+    $listView.GridLines = $true
+    $listView.CheckBoxes = $true
+    $listView.MultiSelect = $true
+    [void]$listView.Columns.Add("特性", 150)
+    [void]$listView.Columns.Add("等级", 80)
+    [void]$listView.Columns.Add("部位", 70)
+    [void]$listView.Columns.Add("效果", 380)
+    [void]$listView.Columns.Add("寿命", 55)
+
+    $countLabel = New-Object System.Windows.Forms.Label
+    $countLabel.Location = New-Object System.Drawing.Point(288, 574)
+    $countLabel.AutoSize = $true
+    $countLabel.ForeColor = [System.Drawing.Color]::DimGray
+
+    $btnApply = New-Object System.Windows.Forms.Button
+    $btnApply.Text = "应用勾选"
+    $btnApply.Location = New-Object System.Drawing.Point(288, 604)
+    $btnApply.Size = New-Object System.Drawing.Size(150, 34)
+    $btnApply.BackColor = [System.Drawing.Color]::FromArgb(79, 140, 255)
+    $btnApply.ForeColor = [System.Drawing.Color]::White
+
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = "取消"
+    $btnCancel.Location = New-Object System.Drawing.Point(448, 604)
+    $btnCancel.Size = New-Object System.Drawing.Size(90, 34)
+    $dialog.CancelButton = $btnCancel
+
+    $updateCount = {
+        $countLabel.Text = "已选 $($script:featurePicked.Count) 项特性"
+    }
+
+    $refresh = {
+        $listView.BeginUpdate()
+        $listView.Items.Clear()
+        $keyword = $filterBox.Text.Trim()
+        if ($keyword -eq "筛选特性名 / 效果") { $keyword = "" }
+        $checkedNow = @{}
+        foreach ($key in @($script:featurePicked.Keys)) { $checkedNow[$key] = $true }
+        foreach ($feature in @($script:featureView)) {
+            $name = [string]$feature.name
+            $hay = $name + " " + [string]$feature.level + " " + [string]$feature.position + " " + [string]$feature.effect
+            if ($keyword -and ($hay -notlike "*$keyword*")) { continue }
+            $item = New-Object System.Windows.Forms.ListViewItem($name)
+            [void]$item.SubItems.Add([string]$feature.level)
+            [void]$item.SubItems.Add([string]$feature.position)
+            [void]$item.SubItems.Add([string]$feature.effect)
+            [void]$item.SubItems.Add([string]$feature.lifespan)
+            $item.Tag = $name
+            [void]$listView.Items.Add($item)
+            if ($checkedNow.ContainsKey($name)) { $item.Checked = $true }
+        }
+        $listView.EndUpdate()
+        & $updateCount
+    }
+
+    foreach ($group in $script:groups) {
+        $kind = [string]$group.kindLabel
+        if (-not $kind) { $kind = "通用" }
+        $kindNode = $tree.Nodes | Where-Object { $_.Text -eq $kind } | Select-Object -First 1
+        if (-not $kindNode) {
+            $kindNode = New-Object System.Windows.Forms.TreeNode($kind)
+            [void]$tree.Nodes.Add($kindNode)
+        }
+        $child = New-Object System.Windows.Forms.TreeNode([string]$group.label)
+        $child.Tag = $group
+        [void]$kindNode.Nodes.Add($child)
+    }
+    if ($tree.Nodes.Count -gt 0) { $tree.ExpandAll() }
+
+    $tree.Add_AfterSelect({
+        param($sender, $eventArgs)
+        if ($eventArgs.Node -and $eventArgs.Node.Tag) {
+            $script:featureView = @($eventArgs.Node.Tag.features)
+        } else {
+            $script:featureView = @()
+        }
+        & $refresh
+    })
+    $listView.Add_ItemChecked({
+        param($sender, $eventArgs)
+        $name = [string]$eventArgs.Item.Tag
+        if ($eventArgs.Item.Checked) { $script:featurePicked[$name] = $true }
+        else { [void]$script:featurePicked.Remove($name) }
+        & $updateCount
+    })
+    $filterBox.Add_GotFocus({
+        if ($filterBox.Text -eq "筛选特性名 / 效果") {
+            $filterBox.Text = ""
+            $filterBox.ForeColor = [System.Drawing.Color]::Black
+        }
+    })
+    $filterBox.Add_LostFocus({
+        if (-not $filterBox.Text.Trim()) {
+            $filterBox.Text = "筛选特性名 / 效果"
+            $filterBox.ForeColor = [System.Drawing.Color]::Gray
+            & $refresh
+        }
+    })
+    $filterBox.Add_TextChanged({
+        if ($filterBox.Text -ne "筛选特性名 / 效果") { & $refresh }
+    })
+    $btnApply.Add_Click({ $dialog.DialogResult = [System.Windows.Forms.DialogResult]::OK })
+    $btnCancel.Add_Click({ $dialog.DialogResult = [System.Windows.Forms.DialogResult]::Cancel })
+
+    # 默认选中第一个种族，触发 AfterSelect 填充右侧表格
+    if ($tree.Nodes.Count -gt 0 -and $tree.Nodes[0].Nodes.Count -gt 0) {
+        $tree.SelectedNode = $tree.Nodes[0].Nodes[0]
+    } else {
+        $script:featureView = @()
+        & $refresh
+    }
+
+    $dialog.Controls.AddRange(@($hint, $filterBox, $tree, $listView, $countLabel, $btnApply, $btnCancel))
+
+    if ($dialog.ShowDialog($form) -ne [System.Windows.Forms.DialogResult]::OK) { return $null }
+
+    # 输出顺序：先按特性表顺序排，再接上表里没有的自定义特性
+    $result = New-Object System.Collections.ArrayList
+    $inTable = @{}
+    foreach ($group in $script:groups) {
+        foreach ($feature in @($group.features)) {
+            $name = [string]$feature.name
+            if ($inTable.ContainsKey($name)) { continue }
+            $inTable[$name] = $true
+            if ($script:featurePicked.ContainsKey($name)) { [void]$result.Add($name) }
+        }
+    }
+    foreach ($name in @($current)) {
+        $name = [string]$name
+        if ($name -and -not $inTable.ContainsKey($name) -and $script:featurePicked.ContainsKey($name)) {
+            if (-not $result.Contains($name)) { [void]$result.Add($name) }
+        }
+    }
+    return [pscustomobject]@{ Features = @($result.ToArray()) }
 }
 
 function Load-All {
@@ -267,7 +448,7 @@ function Load-All {
         $script:index = -1
         $script:index = 0
         Show-Item 0
-        $status.Text = "已读取 $($script:conditions.Count) 个类型"
+        $status.Text = "已读取 $($script:conditions.Count) 个组合（$($script:groups.Count) 个种族分类）"
     } catch {
         $status.Text = "读取失败：$($_.Exception.Message)。请先启动 MaaGC（Agent 会在后台启动控制台服务）。"
     }
@@ -286,8 +467,8 @@ $btnAdd.Add_Click({
     $m = @{}
     foreach ($attr in $attrs) { $g[$attr] = ""; $m[$attr] = "" }
     $script:conditions += [pscustomobject]@{
-        id = "type_$n"; name = "新提醒类型"; description = ""
-        caseName = "新提醒类型 $n"; node = "检测_新提醒类型$n"
+        id = "type_$n"; name = "新组合 $n"; description = ""; note = ""
+        caseName = "新组合 $n"; node = "检测_新组合$n"
         defaultChecked = $false; features = @(); orLines = @()
         grades = $g; mins = $m
     }
@@ -297,7 +478,7 @@ $btnAdd.Add_Click({
 
 $btnDel.Add_Click({
     if ($script:index -lt 0) { return }
-    if ([System.Windows.Forms.MessageBox]::Show("确定删除这个提醒类型？保存后同时移除检测节点和界面选项。", "删除确认",
+    if ([System.Windows.Forms.MessageBox]::Show("确定删除这个组合？保存后同时移除检测节点和界面选项。", "删除确认",
             "YesNo", "Warning") -ne "Yes") { return }
     $script:conditions = @($script:conditions | Where-Object { $_ -ne $script:conditions[$script:index] })
     $script:index = -1
@@ -306,6 +487,26 @@ $btnDel.Add_Click({
 })
 
 $btnReload.Add_Click({ Load-All })
+
+$btnFeature.Add_Click({
+    if ($script:index -lt 0 -or $script:index -ge $script:conditions.Count) {
+        $status.Text = "先在左侧选中一个组合，再打开特性表"
+        return
+    }
+    Store-Item
+    try {
+        $target = $script:conditions[$script:index]
+        $result = Show-FeatureTable ([string]$target.caseName) (@($target.features))
+        if ($null -ne $result) {
+            $picked = @($result.Features)
+            $featuresBox.Text = ($picked -join "`r`n")
+            $detailHeader.Text = "详情：$($target.caseName)（$($picked.Count) 特性）"
+            $status.Text = "已从特性表写回 $($picked.Count) 项特性，记得点「保存并同步」"
+        }
+    } catch {
+        $status.Text = "打开特性表失败：$($_.Exception.Message)"
+    }
+})
 
 $btnSync.Add_Click({
     try {

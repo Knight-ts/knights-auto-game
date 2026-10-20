@@ -21,7 +21,7 @@ python\python.exe webapp\server.py
 | 任务 | 读取 interface.json 的任务与选项（switch/checkbox/select/input），组合 pipeline_override 后执行 |
 | 截图 | 设备实时画面（2 秒刷新、可下载） |
 | 日志 | 调度日志 + Agent stdout |
-| 好娃提醒 | 增删改提醒类型，保存时同步条件表 / 检测节点 / 界面选项 |
+| 好娃提醒 | 组合列表（点「详情」展开）+ 按种族分类的完整特性表，保存时同步条件表 / 检测节点 / 界面选项 |
 | 孩子记录 | 读取 table/child_records.xlsx 对应的记录，可标记已招募 |
 
 ## 结构
@@ -34,6 +34,8 @@ webapp/
   static/app.js      前端逻辑
   static/style.css   样式
 ```
+
+好娃提醒的界面不在这四个文件里：`agent/action/zshg/web_alerts.js`、`web_alerts.css` 由本服务和网页控制台共用（`/alerts.js`、`/alerts.css`），数据来自 `child_alert_store.py` + `child_feature_table.py`。
 
 ## 与旧版的关系
 
@@ -54,7 +56,7 @@ webapp/
 | POST | `/api/agent/start` / `/api/agent/stop` | Agent 控制 |
 | POST | `/api/task/run` | `{entry, name, selection}` |
 | POST | `/api/task/stop` | 停止当前任务 |
-| GET/POST | `/api/alerts`、`/api/alerts/save` | 好娃提醒配置 |
+| GET/POST | `/api/alerts`、`/api/alerts/save` | 好娃提醒配置（含 `featureGroups` 特性表分类） |
 | GET/POST | `/api/records`、`/api/records/recruited` | 孩子记录与招募标记 |
 | GET/POST | `/api/notify`、`/api/notify/save`、`/api/notify/test` | 平台推送配置与测试发送 |
 | POST | `/api/logs/clear` | 清空内存日志 |

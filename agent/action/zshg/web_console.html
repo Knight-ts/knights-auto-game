@@ -336,7 +336,9 @@ $("tabs").addEventListener("click", (event) => {
   if (target) switchTab(target.dataset.tab);
 });
 
-switchTab("home");
+// 支持 #alerts 之类的深链接，方便直接打开某一页
+const startTab = (location.hash || "").replace(/^#/, "");
+switchTab(["home", "control", "shot", "alerts"].includes(startTab) ? startTab : "home");
 </script>
 </body>
 </html>

@@ -27,10 +27,6 @@ OPTION_NAME = "开启好娃提醒"
 TABLE_REL = Path("table") / "child_alert_conditions.json"
 PIPELINE_REL = Path("resource") / "base" / "pipeline" / "child_info.json"
 INTERFACE_REL = Path("interface.json")
-FEATURE_TABLES = [
-    Path("table") / "各国家特性表.json",
-    Path("table") / "正负面特性表.json",
-]
 
 _FEATURE_TABLE_LOADER = None
 
