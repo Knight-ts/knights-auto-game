@@ -1,3 +1,5 @@
+> 说明：本文档由 AI 生成，内容参考并借鉴了 [MAAGC](https://github.com/KhazixW2/MAAGC)（MIT）的代码与文档，未逐条人工校对；如与本仓库实际代码不一致，以代码为准。
+
 # Custom 节点（Custom Actions）
 
 > 本文档列出本仓库**已实现**的 8 个 Custom Action、1 个待补全的声明，以及新增 Custom Action 的标准流程。**仅覆盖本仓库现状**，协议级节点（`SubTask` / `ExpressionRecognition` / `ClearHitCount` / Custom Recognition）项目暂未使用，不展开。
@@ -88,7 +90,7 @@ class XxxProcessor(CustomAction):
 
 界面分两块：上面是**按种族分类的完整特性表**（血统 15 个、平民血 7 个、通用 4 类，共 214 项，见 [`child_feature_table.py`](../../../agent/action/zshg/child_feature_table.py)），点「＋ 加入」把特性加到当前组合；下面是**组合列表**，每行约 2cm，点「详情」展开填写界面显示名、内部 ID、条件名、检测节点、说明、备注、必需特性、属性门槛和或条件。备注（`note`）只给自己看，随条件表保存，不参与判定。
 
-连不上模拟器时双击 `tools\启动MaaGC.bat`：它先 `adb connect` 再启动 MaaGC，避免刷新设备时列表为空。
+连不上模拟器时双击 `tools\启动Knights Auto Game.bat`：它先 `adb connect` 再启动 Knights Auto Game，避免刷新设备时列表为空。
 
 需要手改时的三步（判定与开关都由表驱动，**不需要改 Python 代码**）：
 

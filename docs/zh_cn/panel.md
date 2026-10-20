@@ -1,3 +1,5 @@
+> 说明：本文档由 AI 生成，内容参考并借鉴了 [MAAGC](https://github.com/KhazixW2/MAAGC)（MIT）的代码与文档，未逐条人工校对；如与本仓库实际代码不一致，以代码为准。
+
 # Panel 识别系统设计与实现
 
 ## 概述

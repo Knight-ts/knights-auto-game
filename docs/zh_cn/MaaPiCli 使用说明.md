@@ -1,3 +1,5 @@
+> 说明：本文档由 AI 生成，内容参考并借鉴了 [MAAGC](https://github.com/KhazixW2/MAAGC)（MIT）的代码与文档，未逐条人工校对；如与本仓库实际代码不一致，以代码为准。
+
 # MaaPiCli 使用说明
 
 MaaPiCli 是 MaaFramework 提供的命令行版本，适合高级用户和服务器环境使用。
@@ -17,7 +19,7 @@ maagc-win-x86_64-*-PiCLI.zip
 将下载的压缩包解压到任意目录，例如：
 
 ```
-D:\MaaGC\
+D:\Knights Auto Game\
 ├── MaaPiCli.exe
 ├── python/
 ├── agent/
@@ -30,7 +32,7 @@ D:\MaaGC\
 打开命令行（CMD 或 PowerShell），进入安装目录：
 
 ```bash
-cd D:\MaaGC
+cd D:\Knights Auto Game
 .\MaaPiCli.exe --version
 ```
 
@@ -189,10 +191,10 @@ pause
 
 1. 打开"任务计划程序"
 2. 点击"创建基本任务"
-3. 设置任务名称（如"MaaGC 日常任务"）
+3. 设置任务名称（如"Knights Auto Game 日常任务"）
 4. 设置触发器（如每天上午 10:00）
 5. 操作选择"启动程序"
-6. 程序/脚本：`D:\MaaGC\MaaPiCli.exe`
+6. 程序/脚本：`D:\Knights Auto Game\MaaPiCli.exe`
 7. 添加参数：`--config config\daily_config.json`
 8. 完成创建
 

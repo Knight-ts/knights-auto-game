@@ -1,6 +1,8 @@
-# MaaGC 开发者文档
+> 说明：本文档由 AI 生成，内容参考并借鉴了 [MAAGC](https://github.com/KhazixW2/MAAGC)（MIT）的代码与文档，未逐条人工校对；如与本仓库实际代码不一致，以代码为准。
 
-> 本目录是 MaaGC（基于 MaaFramework 的「诸神皇冠」自动化助手）的开发者参考。聚焦本仓库**当前真实存在**的节点、自定义动作与测试流程。
+# Knights Auto Game 开发者文档
+
+> 本目录是 Knights Auto Game（基于 MaaFramework 的「诸神皇冠」自动化助手）的开发者参考。聚焦本仓库**当前真实存在**的节点、自定义动作与测试流程。
 
 ## 命名约定
 
