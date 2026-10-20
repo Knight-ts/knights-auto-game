@@ -1,14 +1,12 @@
 {
     "interface_version": 2,
-    "name": "MaaGC",
-    "description": "这是一个使用 MaaFramework 创建的新项目。",
-    "contact": "QQ群: 123456789",
+    "name": "Knights-web-windows",
+    "description": "《诸神皇冠 / 百年骑士团》网页版自动化助手（MAAGC 衍生，非官方）",
+    "contact": "https://github.com/Knight-ts/Knights-web-windows/issues",
     "license": "MIT",
-    "welcome": "首次使用！欢迎使用 MaaGC!",
-    "github": "https://github.com/KhazixW2/MAAGC",
+    "welcome": "首次使用！欢迎使用 Knights 网页版。",
+    "github": "https://github.com/Knight-ts/Knights-web-windows",
     "version": "v1.6.1",
-    "mirrorchyan_rid": "MAAGC",
-    "mirrorchyan_multiplatform": true,
     "controller": [
         {
             "name": "ADB",
