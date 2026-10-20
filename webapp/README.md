@@ -19,7 +19,7 @@ python\python.exe webapp\server.py
 |---|---|
 | 主页 | 设备选择与连接、资源/Agent/任务状态、最近日志 |
 | 任务 | 读取 interface.json 的任务与选项（switch/checkbox/select/input），组合 pipeline_override 后执行 |
-| 推年计划 | 任务组合：选模块、排序、循环次数、命名保存（table/task_combos.json）并运行 |
+| 推年计划 | 任务组合：选模块、逐步改选项、排序、循环次数、简介、自动处理规则，命名保存（table/task_combos.json）并运行 |
 | 截图 | 设备实时画面（2 秒刷新、可下载） |
 | 日志 | 调度日志 + Agent stdout |
 | 好娃提醒 | 组合列表（点「详情」展开）+ 按种族分类的完整特性表，保存时同步条件表 / 检测节点 / 界面选项 |
@@ -75,5 +75,5 @@ webapp/
 
 - 任务页会记住上次选的任务与各选项（`config/webapp.json`），并显示最近任务记录；
 - 任务页底部有「任务包」卡片：导出 tasks/、重建 interface.json、打包当前任务、导入 zip，改完不用命令行也能用；
-- 「推年计划」页是任务组合编辑器：步骤按顺序执行，选项沿用任务页保存的选择，组合存在 `table/task_combos.json`；
+- 「推年计划」页是任务组合编辑器：每个步骤单独存选项（相亲爵位、刷取任务国家等），组合可写简介、配自动处理规则（失败重试/跳过/停止、好娃提醒、离线重连、每轮等待），存在 `table/task_combos.json`；
 - 通知页可启用推送、选择飞书/通用 JSON、发送测试消息；webhook 留空时自动复用 `config/config.json` 的飞书地址。

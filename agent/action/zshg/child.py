@@ -607,6 +607,26 @@ class ChildRec(CustomAction):
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"平台推送异常：{exc}")
 
+        # 给网页版的「推年计划」组合脚本留一个标记：
+        # 好娃提醒触发时组合可以按规则停止 / 通知 / 继续
+        try:
+            marker = os.path.join(os.getcwd(), "temp", "child_alert.json")
+            os.makedirs(os.path.dirname(marker), exist_ok=True)
+            with open(marker, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "child_name": child_name,
+                        "condition": condition_name,
+                        "title": highest_title,
+                        "child_index": child_index,
+                    },
+                    handle,
+                    ensure_ascii=False,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"写入好娃提醒标记失败：{exc}")
+
         context.run_task(
             "UI_PopInform",
             pipeline_override={"Node.Action.Succeeded": {"content": alert_content}},

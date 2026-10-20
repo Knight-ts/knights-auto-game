@@ -96,3 +96,21 @@ select.grade { width: 74px; } input.min { width: 92px; }
 .combo-step .step-actions { display: flex; gap: 4px; margin-left: auto; }
 #comboModule { flex: 1 1 220px; min-width: 0; }
 #comboName { min-width: 0; }
+
+.combo-step-wrap { border: 1px solid transparent; border-radius: 10px; }
+.step-options {
+  margin: 4px 0 6px 28px; padding: 8px 10px;
+  border: 1px dashed var(--line); border-radius: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.opt-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.opt-row .opt-label { flex: 0 0 150px; color: var(--muted); font-size: 12px; }
+.opt-row .opt-field { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.opt-row select, .opt-row input[type=text] { min-width: 120px; max-width: 100%; }
+.opt-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.combo-rules { display: flex; flex-direction: column; gap: 4px; }
+.combo-rule {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel2); font-size: 13px;
+}

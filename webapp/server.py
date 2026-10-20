@@ -74,12 +74,36 @@ def save_config(data: dict) -> None:
 
 
 def combo_selection(entry: str) -> dict:
-    """组合里每个步骤的选项：沿用「任务」页给该任务保存的选择。"""
+    """组合步骤没单独存选项时，沿用「任务」页给该任务保存的选择。"""
     selections = load_config().get("selections") or {}
     return selections.get(entry) or {}
 
 
-combo_runner = ComboRunner(runtime, ROOT, selection_provider=combo_selection)
+def combo_reconnect() -> bool:
+    """组合规则「设备离线 → 重连」用。"""
+    config = load_config()
+    try:
+        runtime.connect(config.get("adb_path") or "", config.get("address") or "")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        runtime.log(f"组合重连失败：{exc}")
+        return False
+
+
+def combo_notify(title: str, content: str) -> None:
+    try:
+        notifier.notify(title, content)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+combo_runner = ComboRunner(
+    runtime,
+    ROOT,
+    selection_provider=combo_selection,
+    reconnect_provider=combo_reconnect,
+    notify_provider=combo_notify,
+)
 
 
 def _persist_history(items: list[dict]) -> None:
@@ -202,18 +226,7 @@ class Handler(BaseHTTPRequestHandler):
                             }
                         )
                     ]
-                modules = []
-                for task in runtime.interfaces.get("task", []):
-                    entry = task.get("entry", "")
-                    modules.append(
-                        {
-                            "entry": entry,
-                            "name": config.get("task_labels", {}).get(entry)
-                            or task.get("name", ""),
-                            "description": task.get("description", ""),
-                            "options": task.get("option", []) or [],
-                        }
-                    )
+                modules = runtime.tasks(config.get("task_labels") or {}, [])
                 self._json(
                     200,
                     {

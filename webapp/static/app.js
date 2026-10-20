@@ -11,6 +11,7 @@ const state = {
   tasks: [], records: [],
   devices: [], selectedTask: 0, activeTab: "home", prefs: {}, prefsLoaded: false,
   combos: [], comboModules: [], comboSelections: {}, comboIndex: -1, comboRunning: null,
+  comboOpenSteps: new Set(),
 };
 const timers = {};
 let selectionTimer = null;
@@ -696,6 +697,7 @@ $("comboList").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-i]");
   if (!btn) return;
   state.comboIndex = Number(btn.dataset.i);
+  state.comboOpenSteps = new Set();
   renderComboList();
   renderComboEditor();
 });
@@ -708,9 +710,16 @@ $("comboSteps").addEventListener("click", (e) => {
   else if (action === "down") moveComboStep(index, 1);
   else if (action === "remove") removeComboStep(index);
   else if (action === "options") {
-    const combo = currentCombo();
-    if (combo && combo.steps[index]) gotoTaskOptions(combo.steps[index].entry);
+    if (state.comboOpenSteps.has(index)) state.comboOpenSteps.delete(index);
+    else state.comboOpenSteps.add(index);
+    renderComboEditor();
   }
+});
+$("comboSteps").addEventListener("change", updateStepOption);
+$("comboSteps").addEventListener("input", updateStepOption);
+$("comboDesc").addEventListener("input", () => {
+  const combo = currentCombo();
+  if (combo) combo.description = $("comboDesc").value;
 });
 $("comboName").addEventListener("input", () => {
   const combo = currentCombo();
@@ -722,6 +731,29 @@ $("comboName").addEventListener("input", () => {
 $("comboLoops").addEventListener("input", () => {
   const combo = currentCombo();
   if (combo) combo.loops = Math.max(0, Number($("comboLoops").value) || 0);
+});
+$("comboRules").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-rule]");
+  if (!btn) return;
+  const combo = currentCombo();
+  if (!combo) return;
+  combo.rules.splice(Number(btn.dataset.rule), 1);
+  renderComboRules();
+});
+$("btnRuleAdd").addEventListener("click", () => {
+  const combo = currentCombo();
+  if (!combo) {
+    banner("err", ["先新建组合"]);
+    return;
+  }
+  const action = $("ruleAction").value;
+  const value = Math.max(0, Number($("ruleValue").value) || 0);
+  if ((action === "retry" || action === "wait") && value <= 0) {
+    banner("err", ["重试 / 等待需要填写次数或秒数"]);
+    return;
+  }
+  combo.rules.push({ when: $("ruleWhen").value, action, value });
+  renderComboRules();
 });
 $("btnComboNew").addEventListener("click", newCombo);
 $("btnComboDelete").addEventListener("click", deleteCombo);
@@ -776,7 +808,7 @@ function renderComboList() {
     ? state.combos
         .map(
           (combo, index) =>
-            `<button data-i="${index}" class="${index === state.comboIndex ? "active" : ""}">${esc(combo.name)} <span class="hint">（${combo.steps.length} 步）</span></button>`
+            `<button data-i="${index}" title="${esc(combo.description || "")}" class="${index === state.comboIndex ? "active" : ""}">${esc(combo.name)} <span class="hint">（${combo.steps.length} 步）</span></button>`
         )
         .join("")
     : '<div class="empty">还没有组合，点「＋ 新建组合」</div>';
@@ -792,39 +824,180 @@ function renderComboModuleOptions() {
   if (current) select.value = current;
 }
 
+const RULE_WHEN_OPTIONS = [
+  ["fail", "任务失败"],
+  ["child_alert", "好娃提醒"],
+  ["offline", "设备离线"],
+  ["loop_end", "每轮结束"],
+];
+const RULE_ACTION_OPTIONS = [
+  ["retry", "重试当前步骤"],
+  ["skip", "跳过当前步骤"],
+  ["stop", "停止组合"],
+  ["continue", "继续下一步"],
+  ["notify", "发送通知"],
+  ["reconnect", "重连后重试"],
+  ["wait", "等待"],
+];
+
+function ruleLabel(list, value) {
+  const found = list.find((item) => item[0] === value);
+  return found ? found[1] : value;
+}
+
+function renderRuleSelects() {
+  const when = $("ruleWhen");
+  const action = $("ruleAction");
+  if (!when || !action) return;
+  when.innerHTML = RULE_WHEN_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+  action.innerHTML = RULE_ACTION_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+}
+
+function defaultSelection(module) {
+  const selection = {};
+  (module.options || []).forEach((option) => {
+    if (option.type === "switch" || option.type === "select") {
+      selection[option.name] = option.default_case || (option.cases[0] ? option.cases[0].name : "");
+    } else if (option.type === "checkbox") {
+      const list = option.default_case;
+      selection[option.name] = Array.isArray(list) ? list.slice() : list ? [list] : [];
+    } else if (option.type === "input") {
+      const values = {};
+      (option.inputs || []).forEach((input) => {
+        values[input.name] = input.default || "";
+      });
+      selection[option.name] = values;
+    }
+  });
+  return selection;
+}
+
+function selectionFor(entry) {
+  const module = state.comboModules.find((item) => item.entry === entry);
+  const base = module ? defaultSelection(module) : {};
+  return Object.assign(base, state.comboSelections[entry] || {});
+}
+
+function stepOptionsHtml(step, index) {
+  const module = state.comboModules.find((item) => item.entry === step.entry);
+  if (!module) return '<div class="step-options"><div class="hint">找不到模块信息</div></div>';
+  if (!(module.options || []).length) {
+    return '<div class="step-options"><div class="hint">这个模块没有选项</div></div>';
+  }
+  const rows = module.options.map((option) => {
+    const value = step.selection ? step.selection[option.name] : undefined;
+    let field = "";
+    if (option.type === "checkbox") {
+      const list = Array.isArray(value) ? value : [];
+      field = (option.cases || [])
+        .map(
+          (item) =>
+            `<label class="opt-check"><input type="checkbox" data-step="${index}" data-opt="${esc(option.name)}" value="${esc(item.name)}" ${list.includes(item.name) ? "checked" : ""}> ${esc(item.name)}</label>`
+        )
+        .join("");
+    } else if (option.type === "select" || option.type === "switch") {
+      field = `<select data-step="${index}" data-opt="${esc(option.name)}">${(option.cases || [])
+        .map(
+          (item) =>
+            `<option value="${esc(item.name)}" ${item.name === value ? "selected" : ""}>${esc(item.name)}</option>`
+        )
+        .join("")}</select>`;
+    } else if (option.type === "input") {
+      field = (option.inputs || [])
+        .map((input) => {
+          const inputValue = (value && value[input.name]) || "";
+          return `<input type="text" data-step="${index}" data-opt="${esc(option.name)}" data-input="${esc(input.name)}" value="${esc(inputValue)}" placeholder="${esc(input.name)}">`;
+        })
+        .join("");
+    }
+    return `<div class="opt-row"><span class="opt-label" title="${esc(option.description || "")}">${esc(option.label || option.name)}</span><span class="opt-field">${field}</span></div>`;
+  });
+  return `<div class="step-options">${rows.join("")}</div>`;
+}
+
+function renderComboSteps(combo) {
+  if (!combo.steps.length) {
+    return '<div class="empty">还没有步骤，从下面选一个任务模块添加</div>';
+  }
+  return combo.steps
+    .map((step, index) => {
+      const saved = step.selection || {};
+      const keys = Object.keys(saved);
+      const detail = keys.length ? keys.map((key) => `${key}=${saved[key]}`).join("，") : "默认";
+      const summary = keys.length ? `${keys.length} 项选项` : "默认";
+      const open = state.comboOpenSteps.has(index);
+      return `<div class="combo-step-wrap">
+        <div class="combo-step">
+          <span class="step-index">${index + 1}</span>
+          <span class="step-name">${esc(moduleName(step.entry))}</span>
+          <span class="step-hint" title="${esc(detail)}">选项：${esc(summary)}</span>
+          <span class="step-actions">
+            <button class="btn small" data-act="up" data-i="${index}" ${index === 0 ? "disabled" : ""}>↑</button>
+            <button class="btn small" data-act="down" data-i="${index}" ${index === combo.steps.length - 1 ? "disabled" : ""}>↓</button>
+            <button class="btn small ${open ? "primary" : ""}" data-act="options" data-i="${index}">选项</button>
+            <button class="btn small danger" data-act="remove" data-i="${index}">✕</button>
+          </span>
+        </div>
+        ${open ? stepOptionsHtml(step, index) : ""}
+      </div>`;
+    })
+    .join("");
+}
+
+function renderComboRules() {
+  const combo = currentCombo();
+  const box = $("comboRules");
+  if (!box) return;
+  const rules = combo ? combo.rules || [] : [];
+  box.innerHTML = rules.length
+    ? rules
+        .map((rule, index) => {
+          const unit = rule.action === "wait" ? " 秒" : rule.action === "retry" ? " 次" : "";
+          const value = rule.value ? ` ${rule.value}${unit}` : "";
+          return `<div class="combo-rule">
+            <span>当「${esc(ruleLabel(RULE_WHEN_OPTIONS, rule.when))}」→ ${esc(ruleLabel(RULE_ACTION_OPTIONS, rule.action))}${esc(value)}</span>
+            <button class="btn small danger" data-rule="${index}">✕</button>
+          </div>`;
+        })
+        .join("")
+    : '<div class="hint">还没有规则：任务失败默认停止、好娃提醒默认停止、设备离线默认停止。</div>';
+}
+
 function renderComboEditor() {
   const combo = currentCombo();
   if (!combo) {
     $("comboName").value = "";
     $("comboLoops").value = 1;
+    $("comboDesc").value = "";
     $("comboSteps").innerHTML = '<div class="empty">还没有组合</div>';
+    renderComboRules();
     return;
   }
   $("comboName").value = combo.name;
   $("comboLoops").value = combo.loops;
-  $("comboSteps").innerHTML = combo.steps.length
-    ? combo.steps
-        .map((step, index) => {
-          const saved = state.comboSelections[step.entry] || {};
-          const keys = Object.keys(saved);
-          const detail = keys.length
-            ? keys.map((key) => `${key}=${saved[key]}`).join("，")
-            : "默认";
-          const summary = keys.length ? `${keys.length} 项选项` : "默认";
-          return `<div class="combo-step">
-            <span class="step-index">${index + 1}</span>
-            <span class="step-name">${esc(moduleName(step.entry))}</span>
-            <span class="step-hint" title="${esc(detail)}">选项：${esc(summary)}</span>
-            <span class="step-actions">
-              <button class="btn small" data-act="up" data-i="${index}" ${index === 0 ? "disabled" : ""}>↑</button>
-              <button class="btn small" data-act="down" data-i="${index}" ${index === combo.steps.length - 1 ? "disabled" : ""}>↓</button>
-              <button class="btn small" data-act="options" data-i="${index}">设选项</button>
-              <button class="btn small danger" data-act="remove" data-i="${index}">✕</button>
-            </span>
-          </div>`;
-        })
-        .join("")
-    : '<div class="empty">还没有步骤，从下面选一个任务模块添加</div>';
+  $("comboDesc").value = combo.description || "";
+  $("comboSteps").innerHTML = renderComboSteps(combo);
+  renderComboRules();
+}
+
+function newCombo() {
+  state.combos.push({
+    id: "c" + Date.now().toString(36),
+    name: `新组合 ${state.combos.length + 1}`,
+    description: "",
+    loops: 1,
+    steps: [],
+    rules: [
+      { when: "child_alert", action: "stop", value: 0 },
+      { when: "offline", action: "reconnect", value: 0 },
+    ],
+  });
+  state.comboIndex = state.combos.length - 1;
+  state.comboOpenSteps = new Set();
+  renderComboList();
+  renderComboEditor();
+  $("comboName").focus();
+  $("comboName").select();
 }
 
 function renderComboStatus() {
@@ -840,20 +1013,6 @@ function renderComboStatus() {
   } else {
     box.textContent = "未运行";
   }
-}
-
-function newCombo() {
-  state.combos.push({
-    id: "c" + Date.now().toString(36),
-    name: `新组合 ${state.combos.length + 1}`,
-    loops: 1,
-    steps: [],
-  });
-  state.comboIndex = state.combos.length - 1;
-  renderComboList();
-  renderComboEditor();
-  $("comboName").focus();
-  $("comboName").select();
 }
 
 async function saveCombos() {
@@ -880,6 +1039,7 @@ async function deleteCombo() {
   if (!confirm(`删除组合「${combo.name}」？`)) return;
   state.combos.splice(state.comboIndex, 1);
   state.comboIndex = Math.min(state.comboIndex, state.combos.length - 1);
+  state.comboOpenSteps = new Set();
   await saveCombos();
   if (state.comboIndex < 0 && state.combos.length) state.comboIndex = 0;
   renderComboList();
@@ -890,7 +1050,8 @@ function addComboStep() {
   const combo = currentCombo();
   const entry = $("comboModule").value;
   if (!combo || !entry) return;
-  combo.steps.push({ entry });
+  combo.steps.push({ entry, selection: selectionFor(entry) });
+  state.comboOpenSteps = new Set([combo.steps.length - 1]);
   renderComboEditor();
 }
 
@@ -901,6 +1062,7 @@ function moveComboStep(index, delta) {
   if (target < 0 || target >= combo.steps.length) return;
   const [step] = combo.steps.splice(index, 1);
   combo.steps.splice(target, 0, step);
+  state.comboOpenSteps = new Set();
   renderComboEditor();
 }
 
@@ -908,18 +1070,37 @@ function removeComboStep(index) {
   const combo = currentCombo();
   if (!combo) return;
   combo.steps.splice(index, 1);
+  state.comboOpenSteps = new Set();
   renderComboEditor();
 }
 
-async function gotoTaskOptions(entry) {
-  if (!state.tasks.length) await fetchTasks();
-  const index = state.tasks.findIndex((task) => task.entry === entry);
-  if (index < 0) {
-    banner("err", ["这个任务不在任务列表里（可能被隐藏了）"]);
-    return;
+function updateStepOption(event) {
+  const element = event.target;
+  if (!element.dataset || element.dataset.step === undefined || !element.dataset.opt) return;
+  const combo = currentCombo();
+  if (!combo) return;
+  const step = combo.steps[Number(element.dataset.step)];
+  if (!step) return;
+  step.selection = step.selection || {};
+  const name = element.dataset.opt;
+  if (element.type === "checkbox") {
+    const list = new Set(Array.isArray(step.selection[name]) ? step.selection[name] : []);
+    if (element.checked) list.add(element.value);
+    else list.delete(element.value);
+    step.selection[name] = [...list];
+  } else if (element.dataset.input) {
+    step.selection[name] = step.selection[name] || {};
+    step.selection[name][element.dataset.input] = element.value;
+  } else {
+    step.selection[name] = element.value;
   }
-  switchTab("tasks");
-  selectTask(index);
+  const wrap = element.closest(".combo-step-wrap");
+  const hint = wrap && wrap.querySelector(".step-hint");
+  if (hint) {
+    const keys = Object.keys(step.selection);
+    hint.textContent = `选项：${keys.length ? keys.length + " 项选项" : "默认"}`;
+    hint.title = keys.map((key) => `${key}=${step.selection[key]}`).join("，");
+  }
 }
 
 async function runCombo() {
@@ -960,5 +1141,6 @@ if (["home", "tasks", "combos", "shot", "logs", "alerts", "records", "mercs", "n
   switchTab(startTab);
 }
 
+renderRuleSelects();
 refreshState();
 setInterval(refreshState, 3000);

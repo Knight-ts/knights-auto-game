@@ -141,15 +141,28 @@
             <input type="number" id="comboLoops" min="0" step="1" value="1">
           </label>
         </div>
+        <label class="field" style="margin-top:8px;width:100%">简介（这个组合是干什么的）
+          <textarea id="comboDesc" placeholder="例如：每天先领礼包，再跑 12 个月推年；相亲遇到公爵就停下等手动处理。"></textarea>
+        </label>
         <div class="hint" style="margin-top:6px">
-          0 = 一直循环到手动停止，1 = 只跑一遍；步骤按顺序执行，每个步骤的选项沿用「任务」页里给该任务保存的选择。
+          0 = 一直循环到手动停止，1 = 只跑一遍；步骤按顺序执行，每个步骤可以单独改选项。
         </div>
         <div id="comboSteps" class="combo-steps" style="margin-top:12px"></div>
         <div class="row" style="margin-top:12px">
           <select id="comboModule" class="grow"></select>
           <button class="btn" id="btnComboAddStep">＋ 添加步骤</button>
         </div>
-        <div class="row" style="margin-top:12px">
+
+        <div class="hint" style="margin-top:16px;margin-bottom:6px">自动处理（遇到什么情况做什么）</div>
+        <div id="comboRules" class="combo-rules"></div>
+        <div class="row" style="margin-top:6px">
+          <select id="ruleWhen"></select>
+          <select id="ruleAction"></select>
+          <input type="number" id="ruleValue" min="0" step="1" value="0" style="width:80px" title="重试次数 / 等待秒数">
+          <button class="btn" id="btnRuleAdd">＋ 添加规则</button>
+        </div>
+
+        <div class="row" style="margin-top:16px">
           <button class="btn primary" id="btnComboSave">保存组合</button>
           <button class="btn primary" id="btnComboRun">运行组合</button>
           <button class="btn danger" id="btnComboStop">停止</button>
