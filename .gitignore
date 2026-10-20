@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+python/
 
 # 运行时与日志
 logs/

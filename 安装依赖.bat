@@ -1,17 +1,22 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 cd /d "%~dp0"
 
-where python >nul 2>nul
+set "PY=python"
+if exist "python\python.exe" set "PY=python\python.exe"
+
+where %PY% >nul 2>nul
 if errorlevel 1 (
-    echo 未找到 Python，请先安装 Python 3.12 并勾选 Add to PATH。
-    pause
-    exit /b 1
+    if not exist "%PY%" (
+        echo 未找到 Python，请先安装 Python 3.12 并勾选 Add to PATH。
+        pause
+        exit /b 1
+    )
 )
 
 if not exist ".venv\Scripts\python.exe" (
     echo 正在创建虚拟环境 .venv ...
-    python -m venv .venv
+    "%PY%" -m venv .venv
     if errorlevel 1 (
         echo 创建虚拟环境失败。
         pause

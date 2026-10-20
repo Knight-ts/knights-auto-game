@@ -1,8 +1,9 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 cd /d "%~dp0"
 
 set "PY=python"
+if exist "python\python.exe" set "PY=python\python.exe"
 if exist ".venv\Scripts\python.exe" set "PY=.venv\Scripts\python.exe"
 
 where %PY% >nul 2>nul
