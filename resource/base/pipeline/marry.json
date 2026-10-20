@@ -497,5 +497,19 @@
         ],
         "timeout": 1000,
         "enabled": true
+    },
+    "MarryFeatureSelect": {
+        "recognition": "OCR",
+        "expected": [
+            "orange"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
     }
 }

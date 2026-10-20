@@ -66,6 +66,7 @@
                 "相亲种族",
                 "相亲爵位",
                 "相亲年龄",
+                "目标特性",
                 "选择年度任务月份数",
                 "自定义任务黑名单"
             ],
@@ -82,8 +83,13 @@
                 "- 支持好娃检测与弹窗提醒",
                 "",
                 "**选项说明：**",
-                "- 4月城堡相亲：4月城堡主厅相亲（自动 / 跳过 / 手动）",
-                "- 5月春林节相亲：5月春林节相亲（自动 / 跳过 / 手动）",
+                "- 4月城堡相亲：4月城堡主厅相亲（自动 / 跳过 / 手动），自动时使用下面的相亲参数",
+                "- 相亲种族：目标种族，默认高阶精灵",
+                "- 相亲爵位：公爵 / 伯爵 / 男爵 / 骑士 / 不限，默认公爵",
+                "- 相亲年龄：年龄较大（30~44）/ 年龄较小（18~29）/ 不限（45以下）",
+                "- 目标特性：橙色特征（只接受带特征）/ 不限",
+                "- 特征识别范围：目前只有 佩尔弗因王族（科内塔之怒）、塞宁王族（太阳之子）、高阶精灵（专注之瞳 / 上古灵性）能识别；其他种族请把目标特性选“不限”",
+                "- 5月春林节相亲：暂未实现自动流程，只能选择 跳过 / 手动",
                 "- 开启3月启航节购买：3月启航节是否自动进入节日页面并购买物品",
                 "- 开启好娃提醒：检测到优质子女时弹窗提醒并暂停任务",
                 "- 开启生娃自动起名：佣兵生娃事件后是否自动识别属性并起名（关闭则保留游戏默认名字，不做属性识别）",
@@ -187,7 +193,10 @@
             "option": [
                 "相亲范围",
                 "相亲模式",
-                "相亲种族"
+                "相亲种族",
+                "相亲爵位",
+                "相亲年龄",
+                "目标特性"
             ],
             "doc": [
                 "### 自动相亲",
@@ -319,24 +328,12 @@
         },
         "5月春林节相亲": {
             "type": "select",
-            "description": "5月春林节相亲：自动 / 跳过 / 手动",
-            "default_case": "自动",
+            "description": "5月春林节相亲暂未实现自动流程，只能选择 跳过 / 手动",
+            "default_case": "跳过",
             "cases": [
                 {
-                    "name": "自动",
-                    "description": "自动执行春林节相亲",
-                    "pipeline_override": {
-                        "Flag_EnableMaySpringMarry": {
-                            "enabled": true
-                        },
-                        "Flag_MaySpringManual": {
-                            "enabled": false
-                        }
-                    }
-                },
-                {
                     "name": "跳过",
-                    "description": "5月春林节不做相亲",
+                    "description": "5月春林节不做相亲，继续推月",
                     "pipeline_override": {
                         "Flag_EnableMaySpringMarry": {
                             "enabled": false
@@ -920,7 +917,7 @@
         },
         "相亲爵位": {
             "type": "select",
-            "description": "优先选择哪个爵位的角色去相亲（默认公爵）",
+            "description": "4月城堡相亲筛选的爵位（默认公爵）",
             "default_case": "公爵",
             "cases": [
                 {
@@ -932,18 +929,26 @@
                     }
                 },
                 {
-                    "name": "侯爵",
-                    "pipeline_override": {
-                        "MarryTitleSelect": {
-                            "expected": "侯爵"
-                        }
-                    }
-                },
-                {
                     "name": "伯爵",
                     "pipeline_override": {
                         "MarryTitleSelect": {
                             "expected": "伯爵"
+                        }
+                    }
+                },
+                {
+                    "name": "男爵",
+                    "pipeline_override": {
+                        "MarryTitleSelect": {
+                            "expected": "男爵"
+                        }
+                    }
+                },
+                {
+                    "name": "骑士",
+                    "pipeline_override": {
+                        "MarryTitleSelect": {
+                            "expected": "骑士"
                         }
                     }
                 },
@@ -1006,6 +1011,31 @@
                     "pipeline_override": {
                         "MarryActionSelect": {
                             "expected": "速配联姻"
+                        }
+                    }
+                }
+            ]
+        },
+        "目标特性": {
+            "type": "select",
+            "description": "要求目标带橙色特征，还是只看种族/姓名。目前只有佩尔弗因王族（科内塔之怒）、塞宁王族（太阳之子）、高阶精灵（专注之瞳/上古灵性）能识别特征，其他种族只能选“不限”。",
+            "default_case": "橙色特征",
+            "cases": [
+                {
+                    "name": "橙色特征",
+                    "description": "只接受识别到橙色特征的候选人",
+                    "pipeline_override": {
+                        "MarryFeatureSelect": {
+                            "expected": "orange"
+                        }
+                    }
+                },
+                {
+                    "name": "不限",
+                    "description": "不要求橙色特征，聊天/姓名匹配通过就接受",
+                    "pipeline_override": {
+                        "MarryFeatureSelect": {
+                            "expected": "any"
                         }
                     }
                 }

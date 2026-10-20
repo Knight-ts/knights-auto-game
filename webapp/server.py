@@ -169,7 +169,14 @@ class Handler(BaseHTTPRequestHandler):
                 state["game"] = game_state.load()
                 self._json(200, state)
             elif path == "/api/tasks":
-                self._json(200, runtime.tasks())
+                config = load_config()
+                self._json(
+                    200,
+                    runtime.tasks(
+                        config.get("task_labels") or {},
+                        config.get("hidden_tasks") or [],
+                    ),
+                )
             elif path == "/api/taskpack":
                 self._json(200, taskpack.status())
             elif path == "/api/screenshot":
@@ -263,6 +270,42 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(200, {"ok": True})
             elif path == "/api/task/stop":
                 self._json(200, runtime.stop_task())
+            elif path == "/api/task/rename":
+                entry = payload.get("entry") or ""
+                name = (payload.get("name") or "").strip()
+                if not entry or not name:
+                    self._json(400, {"ok": False, "error": "缺少 entry 或 name"})
+                else:
+                    config = load_config()
+                    labels = config.get("task_labels") or {}
+                    labels[entry] = name
+                    config["task_labels"] = labels
+                    save_config(config)
+                    self._json(200, {"ok": True})
+            elif path == "/api/task/delete":
+                entry = payload.get("entry") or ""
+                if not entry:
+                    self._json(400, {"ok": False, "error": "缺少 entry"})
+                else:
+                    config = load_config()
+                    hidden = config.get("hidden_tasks") or []
+                    if entry not in hidden:
+                        hidden.append(entry)
+                    config["hidden_tasks"] = hidden
+                    save_config(config)
+                    self._json(200, {"ok": True})
+            elif path == "/api/task/restore":
+                entry = payload.get("entry") or ""
+                if not entry:
+                    self._json(400, {"ok": False, "error": "缺少 entry"})
+                else:
+                    config = load_config()
+                    hidden = config.get("hidden_tasks") or []
+                    if entry in hidden:
+                        hidden.remove(entry)
+                    config["hidden_tasks"] = hidden
+                    save_config(config)
+                    self._json(200, {"ok": True})
             elif path == "/api/logs/clear":
                 runtime.clear_logs()
                 self._json(200, {"ok": True})

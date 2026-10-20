@@ -101,6 +101,7 @@ class MarryProcessor(CustomAction):
         self._candidate_index = 0
         self._target_title = "公爵"
         self._age_pref = "older"
+        self._feature_mode = "orange"
 
     def _load_blood_names(self) -> None:
         """
@@ -179,6 +180,7 @@ class MarryProcessor(CustomAction):
         self._mode = self._get_selected_mode(context)
         self._target_title = self._get_selected_title(context)
         self._age_pref = self._get_selected_age_pref(context)
+        self._feature_mode = self._get_selected_feature_mode(context)
 
         # 前处理：检查联姻资格
         candidates = self._pre_process(context)
@@ -203,6 +205,7 @@ class MarryProcessor(CustomAction):
         self._mode = self._get_selected_mode(context)
         self._target_title = self._get_selected_title(context)
         self._age_pref = self._get_selected_age_pref(context)
+        self._feature_mode = self._get_selected_feature_mode(context)
 
         # 检查联姻资格（界面进入、对象数量、回信数量）
         if not self._check_marriage_eligibility(context):
@@ -303,6 +306,18 @@ class MarryProcessor(CustomAction):
         logger.info(f"年龄偏好: {pref}")
         return pref
 
+    def _get_selected_feature_mode(self, context: Context) -> str:
+        """目标特性：orange（只接受橙色特征）/ any（不要求）。"""
+        data = context.get_node_data("MarryFeatureSelect")
+        mode = "orange"
+        if data:
+            expected = data.get("recognition", {}).get("param", {}).get(
+                "expected", ["orange"]
+            )
+            mode = expected[0] if isinstance(expected, list) else expected
+        logger.info(f"目标特性: {mode}")
+        return mode
+
     def _get_selected_match_scope(self, context: Context) -> bool:
         """
         检测用户选择的是多角色相亲还是单角色相亲
@@ -383,7 +398,11 @@ class MarryProcessor(CustomAction):
         try:
             from action.zshg.marry_test import ensure_filter_and_sort
 
-            ensure_filter_and_sort(context)
+            ensure_filter_and_sort(
+                context,
+                getattr(self, "_target_title", "公爵"),
+                getattr(self, "_age_pref", "older"),
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"联姻筛选/排序失败：{exc}")
 
@@ -557,8 +576,9 @@ class MarryProcessor(CustomAction):
         if not self._enter_role_details(context, roleBoxCenter):
             return
 
-        # 3.2 记录年龄（不限年龄，列表按年龄从大到小）
-        self._check_and_filter_by_age(context)
+        # 3.2 读取年龄并按偏好过滤
+        if not self._check_and_filter_by_age(context):
+            return
 
         # 3.3 提取血统信息并确定联姻目标
         target_race, target_country = self._evaluate_bloodline_and_get_target(context)
@@ -620,23 +640,39 @@ class MarryProcessor(CustomAction):
         return False
 
     def _check_and_filter_by_age(self, context: Context) -> bool:
-        """记录年龄，不做过滤。
-
-        年龄任意都可以；列表已按「年龄↑」从大到小排，越靠前年龄越大。
-        """
+        """读年龄并按「年龄较大 / 年龄较小 / 不限」过滤。"""
         RecoEmail = context.run_recognition(
             "CastleMarry_AgeCheck",
             context.tasker.controller.post_screencap().wait().get(),
         )
-        if RecoEmail.hit:
-            age_text = RecoEmail.best_result.text
-            match = re.search(r"\d+", age_text)
-            if match:
-                logger.info(f"年龄 {int(match.group())}（不限年龄，越大越优先）")
-            else:
-                logger.info(f"年龄文本 {age_text}（不限年龄）")
-        else:
-            logger.info("未识别到年龄信息，继续（不限年龄）")
+        if not RecoEmail.hit:
+            logger.info("未识别到年龄信息，跳过该候选人")
+            context.run_task("BackButton_500ms")
+            return False
+
+        age_text = RecoEmail.best_result.text
+        match = re.search(r"\d+", age_text)
+        if not match:
+            logger.info(f"年龄文本无法解析：{age_text}，跳过")
+            context.run_task("BackButton_500ms")
+            return False
+
+        age = int(match.group())
+        pref = getattr(self, "_age_pref", "any")
+        if age >= 45:
+            logger.info(f"年龄 {age} 大于等于45岁，跳过")
+            context.run_task("BackButton_500ms")
+            return False
+        if pref == "older" and age < 30:
+            logger.info(f"年龄 {age} 小于30岁，不符合“年龄较大”")
+            context.run_task("BackButton_500ms")
+            return False
+        if pref == "younger" and age >= 30:
+            logger.info(f"年龄 {age} 大于等于30岁，不符合“年龄较小”")
+            context.run_task("BackButton_500ms")
+            return False
+
+        logger.info(f"年龄 {age}，符合偏好 {pref}")
         return True
 
     def _evaluate_bloodline_and_get_target(self, context: Context) -> tuple:
@@ -714,6 +750,15 @@ class MarryProcessor(CustomAction):
                         self._email_current += 1
                         return
                     else:
+                        if getattr(self, "_feature_mode", "orange") == "any":
+                            logger.info(
+                                f"第 {attempt} 次尝试未要求橙色特征，接受该对象: "
+                                f"姓名={profile.name}, 爵位={profile.title}"
+                            )
+                            context.run_task("CastleMarryJustThisButton")
+                            context.run_task("PopUpWindowConfirm")
+                            self._email_current += 1
+                            return
                         # 无橙色特征，尝试下一位
                         logger.info(
                             f"第 {attempt} 次尝试无橙色特征，尝试下一位: "
@@ -721,6 +766,12 @@ class MarryProcessor(CustomAction):
                         )
                         break
                 elif state == "end":
+                    if getattr(self, "_feature_mode", "orange") == "any":
+                        logger.info("未要求橙色特征，直接接受该候选人")
+                        context.run_task("CastleMarryJustThisButton")
+                        context.run_task("PopUpWindowConfirm")
+                        self._email_current += 1
+                        return
                     # 未识别到照片就到了结束，直接尝试下一位
                     logger.info(f"第 {attempt} 次尝试未识别到照片，尝试下一位")
                     break

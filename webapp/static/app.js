@@ -151,6 +151,10 @@ async function stopAgent() {
 
 async function loadTasks() {
   if (state.tasks.length) return;
+  await fetchTasks();
+}
+
+async function fetchTasks() {
   try {
     if (!state.prefsLoaded) await refreshState();
     state.tasks = await api("/api/tasks");
@@ -161,6 +165,55 @@ async function loadTasks() {
     renderLoopTasks();
   } catch (error) {
     banner("err", ["读取任务失败：" + error.message]);
+  }
+}
+
+async function reloadTasks() {
+  state.tasks = [];
+  await fetchTasks();
+}
+
+async function renameTask() {
+  const task = state.tasks[state.selectedTask];
+  if (!task) { banner("err", ["先选择任务"]); return; }
+  const name = prompt("新的任务名称", task.name);
+  if (!name || name.trim() === task.name) return;
+  try {
+    await post("/api/task/rename", { entry: task.entry, name: name.trim() });
+    banner("ok", ["已重命名为：" + name.trim()]);
+    await reloadTasks();
+  } catch (error) {
+    banner("err", ["重命名失败：" + error.message]);
+  }
+}
+
+let lastDeletedTask = "";
+
+async function deleteTask() {
+  const task = state.tasks[state.selectedTask];
+  if (!task) { banner("err", ["先选择任务"]); return; }
+  if (!confirm(`确定从列表删除「${task.name}」吗？\n（只隐藏，可点“恢复删除”找回）`)) return;
+  try {
+    await post("/api/task/delete", { entry: task.entry });
+    lastDeletedTask = task.entry;
+    $("btnRestoreTask").hidden = false;
+    banner("ok", ["已从列表删除：" + task.name]);
+    await reloadTasks();
+  } catch (error) {
+    banner("err", ["删除失败：" + error.message]);
+  }
+}
+
+async function restoreTask() {
+  if (!lastDeletedTask) { banner("err", ["没有可恢复的任务"]); return; }
+  try {
+    await post("/api/task/restore", { entry: lastDeletedTask });
+    banner("ok", ["已恢复：" + lastDeletedTask]);
+    lastDeletedTask = "";
+    $("btnRestoreTask").hidden = true;
+    await reloadTasks();
+  } catch (error) {
+    banner("err", ["恢复失败：" + error.message]);
   }
 }
 
@@ -580,6 +633,9 @@ $("btnScan").addEventListener("click", refreshState);
 $("btnAgentStart").addEventListener("click", startAgent);
 $("btnAgentStop").addEventListener("click", stopAgent);
 $("btnRun").addEventListener("click", runTask);
+$("btnRenameTask").addEventListener("click", renameTask);
+$("btnDeleteTask").addEventListener("click", deleteTask);
+$("btnRestoreTask").addEventListener("click", restoreTask);
 $("btnLoopStart").addEventListener("click", startLoop);
 $("btnLoopStop").addEventListener("click", stopLoop);
 $("taskOptions").addEventListener("change", scheduleSelectionSave);

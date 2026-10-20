@@ -87,13 +87,18 @@ class Runtime:
             self.log(f"读取 interface.json 失败：{exc}")
             return {"task": [], "option": {}}
 
-    def tasks(self) -> list[dict]:
+    def tasks(self, labels: dict | None = None, hidden: list | None = None) -> list[dict]:
         options = self.interfaces.get("option", {})
+        labels = labels or {}
+        hidden = set(hidden or [])
         result = []
         for task in self.interfaces.get("task", []):
+            entry = task.get("entry", "")
+            if entry in hidden:
+                continue
             item = {
-                "name": task.get("name", ""),
-                "entry": task.get("entry", ""),
+                "name": labels.get(entry) or task.get("name", ""),
+                "entry": entry,
                 "description": task.get("description", ""),
                 "doc": task.get("doc", []),
                 "options": [],

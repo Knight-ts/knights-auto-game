@@ -92,6 +92,9 @@
         <div class="row">
           <div class="big" id="taskTitle">选择一个任务</div>
           <span style="flex:1"></span>
+          <button class="btn" id="btnRenameTask">重命名</button>
+          <button class="btn danger" id="btnDeleteTask">删除</button>
+          <button class="btn" id="btnRestoreTask" hidden>恢复删除</button>
           <button class="btn primary" id="btnRun">开始任务</button>
           <button class="btn danger" id="btnStop">停止</button>
         </div>
@@ -241,7 +244,8 @@
         <textarea id="mercNames" placeholder="每行一个名字关键字，例如：&#10;卡尔&#10;塞尔"></textarea>
       </div>
       <div class="hint" style="margin-top:6px">
-        任务里「开启自动接受佣兵」选“智能”后生效；名字 OCR 区域在 table/mercenary_rules.json 的 name_roi，可手动校准。
+        任务里「开启自动接受佣兵」选“智能”后生效；名字取自弹窗「希望加入佣兵团」与「年龄」之间那一行，
+        <code>table/mercenary_rules.json</code> 的 name_roi 只在两行锚点都没识别到时兜底。
       </div>
     </div>
     <div class="card">

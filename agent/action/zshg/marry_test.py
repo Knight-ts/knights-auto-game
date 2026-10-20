@@ -20,10 +20,20 @@ FILTER_BTN = (97, 634)       # 筛选按钮（排序面板打开时也在同一�
 DUKE_CHECKBOX = (292, 964)   # 筛选弹窗里的「公爵」
 CONFIRM_BTN = (508, 1035)    # 筛选弹窗「确定」
 SORT_LABEL = (600, 630)      # 排序入口（显示「年龄↑ / 力量 …」），点开排序面板
-AGE_DESC = (565, 500)        # 排序面板里的「年龄↑」
-FIRST_CELL = (105, 800)      # 第一个候选格：也用来关掉排序面板
+AGE_DESC = (565, 500)        # 排序面板里的「年龄↑」（从大到小）
+AGE_ASC = (300, 563)         # 排序面板里的「年龄↓」（从小到大）
+FIRST_CELL = (105, 800)      # 第一个候选格
 MARRY_BTN = (365, 1218)
 FAST_MARRY_BTN = (635, 1218)
+
+TITLE_BOXES = {
+    "公爵": (292, 964),
+    "伯爵": (592, 902),
+    "男爵": (292, 902),
+    "骑士": (592, 845),
+    "平民": (292, 845),
+}
+ALL_TITLES = (292, 265)      # 筛选弹窗「全部」
 
 
 def _click(context: Context, x: int, y: int, wait: float = 0.5) -> None:
@@ -50,30 +60,41 @@ def _text(context: Context, roi, expected=None) -> str:
     return ""
 
 
-def ensure_filter_and_sort(context: Context) -> None:
-    """在联姻界面执行：筛选公爵 → 确定 → 年龄↑（从大到小）→ 关掉排序面板。"""
-    logger.info("联姻界面：点击筛选")
+def ensure_filter_and_sort(
+    context: Context, title: str = "公爵", age_pref: str = "older"
+) -> None:
+    """在联姻界面执行：筛选爵位 → 确定 → 按年龄排序 → 关掉排序面板。"""
+    logger.info(f"联姻界面：点击筛选（爵位={title}，年龄={age_pref}）")
     _click(context, *FILTER_BTN, wait=0.8)
 
-    logger.info("联姻界面：勾选公爵")
-    _click(context, *DUKE_CHECKBOX, wait=0.3)
+    if title == "不限":
+        logger.info("联姻界面：勾选“全部”爵位")
+        _click(context, *ALL_TITLES, wait=0.3)
+    else:
+        box = TITLE_BOXES.get(title, TITLE_BOXES["公爵"])
+        logger.info(f"联姻界面：勾选{title}")
+        _click(context, *box, wait=0.3)
     logger.info("联姻界面：点击确定")
     _click(context, *CONFIRM_BTN, wait=1.0)
 
     count = _text(context, [230, 630, 260, 40])
     logger.info(f"筛选后数量：{count or '未识别'}")
-    if count.startswith("0/"):
-        logger.warning("筛选后没有对象，重新勾选公爵")
+    if count.startswith("0/") and title != "不限":
+        logger.warning(f"筛选后没有{title}对象，重新勾选")
         _click(context, *FILTER_BTN, wait=0.8)
-        _click(context, *DUKE_CHECKBOX, wait=0.3)
+        _click(context, *TITLE_BOXES.get(title, TITLE_BOXES["公爵"]), wait=0.3)
         _click(context, *CONFIRM_BTN, wait=1.0)
 
     logger.info("联姻界面：打开排序面板")
     _click(context, *SORT_LABEL, wait=0.8)
     sort_text = _text(context, [560, 630, 140, 40])
     logger.info(f"当前排序：{sort_text or '未识别'}")
-    logger.info("联姻界面：选择年龄↑（从大到小）")
-    _click(context, *AGE_DESC, wait=0.6)
+    if age_pref == "younger":
+        logger.info("联姻界面：选择年龄↓（从小到大）")
+        _click(context, *AGE_ASC, wait=0.6)
+    else:
+        logger.info("联姻界面：选择年龄↑（从大到小）")
+        _click(context, *AGE_DESC, wait=0.6)
 
     # 排序面板没有确定/取消，点面板外的排序图标关闭；
     # 不能点候选格，否则会选中角色并打开详情，正式流程会读不到对象数量。
