@@ -1,6 +1,6 @@
 # 上游与来源说明（UPSTREAM）
 
-本项目 **Knights Auto Game**（仓库名 `Knights-web-windows`）是一个非官方衍生项目，不是 MAAGC 的官方仓库，也不隶属于 MaaXYZ 或 KhazixW2。
+本项目 **Knights Auto Game**（仓库名 `knights-auto-game`）是一个非官方衍生项目，不是 MAAGC 的官方仓库，也不隶属于 MaaXYZ 或 KhazixW2。
 
 ## 来源
 
