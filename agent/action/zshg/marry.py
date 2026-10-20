@@ -388,6 +388,13 @@ class MarryProcessor(CustomAction):
             logger.error("联姻界面未进入,可能存在Bug")
             return False
 
+        try:
+            from action.zshg.marry_test import ensure_filter_and_sort
+
+            ensure_filter_and_sort(context)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"联姻筛选/排序失败：{exc}")
+
         if not self._check_objects_count(context, img):
             return False
 

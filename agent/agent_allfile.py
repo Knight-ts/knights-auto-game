@@ -5,5 +5,6 @@ import action.zshg.daily_task
 import action.zshg.child
 import action.zshg.child_alert_manager
 import action.zshg.marry
+import action.zshg.marry_test
 
 import action.zshg.auto_fight_processor

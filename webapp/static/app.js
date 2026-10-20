@@ -158,6 +158,7 @@ async function loadTasks() {
     const last = (state.prefs || {}).last_task;
     const index = state.tasks.findIndex((t) => t.entry === last);
     if (state.tasks.length) selectTask(index >= 0 ? index : 0);
+    renderLoopTasks();
   } catch (error) {
     banner("err", ["读取任务失败：" + error.message]);
   }
@@ -336,7 +337,6 @@ async function runTask() {
     state.prefs.selections = state.prefs.selections || {};
     state.prefs.selections[task.entry] = selection;
     banner("ok", ["已开始：" + task.name]);
-    switchTab("logs");
     await refreshState();
   } catch (error) {
     banner("err", ["启动失败：" + error.message]);
@@ -685,6 +685,8 @@ $("btnScan").addEventListener("click", refreshState);
 $("btnAgentStart").addEventListener("click", startAgent);
 $("btnAgentStop").addEventListener("click", stopAgent);
 $("btnRun").addEventListener("click", runTask);
+$("btnLoopStart").addEventListener("click", startLoop);
+$("btnLoopStop").addEventListener("click", stopLoop);
 $("taskOptions").addEventListener("change", scheduleSelectionSave);
 $("taskOptions").addEventListener("input", scheduleSelectionSave);
 $("btnStop").addEventListener("click", stopTask);
@@ -740,6 +742,108 @@ $("recordBody").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-recruit]");
   if (btn) markRecruited(btn.dataset.recruit);
 });
+
+/* ------------------------------------------------------------ 循环任务 */
+
+const loopState = { running: false, stop: false };
+
+function renderLoopTasks() {
+  const box = $("loopTaskList");
+  if (!box) return;
+  if (!state.tasks.length) {
+    box.innerHTML = '<div class="hint">还没有任务列表</div>';
+    return;
+  }
+  const checked = new Set(
+    [...box.querySelectorAll("input[type=checkbox]:checked")].map((i) => i.dataset.index)
+  );
+  box.innerHTML = state.tasks
+    .map(
+      (task, index) =>
+        `<label class="opt"><input type="checkbox" data-index="${index}" ${
+          checked.has(String(index)) ? "checked" : ""
+        }> ${esc(task.name)}</label>`
+    )
+    .join("");
+}
+
+async function waitLoopTaskDone() {
+  let started = false;
+  while (!loopState.stop) {
+    try {
+      const data = await api("/api/state");
+      const st = data.task || {};
+      if (!started && st.state === "running") started = true;
+      if (st.state === "done") return "done";
+      if (st.state === "failed") return "failed";
+      if (started && st.state === "idle") return "idle";
+    } catch (error) {
+      /* 网络抖动时继续等 */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  return "stopped";
+}
+
+async function startLoop() {
+  if (loopState.running) return;
+  await loadTasks();
+  renderLoopTasks();
+  const indexes = [...$("loopTaskList").querySelectorAll("input:checked")].map((i) =>
+    Number(i.dataset.index)
+  );
+  if (!indexes.length) {
+    banner("err", ["先勾选要循环的任务"]);
+    return;
+  }
+  const continueOnFail = $("loopContinue").checked;
+  loopState.running = true;
+  loopState.stop = false;
+  $("loopStatus").textContent = "循环运行中…";
+
+  while (!loopState.stop) {
+    for (const index of indexes) {
+      if (loopState.stop) break;
+      const task = state.tasks[index];
+      if (!task) continue;
+      const selection = (state.prefs.selections || {})[task.entry] || {};
+      $("loopStatus").textContent = `正在执行：${task.name}`;
+      try {
+        await post("/api/task/run", {
+          entry: task.entry,
+          name: task.name,
+          selection,
+        });
+      } catch (error) {
+        $("loopStatus").textContent = `${task.name} 启动失败：${error.message}`;
+        if (!continueOnFail) loopState.stop = true;
+        continue;
+      }
+      const result = await waitLoopTaskDone();
+      const label = result === "done" ? "成功" : result === "failed" ? "失败" : "已停止";
+      $("loopStatus").textContent = `${task.name} → ${label}`;
+      if (result === "failed" && !continueOnFail) {
+        loopState.stop = true;
+      }
+      if (result === "stopped") loopState.stop = true;
+    }
+    if (!loopState.stop) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+  loopState.running = false;
+  $("loopStatus").textContent = "循环已停止";
+}
+
+async function stopLoop() {
+  loopState.stop = true;
+  try {
+    await post("/api/task/stop", {});
+  } catch (error) {
+    /* ignore */
+  }
+  $("loopStatus").textContent = "正在停止循环…";
+}
 
 refreshState();
 setInterval(refreshState, 3000);

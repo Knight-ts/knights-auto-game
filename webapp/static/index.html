@@ -63,6 +63,16 @@
           网页版直接驱动 MaaFramework，无需 MFAAvalonia。配置在 interface.json，孩子记录在 table/child_records.xlsx。
         </div>
       </div>
+      <div class="card">
+        <h3>循环任务</h3>
+        <div id="loopTaskList" class="task-list" style="max-height:220px;overflow:auto"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn primary" id="btnLoopStart">开始循环</button>
+          <button class="btn danger" id="btnLoopStop">停止循环</button>
+          <label class="row" style="gap:6px"><input type="checkbox" id="loopContinue" checked> 失败后继续</label>
+        </div>
+        <div class="hint" id="loopStatus">勾选任务后点开始，会按勾选顺序循环执行</div>
+      </div>
     </div>
     <div class="card" style="margin-top:14px">
       <h3>最近日志</h3>
