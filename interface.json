@@ -6,7 +6,7 @@
     "license": "MIT",
     "welcome": "首次使用！欢迎使用 Knights Auto Game。",
     "github": "https://github.com/Knight-ts/Knights-web-windows",
-    "version": "v1.6.1",
+    "version": "v0.1.0",
     "controller": [
         {
             "name": "ADB",
@@ -1040,5 +1040,5 @@
             ]
         }
     },
-    "title": "Knights Auto Game v1.6.1 | 百年骑士团小助手"
+    "title": "Knights Auto Game v0.1.0 | 百年骑士团小助手"
 }

@@ -21,7 +21,7 @@
 ## 同步方式
 
 - 本仓库 **不自动跟随上游**。上游更新时，需要手动对比 `resource/base/pipeline`、`agent/`、`table/` 的差异后合并。
-- 上游对应的版本线索：`interface.json` 的 `version` 字段（导入时为 `1.6.1`）。
+- 版本号：`interface.json` 的 `version` 字段自 `v0.1.0` 起由本项目独立编号；导入时的上游版本为 MAAGC v1.6.1。
 
 ## 第三方素材说明
 
