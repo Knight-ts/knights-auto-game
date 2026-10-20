@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MaaGC 网页版</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/alerts.css">
 </head>
 <body>
 <header>
@@ -141,7 +142,7 @@
 
   <!-- 好娃提醒 -->
   <section id="tab-alerts" class="hidden">
-    <div class="card" style="margin-bottom:14px">
+    <div class="card" style="margin-bottom:12px">
       <div class="row">
         <span>孩子命名速度</span>
         <select id="childSpeed">
@@ -156,16 +157,39 @@
         只影响孩子命名时的特性滑动次数与点名/输入/确认的等待；不影响截图帧率（截图由模拟器 extras 决定，约 13ms/帧）。
       </div>
     </div>
-    <div class="card" style="margin-bottom:14px">
+
+    <div class="card alerts-bar">
       <div class="row">
-        <span class="hint">保存会写入条件表、检测节点和界面选项，保存后开始的任务生效。</span>
+        <input type="text" id="alert-search" placeholder="搜索组合名 / 特性 / 种族">
+        <span class="alerts-stats" id="alert-stats">—</span>
         <span style="flex:1"></span>
-        <button class="btn" id="btnAlertReload">重新读取</button>
-        <button class="btn" id="btnAlertAdd">＋ 新增类型</button>
-        <button class="btn primary" id="btnAlertSave">保存并同步</button>
+        <button class="btn" id="btn-alert-reload">重新读取</button>
+        <button class="btn" id="btn-alert-expand">展开全部</button>
+        <button class="btn" id="btn-alert-add">＋ 新增组合</button>
+        <button class="btn primary" id="btn-alert-save">保存并同步</button>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        每行一个组合，点「详情」展开填写；保存会写入条件表、检测节点和界面选项。
       </div>
     </div>
-    <div id="alertList"></div>
+
+    <div class="card alerts-features" id="feature-panel">
+      <div class="row">
+        <h3>完整特性表 · 按种族分类</h3>
+        <span class="badge" id="feature-count">—</span>
+        <span class="hint feature-target" id="feature-target">加入目标：未选择</span>
+        <button class="btn small hidden" id="btn-feature-goto">定位组合</button>
+        <span style="flex:1"></span>
+        <input type="text" id="feature-search" placeholder="筛选特性 / 效果">
+        <button class="btn small" id="btn-feature-toggle">收起</button>
+      </div>
+      <div class="feature-layout" id="feature-layout">
+        <div class="race-nav" id="race-nav"></div>
+        <div class="feature-scroll" id="feature-scroll"></div>
+      </div>
+    </div>
+
+    <div id="alert-list" class="alert-list"></div>
   </section>
 
   <!-- 孩子记录 -->
@@ -250,5 +274,9 @@
 <div id="banner" class="banner hidden"></div>
 <datalist id="catalog"></datalist>
 <script src="app.js"></script>
+<script>
+  window.ALERT_ENDPOINTS = { load: "/api/alerts", save: "/api/alerts/save", sync: "" };
+</script>
+<script src="/alerts.js"></script>
 </body>
 </html>

@@ -338,14 +338,6 @@ class MarryProcessor(CustomAction):
 
         # 2. 寻找可相亲对象
         available_boxes = self._find_available_candidates(context)
-        if not available_boxes and getattr(self, "_target_title", "不限") != "不限":
-            logger.warning(
-                f"没有找到{self._target_title}爵位对象，放宽到全部爵位"
-            )
-            available_boxes = self._find_available_candidates(
-                context,
-                ["公爵", "侯爵", "伯爵", "子爵", "男爵", "骑士"],
-            )
         if not available_boxes:
             logger.info("未发现可相亲对象")
             return []
@@ -480,43 +472,43 @@ class MarryProcessor(CustomAction):
             logger.info("未识别到回信数量信息")
             return False
 
-    def _title_expected(self) -> list:
-        """按优先爵位生成 OCR expected；不限时匹配所有爵位。"""
-        if getattr(self, "_target_title", "不限") == "不限":
-            return ["公爵", "侯爵", "伯爵", "子爵", "男爵", "骑士"]
-        return [self._target_title]
+    def _find_available_candidates(self, context: Context) -> list:
+        """扫描格子：列表卡片上没有爵位文字，用“年龄”判断是否是可相亲对象。
 
-    def _find_available_candidates(
-        self, context: Context, title_expected: list | None = None
-    ) -> list:
-        """扫描所有格子，找出可相亲的对象"""
-        expected = title_expected or self._title_expected()
+        筛选（公爵）已经由 ensure_filter_and_sort 完成，这里不再逐格 OCR 爵位，
+        否则会像之前那样把 20 个公爵全部判成 0 个。
+        """
         available_boxes = []
         img = context.tasker.controller.post_screencap().wait().get()
 
         for row_idx, row_boxes in enumerate(self.all_boxes):
             for col_idx, box in enumerate(row_boxes):
-                # 跳过正在相亲（约会中）的格子
+                # 跳过正在相亲（约会中）或已标记星星的格子
                 if context.run_recognition(
                     "CastleMarryingCheck",
                     img,
                     pipeline_override={"CastleMarryingCheck": {"roi": box}},
                 ).hit:
-                    logger.debug(f"({row_idx + 1}, {col_idx + 1}) 正在相亲")
+                    logger.debug(f"({row_idx + 1}, {col_idx + 1}) 正在相亲/已标记")
                     continue
 
-                # 检查是否有目标爵位（可相亲对象）
-                if context.run_recognition(
-                    "CastleMarryTitleCheck",
+                detail = context.run_recognition(
+                    "CastleMarry_AgeCheck",
                     img,
                     pipeline_override={
-                        "CastleMarryTitleCheck": {"roi": box, "expected": expected}
+                        "CastleMarry_AgeCheck": {"roi": box, "expected": ["[0-9]+"]}
                     },
-                ).hit:
+                )
+                if detail.hit:
+                    age_text = (
+                        detail.best_result.text if detail.best_result is not None else ""
+                    )
                     available_boxes.append((row_idx, col_idx, box))
-                    logger.info(f"发现可相亲对象：({row_idx + 1}, {col_idx + 1})")
+                    logger.info(
+                        f"发现可相亲对象：({row_idx + 1}, {col_idx + 1}) 年龄 {age_text}"
+                    )
 
-        logger.info(f"可相亲队列大小：{len(available_boxes)}（爵位：{expected}）")
+        logger.info(f"可相亲队列大小：{len(available_boxes)}")
         return available_boxes
 
     # ==================== 正式处理阶段 ====================

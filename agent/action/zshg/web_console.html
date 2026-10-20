@@ -50,8 +50,7 @@
           border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.45);font-size:13px;z-index:20}
   .banner.ok{border-color:#2f6b4f}.banner.err{border-color:#7a3434}
   .banner ul{margin:6px 0 0 18px;padding:0}
-  /* 好娃提醒 */
-  .alert-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+  /* 好娃提醒：布局与组合行样式在 /alerts.css（与网页版共用） */
   label.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
   input[type=text],input[type=number],select,textarea{background:#12161c;color:var(--text);
       border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:13px;font-family:inherit}
@@ -60,16 +59,12 @@
   .grow{flex:1 1 240px}
   .badge{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
   .badge.new{color:var(--warn);border-color:#5a4a1f}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
-  .chip{background:#2a3342;border:1px solid #3a4557;border-radius:99px;padding:3px 6px 3px 10px;
-        font-size:12px;display:flex;align-items:center;gap:6px}
-  .chip button{background:none;border:none;color:var(--muted);padding:0 2px;font-size:14px;cursor:pointer}
-  .chip button:hover{color:var(--err)}
   table.attrs td{padding:3px 6px 3px 0;border:none}
   table.attrs td:first-child{width:64px;color:var(--muted);font-size:12px}
   select.grade{width:74px} input.min{width:92px}
   .hint{font-size:12px;color:var(--muted)}
 </style>
+<link rel="stylesheet" href="/alerts.css">
 </head>
 <body>
 <header>
@@ -161,27 +156,48 @@
 
   <!-- ==================== 好娃提醒 ==================== -->
   <section id="tab-alerts" class="hidden">
-    <div class="card" style="margin-bottom:14px">
+    <div class="card alerts-bar">
       <div class="row">
-        <span class="hint">保存会写入条件表、检测节点和界面选项；“默认勾选”是类型自带的初始值。MaaGC 的实际勾选按实例保存，改完点「同步勾选到 MaaGC」并重启生效。</span>
+        <input type="text" id="alert-search" placeholder="搜索组合名 / 特性 / 种族">
+        <span class="alerts-stats" id="alert-stats">—</span>
         <span style="flex:1"></span>
-        <button class="btn" onclick="loadAlerts()">重新读取</button>
-        <button class="btn" onclick="addAlert()">＋ 新增类型</button>
-        <button class="btn" onclick="syncSelection()">同步勾选到 MaaGC</button>
-        <button class="btn primary" id="alert-save" onclick="saveAlerts()">保存并同步</button>
+        <button class="btn" id="btn-alert-reload">重新读取</button>
+        <button class="btn" id="btn-alert-expand">展开全部</button>
+        <button class="btn" id="btn-alert-add">＋ 新增组合</button>
+        <button class="btn" id="btn-alert-sync">同步勾选到 MaaGC</button>
+        <button class="btn primary" id="btn-alert-save">保存并同步</button>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        每行一个组合，点「详情」展开填写；保存会写入条件表、检测节点和界面选项。「默认勾选」是类型自带的初始值，
+        MaaGC 的实际勾选按实例保存，改完点「同步勾选到 MaaGC」并重启生效。
       </div>
     </div>
-    <div id="alert-list"></div>
+
+    <div class="card alerts-features" id="feature-panel">
+      <div class="row">
+        <h3>完整特性表 · 按种族分类</h3>
+        <span class="badge" id="feature-count">—</span>
+        <span class="hint feature-target" id="feature-target">加入目标：未选择</span>
+        <button class="btn small hidden" id="btn-feature-goto">定位组合</button>
+        <span style="flex:1"></span>
+        <input type="text" id="feature-search" placeholder="筛选特性 / 效果">
+        <button class="btn small" id="btn-feature-toggle">收起</button>
+      </div>
+      <div class="feature-layout" id="feature-layout">
+        <div class="race-nav" id="race-nav"></div>
+        <div class="feature-scroll" id="feature-scroll"></div>
+      </div>
+    </div>
+
+    <div id="alert-list" class="alert-list"></div>
   </section>
 </main>
 
 <div id="banner" class="banner hidden"></div>
 <datalist id="catalog"></datalist>
 
+<script src="/alerts.js"></script>
 <script>
-const ATTRS = ["力量", "体质", "技巧", "感知", "敏捷", "意志"];
-const GRADES = ["", "E", "D", "C", "B", "A", "S", "SS"];
-let consoleState = { conditions: [], catalog: [] };
 let activeTab = "home";
 let overviewTimer = null;
 let shotTimer = null;
@@ -226,7 +242,7 @@ function switchTab(name) {
       if ($("shot-auto").checked) refreshShot();
     }, 2000);
   }
-  if (name === "alerts" && !consoleState.conditions.length) loadAlerts();
+  if (name === "alerts" && window.AlertPanel) window.AlertPanel.load();
 }
 
 /* ---------------- 主页 / 总控台 ---------------- */
@@ -314,200 +330,10 @@ function refreshShot() {
   probe.src = "/api/screenshot?t=" + stamp;
 }
 
-/* ---------------- 好娃提醒 ---------------- */
-function emptyAlert(index) {
-  const seq = index + 1;
-  const grades = {}, mins = {};
-  ATTRS.forEach((a) => { grades[a] = ""; mins[a] = ""; });
-  return {
-    id: "type_" + seq, name: "新提醒类型", description: "",
-    caseName: "新提醒类型 " + seq, node: "检测_新提醒类型" + seq,
-    defaultChecked: false, features: [], grades, mins, orLines: [],
-  };
-}
-
-const gradeOptions = (selected) =>
-  GRADES.map((g) => `<option value="${g}" ${g === selected ? "selected" : ""}>${g || "—"}</option>`).join("");
-
-function alertCard(condition, index) {
-  const badges = [];
-  if (!condition.nodeExists) badges.push('<span class="badge new">保存时创建检测节点</span>');
-  if (!condition.caseExists) badges.push('<span class="badge new">保存时创建界面选项</span>');
-  const chips = condition.features.map((f, fi) =>
-    `<span class="chip">${esc(f)}<button title="移除" data-act="rm-feature" data-i="${index}" data-fi="${fi}">×</button></span>`).join("");
-  const attrs = ATTRS.map((attr) => `
-    <tr><td>${attr}</td>
-      <td><select class="grade" data-i="${index}" data-attr="${attr}" data-f="grade">${gradeOptions(condition.grades[attr] || "")}</select></td>
-      <td><input class="min" type="number" step="0.01" min="0" max="5" placeholder="不限"
-           value="${esc(condition.mins[attr])}" data-i="${index}" data-attr="${attr}" data-f="min"></td></tr>`).join("");
-
-  return `
-  <div class="alert-card">
-    <div class="row">
-      <label class="field grow">界面显示名（勾选项名字）
-        <input type="text" data-i="${index}" data-f="caseName" value="${esc(condition.caseName)}">
-      </label>
-      <label class="field">内部 ID
-        <input class="mono" type="text" data-i="${index}" data-f="id" value="${esc(condition.id)}">
-      </label>
-      <label class="field">条件名
-        <input type="text" data-i="${index}" data-f="name" value="${esc(condition.name)}">
-      </label>
-      <label class="row" style="margin-top:16px;gap:6px">
-        <input type="checkbox" data-i="${index}" data-f="defaultChecked" ${condition.defaultChecked ? "checked" : ""}> 默认勾选
-      </label>
-      <button class="btn danger" data-act="remove" data-i="${index}" style="margin-top:16px">删除</button>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <label class="field grow">说明
-        <input type="text" data-i="${index}" data-f="description" value="${esc(condition.description)}">
-      </label>
-      <label class="field">检测节点
-        <input class="mono" type="text" data-i="${index}" data-f="node" value="${esc(condition.node)}">
-      </label>
-      ${badges.join("")}
-    </div>
-    <div class="row" style="margin-top:10px;align-items:flex-start">
-      <div class="grow">
-        <div class="hint" style="margin-bottom:6px">必需特性（必须全部命中；留空表示不看特性）</div>
-        <div class="chips">${chips}</div>
-        <div class="row">
-          <input type="text" list="catalog" placeholder="输入特性名，如 上古灵性"
-                 data-i="${index}" data-role="feature-input" style="flex:1 1 200px">
-          <button class="btn" data-act="add-feature" data-i="${index}">添加特性</button>
-        </div>
-      </div>
-      <div style="flex:1 1 300px">
-        <div class="hint" style="margin-bottom:6px">属性门槛（等级是“≥”语义）</div>
-        <table class="attrs">${attrs}</table>
-      </div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <label class="field" style="width:100%">或条件（每行一条，任一满足即可；格式 <code>敏捷&gt;=0.3</code>，同一行用“且”）
-        <textarea data-i="${index}" data-f="orLines">${esc((condition.orLines || []).join("\n"))}</textarea>
-      </label>
-    </div>
-  </div>`;
-}
-
-function renderAlerts() {
-  $("alert-list").innerHTML = consoleState.conditions.length
-    ? consoleState.conditions.map(alertCard).join("")
-    : '<div class="empty">还没有提醒类型，点「＋ 新增类型」</div>';
-}
-
-async function loadAlerts() {
-  try {
-    consoleState = await api("/api/state");
-    $("catalog").innerHTML = (consoleState.catalog || []).map((n) => `<option value="${esc(n)}"></option>`).join("");
-    renderAlerts();
-  } catch (error) {
-    banner("err", ["读取提醒配置失败：" + error.message]);
-  }
-}
-
-function addAlert() {
-  consoleState.conditions.push(emptyAlert(consoleState.conditions.length));
-  renderAlerts();
-}
-
-function updateAlertField(event) {
-  const t = event.target;
-  const index = Number(t.dataset.i);
-  const field = t.dataset.f;
-  if (!Number.isInteger(index) || !field || !consoleState.conditions[index]) return;
-  const condition = consoleState.conditions[index];
-  if (field === "grade") condition.grades[t.dataset.attr] = t.value;
-  else if (field === "min") condition.mins[t.dataset.attr] = t.value;
-  else if (field === "orLines") condition.orLines = t.value.split("\n").map((s) => s.trim()).filter(Boolean);
-  else if (field === "defaultChecked") condition.defaultChecked = t.checked;
-  else if (field === "caseName") {
-    const oldName = condition.caseName;
-    condition.caseName = t.value;
-    if (condition.node === "检测_" + oldName) {
-      condition.node = "检测_" + t.value;
-      const input = document.querySelector(`input[data-f="node"][data-i="${index}"]`);
-      if (input) input.value = condition.node;
-    }
-  } else condition[field] = t.value;
-}
-
-function addFeature(index) {
-  const input = document.querySelector(`input[data-role="feature-input"][data-i="${index}"]`);
-  const value = (input.value || "").trim();
-  if (!value) return;
-  const condition = consoleState.conditions[index];
-  if (!condition.features.includes(value)) condition.features.push(value);
-  input.value = "";
-  renderAlerts();
-}
-
-async function saveAlerts() {
-  const button = $("alert-save");
-  button.disabled = true;
-  try {
-    const data = await api("/api/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conditions: consoleState.conditions }),
-    });
-    if (data.ok) {
-      consoleState.conditions = data.conditions || consoleState.conditions;
-      renderAlerts();
-      banner("ok", ["保存成功：", ...(data.messages || [])]);
-    } else {
-      banner("err", ["保存失败：", ...(data.errors || ["未知错误"])]);
-    }
-  } catch (error) {
-    banner("err", ["保存失败：" + error.message]);
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function syncSelection() {
-  const names = consoleState.conditions.filter((c) => c.defaultChecked).map((c) => c.caseName);
-  try {
-    const data = await api("/api/instance/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caseNames: names }),
-    });
-    banner(data.ok ? "ok" : "err", [data.message || "已同步实例勾选，重启 MaaGC 后生效"]);
-  } catch (error) {
-    banner("err", ["同步失败：" + error.message]);
-  }
-}
-
 /* ---------------- 事件绑定 ---------------- */
 $("tabs").addEventListener("click", (event) => {
   const target = event.target.closest("button[data-tab]");
   if (target) switchTab(target.dataset.tab);
-});
-
-$("alert-list").addEventListener("input", updateAlertField);
-$("alert-list").addEventListener("change", updateAlertField);
-$("alert-list").addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && event.target.dataset.role === "feature-input") {
-    event.preventDefault();
-    addFeature(Number(event.target.dataset.i));
-  }
-});
-$("alert-list").addEventListener("click", (event) => {
-  const target = event.target.closest("button[data-act]");
-  if (!target) return;
-  const index = Number(target.dataset.i);
-  if (target.dataset.act === "remove") {
-    if (confirm("确定删除这个提醒类型？保存后会同时移除流水线节点和界面选项。")) {
-      consoleState.conditions.splice(index, 1);
-      renderAlerts();
-    }
-  } else if (target.dataset.act === "rm-feature") {
-    consoleState.conditions[index].features.splice(Number(target.dataset.fi), 1);
-    renderAlerts();
-  } else if (target.dataset.act === "add-feature") {
-    addFeature(index);
-  }
 });
 
 switchTab("home");

@@ -8,7 +8,7 @@ const ATTRS = ["力量", "体质", "技巧", "感知", "敏捷", "意志"];
 const GRADES = ["", "E", "D", "C", "B", "A", "S", "SS"];
 
 const state = {
-  tasks: [], alerts: [], catalog: [], records: [],
+  tasks: [], records: [],
   devices: [], selectedTask: 0, activeTab: "home", prefs: {}, prefsLoaded: false,
 };
 const timers = {};
@@ -54,7 +54,7 @@ function switchTab(name) {
   if (name === "logs") { loadLogs(); timers.logs = setInterval(() => { if ($("logAuto").checked) loadLogs(); }, 1500); }
   if (name === "tasks") loadTasks();
   if (name === "alerts") {
-    if (!state.alerts.length) loadAlerts();
+    if (window.AlertPanel) window.AlertPanel.load();
     loadChildSpeed();
   }
   if (name === "records") loadRecords();
@@ -388,143 +388,6 @@ async function loadLogs() {
   }
 }
 
-/* ------------------------------------------------------------ 好娃提醒 */
-
-function emptyAlert(index) {
-  const n = index + 1;
-  const grades = {}, mins = {};
-  ATTRS.forEach((a) => { grades[a] = ""; mins[a] = ""; });
-  return {
-    id: "type_" + n, name: "新提醒类型", description: "",
-    caseName: "新提醒类型 " + n, node: "检测_新提醒类型" + n,
-    defaultChecked: false, features: [], grades, mins, orLines: [],
-  };
-}
-
-const gradeOptions = (selected) =>
-  GRADES.map((g) => `<option value="${g}" ${g === selected ? "selected" : ""}>${g || "—"}</option>`).join("");
-
-function alertCard(condition, index) {
-  const badges = [];
-  if (!condition.nodeExists) badges.push('<span class="badge new">保存时创建检测节点</span>');
-  if (!condition.caseExists) badges.push('<span class="badge new">保存时创建界面选项</span>');
-  const chips = condition.features.map((f, fi) =>
-    `<span class="chip2">${esc(f)}<button data-act="rm-feature" data-i="${index}" data-fi="${fi}">×</button></span>`).join("");
-  const attrs = ATTRS.map((attr) => `
-    <tr><td>${attr}</td>
-      <td><select class="grade" data-i="${index}" data-attr="${attr}" data-f="grade">${gradeOptions(condition.grades[attr] || "")}</select></td>
-      <td><input class="min" type="number" step="0.01" min="0" max="5" placeholder="不限"
-           value="${esc(condition.mins[attr])}" data-i="${index}" data-attr="${attr}" data-f="min"></td></tr>`).join("");
-
-  return `
-  <div class="alert-card">
-    <div class="row">
-      <label class="field grow">界面显示名
-        <input type="text" data-i="${index}" data-f="caseName" value="${esc(condition.caseName)}"></label>
-      <label class="field">内部 ID
-        <input class="mono" type="text" data-i="${index}" data-f="id" value="${esc(condition.id)}"></label>
-      <label class="field">条件名
-        <input type="text" data-i="${index}" data-f="name" value="${esc(condition.name)}"></label>
-      <label class="row" style="margin-top:16px;gap:6px">
-        <input type="checkbox" data-i="${index}" data-f="defaultChecked" ${condition.defaultChecked ? "checked" : ""}> 默认勾选</label>
-      <button class="btn danger" data-act="remove" data-i="${index}" style="margin-top:16px">删除</button>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <label class="field grow">说明
-        <input type="text" data-i="${index}" data-f="description" value="${esc(condition.description)}"></label>
-      <label class="field">检测节点
-        <input class="mono" type="text" data-i="${index}" data-f="node" value="${esc(condition.node)}"></label>
-      ${badges.join("")}
-    </div>
-    <div class="row" style="margin-top:10px;align-items:flex-start">
-      <div class="grow">
-        <div class="hint" style="margin-bottom:6px">必需特性（全部命中；留空表示不看特性）</div>
-        <div class="chips2">${chips}</div>
-        <div class="row">
-          <input type="text" list="catalog" placeholder="输入特性名，如 太阳之子"
-                 data-i="${index}" data-role="feature-input" style="flex:1 1 200px">
-          <button class="btn" data-act="add-feature" data-i="${index}">添加特性</button>
-        </div>
-      </div>
-      <div style="flex:1 1 300px">
-        <div class="hint" style="margin-bottom:6px">属性门槛（等级为 ≥）</div>
-        <table class="attrs">${attrs}</table>
-      </div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <label class="field" style="width:100%">或条件（每行一条，如 敏捷>=0.3；同一行用「且」）
-        <textarea data-i="${index}" data-f="orLines">${esc((condition.orLines || []).join("\n"))}</textarea></label>
-    </div>
-  </div>`;
-}
-
-function renderAlerts() {
-  $("alertList").innerHTML = state.alerts.length
-    ? state.alerts.map(alertCard).join("")
-    : '<div class="empty">还没有提醒类型</div>';
-}
-
-async function loadAlerts() {
-  try {
-    const data = await api("/api/alerts");
-    state.alerts = data.conditions || [];
-    state.catalog = data.catalog || [];
-    $("catalog").innerHTML = state.catalog.map((n) => `<option value="${esc(n)}"></option>`).join("");
-    renderAlerts();
-  } catch (error) {
-    banner("err", ["读取提醒配置失败：" + error.message]);
-  }
-}
-
-function updateAlert(event) {
-  const t = event.target;
-  const index = Number(t.dataset.i);
-  const field = t.dataset.f;
-  if (!Number.isInteger(index) || !field || !state.alerts[index]) return;
-  const c = state.alerts[index];
-  if (field === "grade") c.grades[t.dataset.attr] = t.value;
-  else if (field === "min") c.mins[t.dataset.attr] = t.value;
-  else if (field === "orLines") c.orLines = t.value.split("\n").map((s) => s.trim()).filter(Boolean);
-  else if (field === "defaultChecked") c.defaultChecked = t.checked;
-  else if (field === "caseName") {
-    const old = c.caseName;
-    c.caseName = t.value;
-    if (c.node === "检测_" + old) {
-      c.node = "检测_" + t.value;
-      const input = document.querySelector(`input[data-f="node"][data-i="${index}"]`);
-      if (input) input.value = c.node;
-    }
-  } else c[field] = t.value;
-}
-
-function addFeature(index) {
-  const input = document.querySelector(`input[data-role="feature-input"][data-i="${index}"]`);
-  const value = (input.value || "").trim();
-  if (!value) return;
-  const c = state.alerts[index];
-  if (!c.features.includes(value)) c.features.push(value);
-  input.value = "";
-  renderAlerts();
-}
-
-async function saveAlerts() {
-  try {
-    $("btnAlertSave").disabled = true;
-    const data = await post("/api/alerts/save", { conditions: state.alerts });
-    if (data.ok) {
-      state.alerts = data.conditions || state.alerts;
-      renderAlerts();
-      banner("ok", ["保存成功：", ...(data.messages || [])]);
-    } else {
-      banner("err", ["保存失败：", ...(data.errors || ["未知错误"])]);
-    }
-  } catch (error) {
-    banner("err", ["保存失败：" + error.message]);
-  } finally {
-    $("btnAlertSave").disabled = false;
-  }
-}
-
 /* ------------------------------------------------------------ 孩子记录 */
 
 async function loadRecords() {
@@ -701,10 +564,7 @@ $("btnLogClear").addEventListener("click", async () => {
     banner("err", [error.message]);
   }
 });
-$("btnAlertReload").addEventListener("click", loadAlerts);
 $("btnChildSpeedSave").addEventListener("click", saveChildSpeed);
-$("btnAlertSave").addEventListener("click", saveAlerts);
-$("btnAlertAdd").addEventListener("click", () => { state.alerts.push(emptyAlert(state.alerts.length)); renderAlerts(); });
 $("btnRecordReload").addEventListener("click", loadRecords);
 $("btnMercSave").addEventListener("click", saveMercRules);
 $("btnMercReload").addEventListener("click", loadMercRecords);
@@ -714,28 +574,6 @@ $("btnNotifyTest").addEventListener("click", testNotify);
 $("taskList").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-i]");
   if (btn) selectTask(Number(btn.dataset.i));
-});
-
-$("alertList").addEventListener("input", updateAlert);
-$("alertList").addEventListener("change", updateAlert);
-$("alertList").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && e.target.dataset.role === "feature-input") {
-    e.preventDefault();
-    addFeature(Number(e.target.dataset.i));
-  }
-});
-$("alertList").addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-act]");
-  if (!btn) return;
-  const i = Number(btn.dataset.i);
-  if (btn.dataset.act === "remove") {
-    if (confirm("确定删除这个提醒类型？")) { state.alerts.splice(i, 1); renderAlerts(); }
-  } else if (btn.dataset.act === "rm-feature") {
-    state.alerts[i].features.splice(Number(btn.dataset.fi), 1);
-    renderAlerts();
-  } else if (btn.dataset.act === "add-feature") {
-    addFeature(i);
-  }
 });
 
 $("recordBody").addEventListener("click", (e) => {

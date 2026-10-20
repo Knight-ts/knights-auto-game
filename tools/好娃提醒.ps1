@@ -1,4 +1,4 @@
-﻿# 好娃提醒 - 原生窗口版（WinForms，不依赖浏览器）
+# 好娃提醒 - 原生窗口版（WinForms，不依赖浏览器）
 # 数据通过本机控制台接口读写（默认 http://127.0.0.1:8790）
 
 param([string]$BaseUrl = "http://127.0.0.1:8790")
@@ -17,6 +17,9 @@ try {
 } catch { }
 
 $script:conditions = @()
+$script:groups = @()
+$script:featureView = @()
+$script:featurePicked = @{}
 $script:index = -1
 
 $attrs = @("力量", "体质", "技巧", "感知", "敏捷", "意志")
@@ -27,6 +30,7 @@ $grades = @("", "E", "D", "C", "B", "A", "S", "SS")
 function Get-State {
     $state = Invoke-RestMethod -Uri "$BaseUrl/api/state" -TimeoutSec 10
     $script:conditions = @($state.conditions)
+    $script:groups = @($state.featureGroups)
     return $state
 }
 
@@ -48,14 +52,28 @@ $form.MinimumSize = New-Object System.Drawing.Size(1000, 700)
 $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
 $form.Font = New-Object System.Drawing.Font("Microsoft YaHei", 9)
 
+$listHeader = New-Object System.Windows.Forms.Label
+$listHeader.Text = "组合（每行一个，选中后在右侧填写详情）"
+$listHeader.Location = New-Object System.Drawing.Point(12, 10)
+$listHeader.AutoSize = $true
+$listHeader.ForeColor = [System.Drawing.Color]::DimGray
+
+$detailHeader = New-Object System.Windows.Forms.Label
+$detailHeader.Text = "详情"
+$detailHeader.Location = New-Object System.Drawing.Point(270, 9)
+$detailHeader.AutoSize = $true
+$detailHeader.Font = New-Object System.Drawing.Font("Microsoft YaHei", 11, [System.Drawing.FontStyle]::Bold)
+
 $list = New-Object System.Windows.Forms.ListBox
-$list.Location = New-Object System.Drawing.Point(12, 12)
-$list.Size = New-Object System.Drawing.Size(246, 660)
+$list.Location = New-Object System.Drawing.Point(12, 34)
+$list.Size = New-Object System.Drawing.Size(246, 638)
 $list.Font = New-Object System.Drawing.Font("Microsoft YaHei", 10)
+$list.IntegralHeight = $false
 
 $panel = New-Object System.Windows.Forms.Panel
-$panel.Location = New-Object System.Drawing.Point(270, 12)
-$panel.Size = New-Object System.Drawing.Size(880, 660)
+$panel.Location = New-Object System.Drawing.Point(270, 34)
+$panel.Size = New-Object System.Drawing.Size(880, 638)
+$panel.AutoScroll = $true
 
 function New-Label([string]$text, [int]$x, [int]$y, [int]$w = 96) {
     $lbl = New-Object System.Windows.Forms.Label
@@ -134,6 +152,14 @@ $orBox.Multiline = $true
 $orBox.ScrollBars = "Vertical"
 $panel.Controls.Add($orBox)
 
+$panel.Controls.Add((New-Label "备注（只给自己看，保存在条件表里）" 0 478 360))
+$noteBox = New-Object System.Windows.Forms.TextBox
+$noteBox.Location = New-Object System.Drawing.Point(0, 502)
+$noteBox.Size = New-Object System.Drawing.Size(808, 86)
+$noteBox.Multiline = $true
+$noteBox.ScrollBars = "Vertical"
+$panel.Controls.Add($noteBox)
+
 $status = New-Object System.Windows.Forms.Label
 $status.Location = New-Object System.Drawing.Point(12, 686)
 $status.Size = New-Object System.Drawing.Size(1140, 22)
@@ -147,16 +173,19 @@ function New-Button([string]$text, [int]$x, [int]$w) {
     return $btn
 }
 
-$btnAdd = New-Button "新增类型" 12 100
-$btnDel = New-Button "删除类型" 120 100
-$btnReload = New-Button "重新读取" 228 100
-$btnSync = New-Button "同步到 MaaGC" 336 170
-$btnSave = New-Button "保存并同步" 516 130
+$btnAdd = New-Button "新增组合" 12 90
+$btnDel = New-Button "删除组合" 110 90
+$btnReload = New-Button "重新读取" 208 90
+$btnFeature = New-Button "特性表…" 306 90
+$btnFeature.ForeColor = [System.Drawing.Color]::FromArgb(79, 140, 255)
+$btnSync = New-Button "同步到 MaaGC" 404 150
+$btnSave = New-Button "保存并同步" 562 130
 $btnSave.BackColor = [System.Drawing.Color]::FromArgb(79, 140, 255)
 $btnSave.ForeColor = [System.Drawing.Color]::White
 $btnClose = New-Button "关闭" 1038 70
 
-$form.Controls.AddRange(@($list, $panel, $status, $btnAdd, $btnDel, $btnReload, $btnSync, $btnSave, $btnClose))
+$form.Controls.AddRange(@($listHeader, $detailHeader, $list, $panel, $status,
+        $btnAdd, $btnDel, $btnReload, $btnFeature, $btnSync, $btnSave, $btnClose))
 
 # ---------------------------------------------------------------- 数据绑定
 
@@ -171,11 +200,30 @@ function Show-Item([int]$i) {
     $defaultBox.Checked = [bool]$c.defaultChecked
     $featuresBox.Text = (@($c.features) -join "`r`n")
     $orBox.Text = (@($c.orLines) -join "`r`n")
+    $noteBox.Text = [string]$c.note
     foreach ($attr in $attrs) {
         $gradeBoxes[$attr].SelectedItem = [string]$c.grades.$attr
         $minBoxes[$attr].Text = [string]$c.mins.$attr
     }
-    $status.Text = "编辑：$($c.caseName)"
+    $status.Text = "编辑：$($c.caseName)　|　$(Format-Summary $c)"
+}
+
+function Format-Summary($c) {
+    $parts = @()
+    foreach ($attr in $attrs) {
+        if ($c.grades) {
+            $grade = [string]$c.grades.$attr
+            if ($grade) { $parts += ($attr + ">=" + $grade) }
+        }
+        if ($c.mins) {
+            $min = [string]$c.mins.$attr
+            if ($min) { $parts += ($attr + ">=" + $min) }
+        }
+    }
+    $orLines = @($c.orLines)
+    if ($orLines.Count -gt 0) { $parts += ("或 " + ($orLines -join " / ")) }
+    if ($parts.Count -eq 0) { $parts = @("不看属性") }
+    return ("特性 " + (@($c.features).Count) + " 项 · " + ($parts -join " · "))
 }
 
 function Store-Item {
@@ -187,6 +235,7 @@ function Store-Item {
     $c.name = $nameBox.Text.Trim()
     $c.node = $nodeBox.Text.Trim()
     $c.description = $descBox.Text.Trim()
+    $c.note = $noteBox.Text.Trim()
     $c.defaultChecked = $defaultBox.Checked
     $c.features = @($featuresBox.Text -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $c.orLines = @($orBox.Text -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -204,7 +253,7 @@ function Store-Item {
 function Refresh-List([int]$select = -1) {
     $list.Items.Clear()
     foreach ($c in $script:conditions) {
-        [void]$list.Items.Add([string]$c.caseName)
+        [void]$list.Items.Add("$($c.caseName)  ·  $(@($c.features).Count) 特性")
     }
     if ($select -ge 0 -and $select -lt $list.Items.Count) {
         $list.SelectedIndex = $select

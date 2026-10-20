@@ -71,15 +71,9 @@ textarea { width: 100%; min-height: 54px; resize: vertical; }
 .shot-wrap { background: #0b0e13; border: 1px solid var(--line); border-radius: 12px;
              padding: 10px; display: flex; justify-content: center; align-items: center; min-height: 320px; }
 .shot-wrap img { max-width: 100%; max-height: calc(100vh - 240px); border-radius: 6px; }
-/* 好娃提醒 */
-.alert-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-              padding: 14px 16px; margin-bottom: 12px; }
+/* 好娃提醒：布局与组合行样式在 /alerts.css（web_console 与网页版共用） */
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
 .badge.new { color: var(--warn); border-color: #5a4a1f; }
-.chips2 { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.chip2 { background: #2a3342; border: 1px solid #3a4557; border-radius: 99px; padding: 3px 6px 3px 10px;
-         font-size: 12px; display: flex; align-items: center; gap: 6px; }
-.chip2 button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; }
 table.attrs td { padding: 3px 6px 3px 0; border: none; }
 table.attrs td:first-child { width: 64px; color: var(--muted); font-size: 12px; }
 select.grade { width: 74px; } input.min { width: 92px; }

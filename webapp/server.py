@@ -27,6 +27,7 @@ from webapp.runtime import ROOT, Runtime
 os.chdir(ROOT)
 
 STATIC = Path(__file__).resolve().parent / "static"
+ALERTS_DIR = ROOT / "agent" / "action" / "zshg"
 CONFIG_PATH = ROOT / "config" / "webapp.json"
 
 
@@ -142,6 +143,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, (STATIC / "app.js").read_bytes(), "application/javascript; charset=utf-8")
             elif path == "/style.css":
                 self._send(200, (STATIC / "style.css").read_bytes(), "text/css; charset=utf-8")
+            elif path == "/alerts.js":
+                self._send(
+                    200,
+                    (ALERTS_DIR / "web_alerts.js").read_bytes(),
+                    "application/javascript; charset=utf-8",
+                )
+            elif path == "/alerts.css":
+                self._send(
+                    200,
+                    (ALERTS_DIR / "web_alerts.css").read_bytes(),
+                    "text/css; charset=utf-8",
+                )
             elif path == "/api/state":
                 state = runtime.status()
                 state["devices"] = runtime.list_devices()

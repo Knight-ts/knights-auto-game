@@ -1,0 +1,168 @@
+/* 好娃提醒面板：紧凑组合列表 + 详情展开 + 按种族分类的完整特性表。
+   同时被网页控制台（web_console.py）和独立网页版（webapp/server.py）加载，
+   依赖页面已有的 --panel / --line / --accent 等 CSS 变量。 */
+
+/* ---------------- 顶部工具条 ---------------- */
+.alerts-bar { margin-bottom: 12px; }
+.alerts-bar .row { align-items: center; }
+.alerts-bar .hint { max-width: 720px; }
+#alert-search { min-width: 220px; }
+#feature-search { min-width: 180px; }
+.alerts-stats { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+button.btn.small { padding: 4px 10px; font-size: 12px; border-radius: 7px; }
+button.btn.tiny { padding: 2px 8px; font-size: 11px; border-radius: 6px; }
+
+/* ---------------- 组合列表：每行约 2cm，点「详情」展开 ---------------- */
+.alert-list { display: flex; flex-direction: column; gap: 8px; }
+
+.combo {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.combo.open { border-color: #3d4c66; }
+
+.combo-head {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  align-items: center;
+  min-height: 66px;          /* ≈ 1.75cm，两行摘要，兼顾点击热区 */
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.combo-head:hover { background: var(--panel2); }
+.combo-caret { color: var(--muted); font-size: 11px; transition: transform .15s; }
+.combo.open .combo-caret { transform: rotate(90deg); }
+
+.combo-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.combo-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.combo-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.combo-feats { display: flex; flex-wrap: wrap; gap: 4px; }
+.combo-attr { font-size: 12px; color: var(--muted); }
+.combo-actions { display: flex; align-items: center; gap: 6px; }
+
+.feat-pill {
+  font-size: 11px; line-height: 1.7; padding: 1px 8px; border-radius: 99px;
+  background: #2a3342; border: 1px solid #3a4557; color: #c7d1e0; white-space: nowrap;
+}
+.feat-pill.unknown { border-color: #5a4a1f; color: var(--warn); }
+
+.badge.race { color: #9ec1ff; border-color: #33538a; background: rgba(79,140,255,.08); }
+.badge.race.commoner { color: #ffd27a; border-color: #6b5620; background: rgba(240,180,41,.08); }
+
+/* ---------------- 组合详情 ---------------- */
+.combo-body {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  background: rgba(0,0,0,.12);
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px 12px;
+  margin-bottom: 12px;
+}
+.form-grid .field.wide { grid-column: 1 / -1; }
+.form-grid textarea { min-height: 48px; }
+
+.combo-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 980px) {
+  .combo-split { grid-template-columns: 1fr; }
+}
+
+.feature-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  min-height: 34px; padding: 6px 8px; margin-bottom: 8px;
+  border: 1px dashed var(--line); border-radius: 9px;
+}
+.chip-feat {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #2a3342; border: 1px solid #3a4557; border-radius: 99px;
+  padding: 2px 4px 2px 10px; font-size: 12px;
+}
+.chip-feat.unknown { border-color: #5a4a1f; }
+.chip-feat button {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 4px;
+}
+.chip-feat button:hover { color: var(--err); }
+
+table.attrs { width: auto; }
+table.attrs td { padding: 3px 8px 3px 0; border: none; }
+table.attrs td:first-child { width: 56px; color: var(--muted); font-size: 12px; }
+select.grade { width: 74px; }
+input.min { width: 92px; }
+
+/* ---------------- 完整特性表（按种族） ---------------- */
+.alerts-features { margin-bottom: 14px; }
+.alerts-features h3 { margin: 0; }
+.feature-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+@media (max-width: 900px) {
+  .feature-layout { grid-template-columns: 1fr; }
+  .race-nav { max-height: 180px; }
+}
+
+.race-nav {
+  max-height: 440px; overflow: auto;
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px; background: #12161c;
+}
+.race-nav button {
+  display: flex; justify-content: space-between; gap: 8px; width: 100%;
+  background: none; border: 1px solid transparent; color: var(--text);
+  padding: 6px 9px; border-radius: 7px; cursor: pointer;
+  font-size: 13px; text-align: left; font-family: inherit;
+}
+.race-nav button:hover { background: var(--panel2); }
+.race-nav button.active { background: var(--panel2); border-color: var(--line); }
+.race-nav .count { color: var(--muted); font-size: 11px; }
+.race-nav .race-kind {
+  font-size: 11px; color: var(--muted); padding: 9px 9px 3px; letter-spacing: .06em;
+}
+
+.feature-scroll {
+  max-height: 440px; overflow: auto;
+  border: 1px solid var(--line); border-radius: 10px;
+}
+.race-block + .race-block { border-top: 1px solid var(--line); }
+.race-head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 9px 12px 7px; background: var(--panel2);
+  position: sticky; top: 0; z-index: 2;
+}
+.race-head .race-title { font-size: 13px; font-weight: 600; }
+
+table.features { font-size: 12.5px; }
+table.features th {
+  position: sticky; top: 40px; z-index: 1;
+  background: var(--panel); padding: 6px 8px;
+}
+table.features td { padding: 6px 8px; vertical-align: top; }
+table.features td.feat-name { white-space: nowrap; font-weight: 600; }
+table.features td.feat-level { white-space: nowrap; color: var(--muted); }
+table.features td.feat-life { white-space: nowrap; color: var(--muted); }
+table.features td.feat-effect { color: #c7d1e0; min-width: 180px; }
+table.features tr.picked td { background: rgba(79,140,255,.08); }
+table.features .feat-alias { font-weight: 400; color: var(--muted); font-size: 11px; }
+table.features td.feat-add { white-space: nowrap; text-align: right; }
+
+.feature-target strong { color: var(--text); font-weight: 600; }
+
+@media (max-width: 720px) {
+  .combo-head { grid-template-columns: 14px minmax(0, 1fr); }
+  .combo-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -30,6 +31,31 @@ FEATURE_TABLES = [
     Path("table") / "各国家特性表.json",
     Path("table") / "正负面特性表.json",
 ]
+
+_FEATURE_TABLE_LOADER = None
+
+
+def _feature_table(root: Path) -> dict:
+    """读取按种族分类的完整特性表（见 child_feature_table.py）。
+
+    本文件既会被当作包内模块导入（action.zshg.child_alert_store），
+    也会被 webapp/server.py 以单文件方式加载，所以这里做一次兜底导入。
+    """
+    global _FEATURE_TABLE_LOADER
+    if _FEATURE_TABLE_LOADER is None:
+        try:
+            from .child_feature_table import load_feature_table as loader
+        except ImportError:
+            spec = importlib.util.spec_from_file_location(
+                "child_feature_table", Path(__file__).with_name("child_feature_table.py")
+            )
+            if spec is None or spec.loader is None:
+                raise
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            loader = module.load_feature_table
+        _FEATURE_TABLE_LOADER = loader
+    return _FEATURE_TABLE_LOADER(root)
 
 
 def project_root() -> Path:
@@ -140,35 +166,11 @@ def build_potential(grades: dict, mins: dict, or_lines: list[str]) -> dict:
 
 
 def load_feature_catalog(root: Path) -> list[str]:
-    names: list[str] = []
-    seen = set()
-
-    def add(name: str) -> None:
-        name = (name or "").strip()
-        if name and name not in seen:
-            seen.add(name)
-            names.append(name)
-
-    for rel in FEATURE_TABLES:
-        path = root / rel
-        if not path.exists():
-            continue
-        try:
-            data = _read_json(path)
-        except Exception:
-            continue
-        if isinstance(data, dict) and isinstance(data.get("bloodlines"), list):
-            for bloodline in data["bloodlines"]:
-                for feature in bloodline.get("features", []) or []:
-                    add(feature.get("name", ""))
-        if isinstance(data, dict):
-            for key in ("正面特性", "中性特性", "负面特性", "表白怀孕特性", "平民血特性"):
-                for feature in data.get(key, []) or []:
-                    if isinstance(feature, dict):
-                        add(feature.get("特性名称", ""))
-
-    names.sort(key=len)
-    return names
+    """全部特性名（去重，短名在前，输入时优先匹配短名）。"""
+    try:
+        return list(_feature_table(root).get("names") or [])
+    except Exception:  # noqa: BLE001
+        return []
 
 
 # ---------------------------------------------------------------- 读取状态
@@ -203,6 +205,7 @@ def load_state(root: Path | None = None) -> dict:
                 "id": condition.get("id", ""),
                 "name": condition.get("name", ""),
                 "description": condition.get("description", ""),
+                "note": condition.get("note", ""),
                 "node": node,
                 "caseName": case_name,
                 "defaultChecked": case_name in default_case,
@@ -215,10 +218,14 @@ def load_state(root: Path | None = None) -> dict:
             }
         )
 
+    feature_table = _feature_table(root)
     return {
         "root": str(root),
         "conditions": conditions,
-        "catalog": load_feature_catalog(root),
+        "catalog": list(feature_table.get("names") or []),
+        "featureGroups": feature_table.get("groups") or [],
+        "featureRaces": feature_table.get("featureRaces") or {},
+        "featureCounts": feature_table.get("counts") or {},
         "optionName": OPTION_NAME,
     }
 
@@ -243,6 +250,7 @@ def normalize(condition: dict) -> dict:
         "id": (condition.get("id") or "").strip(),
         "name": (condition.get("name") or "").strip(),
         "description": (condition.get("description") or "").strip(),
+        "note": (condition.get("note") or "").strip(),
         "node": (condition.get("node") or "").strip(),
         "caseName": (condition.get("caseName") or "").strip(),
         "defaultChecked": bool(condition.get("defaultChecked")),
@@ -357,6 +365,8 @@ def save_state(root: Path | None, raw_conditions: list[dict]) -> dict:
             "case_name": condition["caseName"],
             "default_checked": condition["defaultChecked"],
         }
+        if condition["note"]:
+            entry["note"] = condition["note"]
         if condition["features"]:
             entry["features"] = condition["features"]
         if condition["potential"]:

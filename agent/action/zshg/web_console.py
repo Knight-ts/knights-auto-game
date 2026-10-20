@@ -28,6 +28,11 @@ from .child_alert_store import load_state, project_root, save_state, sync_instan
 
 ROOT = project_root()
 HTML_PATH = Path(__file__).with_name("web_console.html")
+ASSET_DIR = Path(__file__).parent
+ASSETS = {
+    "/alerts.js": ("web_alerts.js", "application/javascript; charset=utf-8"),
+    "/alerts.css": ("web_alerts.css", "text/css; charset=utf-8"),
+}
 HOST = "127.0.0.1"
 PORT_RANGE = range(8790, 8801)
 URL_FILE = Path("temp") / "web_console_url.txt"
@@ -244,6 +249,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path in ("/", "/index.html"):
                 self._send(200, HTML_PATH.read_bytes(), "text/html; charset=utf-8")
+            elif path in ASSETS:
+                name, content_type = ASSETS[path]
+                self._send(200, (ASSET_DIR / name).read_bytes(), content_type)
             elif path == "/api/ping":
                 self._json(200, {"ok": True, "app": "maagc-console"})
             elif path == "/api/overview":
