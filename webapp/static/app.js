@@ -9,9 +9,10 @@ const GRADES = ["", "E", "D", "C", "B", "A", "S", "SS"];
 
 const state = {
   tasks: [], alerts: [], catalog: [], records: [],
-  devices: [], selectedTask: 0, activeTab: "home", prefs: {},
+  devices: [], selectedTask: 0, activeTab: "home", prefs: {}, prefsLoaded: false,
 };
 const timers = {};
+let selectionTimer = null;
 
 /* ------------------------------------------------------------ 基础 */
 
@@ -68,6 +69,7 @@ async function refreshState() {
     const data = await api("/api/state");
     state.devices = data.devices || [];
     state.prefs = data.config || {};
+    state.prefsLoaded = true;
     renderDevices(data);
     renderHistory(data.history || []);
 
@@ -150,6 +152,7 @@ async function stopAgent() {
 async function loadTasks() {
   if (state.tasks.length) return;
   try {
+    if (!state.prefsLoaded) await refreshState();
     state.tasks = await api("/api/tasks");
     renderTaskList();
     const last = (state.prefs || {}).last_task;
@@ -182,6 +185,7 @@ function renderTaskList() {
 }
 
 function selectTask(index) {
+  clearTimeout(selectionTimer);
   state.selectedTask = index;
   const task = state.tasks[index];
   if (!task) return;
@@ -300,6 +304,25 @@ function collectSelection() {
     }
   });
   return selection;
+}
+
+function scheduleSelectionSave() {
+  clearTimeout(selectionTimer);
+  selectionTimer = setTimeout(saveSelectionNow, 600);
+}
+
+async function saveSelectionNow() {
+  const task = state.tasks[state.selectedTask];
+  if (!task) return;
+  const selection = collectSelection();
+  try {
+    await post("/api/task/selection/save", { entry: task.entry, selection });
+    state.prefs.last_task = task.entry;
+    state.prefs.selections = state.prefs.selections || {};
+    state.prefs.selections[task.entry] = selection;
+  } catch (error) {
+    /* 自动保存失败不打扰用户，点“开始任务”时还会再存一次 */
+  }
 }
 
 async function runTask() {
@@ -612,7 +635,8 @@ async function loadMercRules() {
     $("mercMode").value = rules.mode || "whitelist";
     $("mercNames").value = (rules.names || []).join("\n");
     $("mercHint").textContent =
-      `当前：${rules.mode === "blacklist" ? "黑名单" : "白名单"}，${(rules.names || []).length} 个关键字`;
+      `当前：${rules.mode === "blacklist" ? "黑名单" : "白名单"}，${(rules.names || []).length} 个关键字` +
+      ((rules.names || []).length ? "" : "（名单为空，智能模式会全部拒绝）");
   } catch (error) {
     $("mercHint").textContent = "读取失败：" + error.message;
   }
@@ -661,6 +685,8 @@ $("btnScan").addEventListener("click", refreshState);
 $("btnAgentStart").addEventListener("click", startAgent);
 $("btnAgentStop").addEventListener("click", stopAgent);
 $("btnRun").addEventListener("click", runTask);
+$("taskOptions").addEventListener("change", scheduleSelectionSave);
+$("taskOptions").addEventListener("input", scheduleSelectionSave);
 $("btnStop").addEventListener("click", stopTask);
 $("btnShot").addEventListener("click", refreshShot);
 $("btnLogRefresh").addEventListener("click", loadLogs);

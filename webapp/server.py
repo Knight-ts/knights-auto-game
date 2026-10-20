@@ -218,14 +218,27 @@ class Handler(BaseHTTPRequestHandler):
                 entry = payload.get("entry") or ""
                 name = payload.get("name") or entry
                 selection = payload.get("selection") or {}
-                state = runtime.run_task(entry, name, selection)
+                # 先保存选择：即使任务启动失败，下次打开页面仍然用这套参数
                 config = load_config()
                 config["last_task"] = entry
                 selections = config.get("selections") or {}
                 selections[entry] = selection
                 config["selections"] = selections
                 save_config(config)
-                self._json(200, state)
+                self._json(200, runtime.run_task(entry, name, selection))
+            elif path == "/api/task/selection/save":
+                entry = payload.get("entry") or ""
+                selection = payload.get("selection") or {}
+                if not entry:
+                    self._json(400, {"ok": False, "error": "缺少 entry"})
+                else:
+                    config = load_config()
+                    config["last_task"] = entry
+                    selections = config.get("selections") or {}
+                    selections[entry] = selection
+                    config["selections"] = selections
+                    save_config(config)
+                    self._json(200, {"ok": True})
             elif path == "/api/task/stop":
                 self._json(200, runtime.stop_task())
             elif path == "/api/logs/clear":

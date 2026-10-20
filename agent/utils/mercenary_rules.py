@@ -10,6 +10,7 @@ table/mercenary_rules.json：
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +25,17 @@ DEFAULT = {
 }
 
 
+def _normalize_names(value) -> list[str]:
+    """把字符串或列表统一成关键字列表，避免 "卡尔" 被拆成单字。"""
+    if isinstance(value, str):
+        parts = re.split(r"[,，;；\n\r]+", value)
+    elif isinstance(value, (list, tuple)):
+        parts = value
+    else:
+        return []
+    return [str(part).strip() for part in parts if str(part).strip()]
+
+
 def load() -> dict:
     config = dict(DEFAULT)
     try:
@@ -35,7 +47,7 @@ def load() -> dict:
             config[key] = data[key]
     if config.get("mode") not in ("whitelist", "blacklist"):
         config["mode"] = "whitelist"
-    config["names"] = [str(n).strip() for n in (config.get("names") or []) if str(n).strip()]
+    config["names"] = _normalize_names(config.get("names"))
     config["stopwords"] = [str(n) for n in (config.get("stopwords") or [])]
     return config
 
@@ -43,6 +55,7 @@ def load() -> dict:
 def save(config: dict) -> dict:
     merged = dict(DEFAULT)
     merged.update({k: v for k, v in config.items() if k in DEFAULT})
+    merged["names"] = _normalize_names(merged.get("names"))
     PATH.parent.mkdir(parents=True, exist_ok=True)
     PATH.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return merged
