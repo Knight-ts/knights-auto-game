@@ -167,7 +167,19 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length) or b"{}")
 
     def _host_ok(self) -> bool:
-        return (self.headers.get("Host") or "").startswith("127.0.0.1")
+        """只接受本机 Host，避免 127.0.0.1.evil.com 这类 DNS rebinding 绕过。"""
+        host = (self.headers.get("Host") or "").strip().lower()
+        if host.startswith("[") and "]" in host:  # [::1]:8790
+            return host[1 : host.index("]")] == "::1"
+        name = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+        return name in ("127.0.0.1", "localhost")
+
+    def _origin_ok(self) -> bool:
+        """跨站请求会带 Origin；只放行本机来源。非浏览器客户端不带 Origin，照常放行。"""
+        origin = (self.headers.get("Origin") or "").strip().lower()
+        if not origin:
+            return True
+        return urlparse(origin).hostname in ("127.0.0.1", "localhost")
 
     # ------------------------------------------------------------ GET
 
@@ -285,7 +297,7 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------ POST
 
     def do_POST(self) -> None:  # noqa: N802
-        if not self._host_ok():
+        if not self._host_ok() or not self._origin_ok():
             self._json(403, {"error": "只允许本机访问"})
             return
 
