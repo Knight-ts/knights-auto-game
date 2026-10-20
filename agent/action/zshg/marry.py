@@ -640,39 +640,21 @@ class MarryProcessor(CustomAction):
         return False
 
     def _check_and_filter_by_age(self, context: Context) -> bool:
-        """读年龄并按「年龄较大 / 年龄较小 / 不限」过滤。"""
+        """记录年龄，不做过滤：不限年龄，列表按年龄从大到小，越大越优先。"""
         RecoEmail = context.run_recognition(
             "CastleMarry_AgeCheck",
             context.tasker.controller.post_screencap().wait().get(),
         )
         if not RecoEmail.hit:
-            logger.info("未识别到年龄信息，跳过该候选人")
-            context.run_task("BackButton_500ms")
-            return False
+            logger.info("未识别到年龄信息，继续（不限年龄）")
+            return True
 
         age_text = RecoEmail.best_result.text
         match = re.search(r"\d+", age_text)
-        if not match:
-            logger.info(f"年龄文本无法解析：{age_text}，跳过")
-            context.run_task("BackButton_500ms")
-            return False
-
-        age = int(match.group())
-        pref = getattr(self, "_age_pref", "any")
-        if age >= 45:
-            logger.info(f"年龄 {age} 大于等于45岁，跳过")
-            context.run_task("BackButton_500ms")
-            return False
-        if pref == "older" and age < 30:
-            logger.info(f"年龄 {age} 小于30岁，不符合“年龄较大”")
-            context.run_task("BackButton_500ms")
-            return False
-        if pref == "younger" and age >= 30:
-            logger.info(f"年龄 {age} 大于等于30岁，不符合“年龄较小”")
-            context.run_task("BackButton_500ms")
-            return False
-
-        logger.info(f"年龄 {age}，符合偏好 {pref}")
+        if match:
+            logger.info(f"年龄 {int(match.group())}（不限年龄，越大越优先）")
+        else:
+            logger.info(f"年龄文本无法解析：{age_text}（不限年龄）")
         return True
 
     def _evaluate_bloodline_and_get_target(self, context: Context) -> tuple:
