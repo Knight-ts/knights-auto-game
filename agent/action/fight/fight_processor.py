@@ -333,18 +333,31 @@ def detect_and_manage_event(context: Context, screenshot) -> str:
         logger.info("检测到佣兵生娃事件")
         AutoNameChild = context.get_node_data("Flag_AutoNameChild").get("enabled")
         if AutoNameChild:
+            from utils.baby_ocr import current_index
+
             logger.info("佣兵生娃自动起名已开启，执行起名与好苗子检测")
-            auto_result = context.run_task("Auto_PannelCheck")
-            remaining_img = context.tasker.controller.post_screencap().wait().get()
-            event_remaining = context.run_recognition(
-                "Event_MercenaryBaby", remaining_img
-            ).hit
-            if not fight_utils._task_succeeded(auto_result) or event_remaining:
-                logger.warning(
-                    "自动起名未完成或出生页仍存在，回退到默认确认流程"
-                )
+            done = False
+            for _ in range(3):
+                before = current_index(context)
+                auto_result = context.run_task("Auto_PannelCheck")
+                remaining_img = context.tasker.controller.post_screencap().wait().get()
+                event_remaining = context.run_recognition(
+                    "Event_MercenaryBaby", remaining_img
+                ).hit
+                if not event_remaining:
+                    done = True
+                    break
+                after = current_index(context, remaining_img)
+                if before and after and after != before:
+                    logger.info(
+                        f"检测到新的孩子出生页（{before} → {after}），继续自动起名"
+                    )
+                    continue
+                logger.warning("自动起名未完成或出生页仍存在，回退到默认确认流程")
                 fallback_img = remaining_img
-                if not context.run_recognition("Event_MercenaryBaby", fallback_img).hit:
+                if not context.run_recognition(
+                    "Event_MercenaryBaby", fallback_img
+                ).hit:
                     # ChildRec 失败后若详情页不再保留出生文案，有界返回一层。
                     context.run_task("BackButton_500ms")
                     fallback_img = context.tasker.controller.post_screencap().wait().get()
@@ -352,6 +365,11 @@ def detect_and_manage_event(context: Context, screenshot) -> str:
                     fallback_result = context.run_task("Event_MercenaryBaby")
                     if not fight_utils._task_succeeded(fallback_result):
                         logger.error("佣兵生娃默认确认流程执行失败")
+                done = True
+                break
+            if not done:
+                logger.warning("连续多个孩子未能全部自动起名，回退到默认确认")
+                context.run_task("Event_MercenaryBaby")
         else:
             logger.info("佣兵生娃自动起名已关闭，保留游戏默认名字")
             context.run_task("Event_MercenaryBaby")

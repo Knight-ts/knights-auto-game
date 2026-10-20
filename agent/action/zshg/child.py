@@ -645,6 +645,7 @@ class ChildRec(CustomAction):
 
         # 提取数字（使用正则表达式）
         ocr_text = child_index.best_result.text.strip()
+        start_index_text = ocr_text
         match = re.search(r"第(\d+)个孩子", ocr_text)
         if not match:
             logger.error(f"无法从识别结果中提取数字：{ocr_text}")
@@ -719,13 +720,22 @@ class ChildRec(CustomAction):
         )
         logger.info(f"输入并确认名字耗时 {time.time() - step_started:.1f}s")
 
-        # 8.识别是否无效
-        if context.run_recognition("CheckNameInvalid",context.tasker.controller.post_screencap().wait().get()):
-            context.run_task("CheckNameInvalid")
-
+        # 8. 出生页还在时，先区分“下一个孩子”与“改名失败”
         img = context.tasker.controller.post_screencap().wait().get()
         if context.run_recognition("Event_MercenaryBaby", img).hit:
+            from utils.baby_ocr import current_index
+
+            after_text = current_index(context, img)
+            if start_index_text and after_text and after_text != start_index_text:
+                logger.info(
+                    f"改名后出现新的孩子出生页（{start_index_text} → {after_text}），立即继续"
+                )
+                logger.info(f"孩子命名流程耗时 {time.time() - started:.1f}s")
+                return CustomAction.RunResult(success=True)
+
             logger.warning("改名后出生页仍在，可能输入未生效")
+            if context.run_recognition("CheckNameInvalid", img).hit:
+                context.run_task("CheckNameInvalid")
 
         logger.info(f"孩子命名流程耗时 {time.time() - started:.1f}s")
         return CustomAction.RunResult(success=True)
