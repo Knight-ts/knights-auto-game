@@ -20,6 +20,7 @@ config/instances/
 table/child_records.*
 table/mercenary_records.*
 table/game_state.json
+table/task_combos.json
 *.bak
 
 # 打包产物

@@ -78,3 +78,21 @@ table.attrs td { padding: 3px 6px 3px 0; border: none; }
 table.attrs td:first-child { width: 64px; color: var(--muted); font-size: 12px; }
 select.grade { width: 74px; } input.min { width: 92px; }
 .hint { font-size: 12px; color: var(--muted); }
+
+/* 推年计划（任务组合） */
+.task-layout > .card { min-width: 0; }
+.combo-steps { display: flex; flex-direction: column; gap: 6px; }
+.combo-step {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel2);
+  min-width: 0; flex-wrap: wrap;
+}
+.combo-step .step-index { color: var(--muted); font-size: 12px; width: 18px; }
+.combo-step .step-name { font-weight: 600; white-space: nowrap; }
+.combo-step .step-hint {
+  flex: 1 1 160px; min-width: 0; color: var(--muted); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.combo-step .step-actions { display: flex; gap: 4px; margin-left: auto; }
+#comboModule { flex: 1 1 220px; min-width: 0; }
+#comboName { min-width: 0; }

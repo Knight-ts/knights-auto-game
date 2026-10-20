@@ -19,6 +19,7 @@
   <nav id="tabs">
     <button data-tab="home" class="active">主页</button>
     <button data-tab="tasks">任务</button>
+    <button data-tab="combos">推年计划</button>
     <button data-tab="shot">截图</button>
     <button data-tab="logs">日志</button>
     <button data-tab="alerts">好娃提醒</button>
@@ -63,16 +64,6 @@
         <div class="hint" style="margin-top:10px">
           网页版直接驱动 MaaFramework，无需 MFAAvalonia。配置在 interface.json，孩子记录在 table/child_records.xlsx。
         </div>
-      </div>
-      <div class="card">
-        <h3>循环任务</h3>
-        <div id="loopTaskList" class="task-list" style="max-height:220px;overflow:auto"></div>
-        <div class="row" style="margin-top:8px">
-          <button class="btn primary" id="btnLoopStart">开始循环</button>
-          <button class="btn danger" id="btnLoopStop">停止循环</button>
-          <label class="row" style="gap:6px"><input type="checkbox" id="loopContinue" checked> 失败后继续</label>
-        </div>
-        <div class="hint" id="loopStatus">勾选任务后点开始，会按勾选顺序循环执行</div>
       </div>
     </div>
     <div class="card" style="margin-top:14px">
@@ -126,6 +117,45 @@
         <thead><tr><th>时间</th><th>任务</th><th>状态</th><th>耗时</th><th>错误</th></tr></thead>
         <tbody id="historyBody"></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- 推年计划（任务组合） -->
+  <section id="tab-combos" class="hidden">
+    <div class="task-layout">
+      <div class="card">
+        <h3>组合列表</h3>
+        <div class="task-list" id="comboList"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn primary" id="btnComboNew">＋ 新建组合</button>
+          <button class="btn danger" id="btnComboDelete">删除</button>
+        </div>
+        <div class="hint" style="margin-top:8px">组合保存在 table/task_combos.json，可命名成 紫砂盾循环 / 成长试炼循环 / 瓦国任务循环 等。</div>
+      </div>
+      <div class="card">
+        <div class="row">
+          <label class="field grow">组合名
+            <input type="text" id="comboName" placeholder="例如 紫砂盾循环">
+          </label>
+          <label class="field">循环次数
+            <input type="number" id="comboLoops" min="0" step="1" value="1">
+          </label>
+        </div>
+        <div class="hint" style="margin-top:6px">
+          0 = 一直循环到手动停止，1 = 只跑一遍；步骤按顺序执行，每个步骤的选项沿用「任务」页里给该任务保存的选择。
+        </div>
+        <div id="comboSteps" class="combo-steps" style="margin-top:12px"></div>
+        <div class="row" style="margin-top:12px">
+          <select id="comboModule" class="grow"></select>
+          <button class="btn" id="btnComboAddStep">＋ 添加步骤</button>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="btnComboSave">保存组合</button>
+          <button class="btn primary" id="btnComboRun">运行组合</button>
+          <button class="btn danger" id="btnComboStop">停止</button>
+          <span class="hint" id="comboStatus"></span>
+        </div>
+      </div>
     </div>
   </section>
 

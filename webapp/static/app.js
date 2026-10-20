@@ -10,6 +10,7 @@ const GRADES = ["", "E", "D", "C", "B", "A", "S", "SS"];
 const state = {
   tasks: [], records: [],
   devices: [], selectedTask: 0, activeTab: "home", prefs: {}, prefsLoaded: false,
+  combos: [], comboModules: [], comboSelections: {}, comboIndex: -1, comboRunning: null,
 };
 const timers = {};
 let selectionTimer = null;
@@ -45,14 +46,19 @@ function banner(kind, lines) {
 function switchTab(name) {
   state.activeTab = name;
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  ["home", "tasks", "shot", "logs", "alerts", "records", "mercs", "notify"].forEach((tab) => {
+  ["home", "tasks", "combos", "shot", "logs", "alerts", "records", "mercs", "notify"].forEach((tab) => {
     $("tab-" + tab).classList.toggle("hidden", tab !== name);
   });
   clearInterval(timers.shot);
   clearInterval(timers.logs);
+  clearInterval(timers.combos);
   if (name === "shot") { refreshShot(); timers.shot = setInterval(() => { if ($("shotAuto").checked) refreshShot(); }, 2000); }
   if (name === "logs") { loadLogs(); timers.logs = setInterval(() => { if ($("logAuto").checked) loadLogs(); }, 1500); }
   if (name === "tasks") { loadTasks(); loadTaskpack(); }
+  if (name === "combos") {
+    loadCombos();
+    timers.combos = setInterval(pollComboStatus, 2000);
+  }
   if (name === "alerts") {
     if (window.AlertPanel) window.AlertPanel.load();
     loadChildSpeed();
@@ -162,7 +168,6 @@ async function fetchTasks() {
     const last = (state.prefs || {}).last_task;
     const index = state.tasks.findIndex((t) => t.entry === last);
     if (state.tasks.length) selectTask(index >= 0 ? index : 0);
-    renderLoopTasks();
   } catch (error) {
     banner("err", ["读取任务失败：" + error.message]);
   }
@@ -636,8 +641,6 @@ $("btnRun").addEventListener("click", runTask);
 $("btnRenameTask").addEventListener("click", renameTask);
 $("btnDeleteTask").addEventListener("click", deleteTask);
 $("btnRestoreTask").addEventListener("click", restoreTask);
-$("btnLoopStart").addEventListener("click", startLoop);
-$("btnLoopStop").addEventListener("click", stopLoop);
 $("taskOptions").addEventListener("change", scheduleSelectionSave);
 $("taskOptions").addEventListener("input", scheduleSelectionSave);
 $("btnStop").addEventListener("click", stopTask);
@@ -689,111 +692,271 @@ $("recordBody").addEventListener("click", (e) => {
   if (btn) markRecruited(btn.dataset.recruit);
 });
 
-/* ------------------------------------------------------------ 循环任务 */
-
-const loopState = { running: false, stop: false };
-
-function renderLoopTasks() {
-  const box = $("loopTaskList");
-  if (!box) return;
-  if (!state.tasks.length) {
-    box.innerHTML = '<div class="hint">还没有任务列表</div>';
-    return;
+$("comboList").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-i]");
+  if (!btn) return;
+  state.comboIndex = Number(btn.dataset.i);
+  renderComboList();
+  renderComboEditor();
+});
+$("comboSteps").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const index = Number(btn.dataset.i);
+  const action = btn.dataset.act;
+  if (action === "up") moveComboStep(index, -1);
+  else if (action === "down") moveComboStep(index, 1);
+  else if (action === "remove") removeComboStep(index);
+  else if (action === "options") {
+    const combo = currentCombo();
+    if (combo && combo.steps[index]) gotoTaskOptions(combo.steps[index].entry);
   }
-  const checked = new Set(
-    [...box.querySelectorAll("input[type=checkbox]:checked")].map((i) => i.dataset.index)
-  );
-  box.innerHTML = state.tasks
-    .map(
-      (task, index) =>
-        `<label class="opt"><input type="checkbox" data-index="${index}" ${
-          checked.has(String(index)) ? "checked" : ""
-        }> ${esc(task.name)}</label>`
-    )
-    .join("");
-}
-
-async function waitLoopTaskDone() {
-  let started = false;
-  while (!loopState.stop) {
-    try {
-      const data = await api("/api/state");
-      const st = data.task || {};
-      if (!started && st.state === "running") started = true;
-      if (st.state === "done") return "done";
-      if (st.state === "failed") return "failed";
-      if (started && st.state === "idle") return "idle";
-    } catch (error) {
-      /* 网络抖动时继续等 */
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+});
+$("comboName").addEventListener("input", () => {
+  const combo = currentCombo();
+  if (combo) {
+    combo.name = $("comboName").value;
+    renderComboList();
   }
-  return "stopped";
-}
+});
+$("comboLoops").addEventListener("input", () => {
+  const combo = currentCombo();
+  if (combo) combo.loops = Math.max(0, Number($("comboLoops").value) || 0);
+});
+$("btnComboNew").addEventListener("click", newCombo);
+$("btnComboDelete").addEventListener("click", deleteCombo);
+$("btnComboAddStep").addEventListener("click", addComboStep);
+$("btnComboSave").addEventListener("click", saveCombos);
+$("btnComboRun").addEventListener("click", runCombo);
+$("btnComboStop").addEventListener("click", stopCombo);
 
-async function startLoop() {
-  if (loopState.running) return;
-  await loadTasks();
-  renderLoopTasks();
-  const indexes = [...$("loopTaskList").querySelectorAll("input:checked")].map((i) =>
-    Number(i.dataset.index)
-  );
-  if (!indexes.length) {
-    banner("err", ["先勾选要循环的任务"]);
-    return;
-  }
-  const continueOnFail = $("loopContinue").checked;
-  loopState.running = true;
-  loopState.stop = false;
-  $("loopStatus").textContent = "循环运行中…";
+/* ------------------------------------------------------------ 推年计划（任务组合） */
 
-  while (!loopState.stop) {
-    for (const index of indexes) {
-      if (loopState.stop) break;
-      const task = state.tasks[index];
-      if (!task) continue;
-      const selection = (state.prefs.selections || {})[task.entry] || {};
-      $("loopStatus").textContent = `正在执行：${task.name}`;
-      try {
-        await post("/api/task/run", {
-          entry: task.entry,
-          name: task.name,
-          selection,
-        });
-      } catch (error) {
-        $("loopStatus").textContent = `${task.name} 启动失败：${error.message}`;
-        if (!continueOnFail) loopState.stop = true;
-        continue;
-      }
-      const result = await waitLoopTaskDone();
-      const label = result === "done" ? "成功" : result === "failed" ? "失败" : "已停止";
-      $("loopStatus").textContent = `${task.name} → ${label}`;
-      if (result === "failed" && !continueOnFail) {
-        loopState.stop = true;
-      }
-      if (result === "stopped") loopState.stop = true;
-    }
-    if (!loopState.stop) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  }
-  loopState.running = false;
-  $("loopStatus").textContent = "循环已停止";
-}
-
-async function stopLoop() {
-  loopState.stop = true;
+async function loadCombos() {
   try {
-    await post("/api/task/stop", {});
+    const data = await api("/api/combos");
+    state.combos = data.combos || [];
+    state.comboModules = data.modules || [];
+    state.comboSelections = data.selections || {};
+    state.comboRunning = data.running || null;
+    if (state.comboIndex >= state.combos.length) state.comboIndex = state.combos.length - 1;
+    if (state.comboIndex < 0 && state.combos.length) state.comboIndex = 0;
+    renderComboList();
+    renderComboModuleOptions();
+    renderComboEditor();
+    renderComboStatus();
   } catch (error) {
-    /* ignore */
+    $("comboStatus").textContent = "读取组合失败：" + error.message;
   }
-  $("loopStatus").textContent = "正在停止循环…";
+}
+
+async function pollComboStatus() {
+  try {
+    const data = await api("/api/combos/status");
+    state.comboRunning = data.running || null;
+    renderComboStatus();
+  } catch (error) {
+    /* 轮询失败不打扰 */
+  }
+}
+
+function currentCombo() {
+  return state.combos[state.comboIndex] || null;
+}
+
+function moduleName(entry) {
+  const module = state.comboModules.find((item) => item.entry === entry);
+  return module ? module.name : entry;
+}
+
+function renderComboList() {
+  const box = $("comboList");
+  if (!box) return;
+  box.innerHTML = state.combos.length
+    ? state.combos
+        .map(
+          (combo, index) =>
+            `<button data-i="${index}" class="${index === state.comboIndex ? "active" : ""}">${esc(combo.name)} <span class="hint">（${combo.steps.length} 步）</span></button>`
+        )
+        .join("")
+    : '<div class="empty">还没有组合，点「＋ 新建组合」</div>';
+}
+
+function renderComboModuleOptions() {
+  const select = $("comboModule");
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = state.comboModules
+    .map((module) => `<option value="${esc(module.entry)}">${esc(module.name)}</option>`)
+    .join("");
+  if (current) select.value = current;
+}
+
+function renderComboEditor() {
+  const combo = currentCombo();
+  if (!combo) {
+    $("comboName").value = "";
+    $("comboLoops").value = 1;
+    $("comboSteps").innerHTML = '<div class="empty">还没有组合</div>';
+    return;
+  }
+  $("comboName").value = combo.name;
+  $("comboLoops").value = combo.loops;
+  $("comboSteps").innerHTML = combo.steps.length
+    ? combo.steps
+        .map((step, index) => {
+          const saved = state.comboSelections[step.entry] || {};
+          const keys = Object.keys(saved);
+          const detail = keys.length
+            ? keys.map((key) => `${key}=${saved[key]}`).join("，")
+            : "默认";
+          const summary = keys.length ? `${keys.length} 项选项` : "默认";
+          return `<div class="combo-step">
+            <span class="step-index">${index + 1}</span>
+            <span class="step-name">${esc(moduleName(step.entry))}</span>
+            <span class="step-hint" title="${esc(detail)}">选项：${esc(summary)}</span>
+            <span class="step-actions">
+              <button class="btn small" data-act="up" data-i="${index}" ${index === 0 ? "disabled" : ""}>↑</button>
+              <button class="btn small" data-act="down" data-i="${index}" ${index === combo.steps.length - 1 ? "disabled" : ""}>↓</button>
+              <button class="btn small" data-act="options" data-i="${index}">设选项</button>
+              <button class="btn small danger" data-act="remove" data-i="${index}">✕</button>
+            </span>
+          </div>`;
+        })
+        .join("")
+    : '<div class="empty">还没有步骤，从下面选一个任务模块添加</div>';
+}
+
+function renderComboStatus() {
+  const box = $("comboStatus");
+  if (!box) return;
+  const running = state.comboRunning || {};
+  if (running.state === "running" || running.state === "stopping") {
+    const loops = running.loops || "∞";
+    box.textContent = `${running.combo}：第 ${running.loop}/${loops} 轮 · 步骤 ${running.step}/${running.steps} ${running.stepName}`;
+  } else if (running.state && running.state !== "idle") {
+    const label = running.state === "done" ? "已完成" : running.state === "failed" ? "失败" : "已停止";
+    box.textContent = `${running.combo || ""}：${running.message || label}`;
+  } else {
+    box.textContent = "未运行";
+  }
+}
+
+function newCombo() {
+  state.combos.push({
+    id: "c" + Date.now().toString(36),
+    name: `新组合 ${state.combos.length + 1}`,
+    loops: 1,
+    steps: [],
+  });
+  state.comboIndex = state.combos.length - 1;
+  renderComboList();
+  renderComboEditor();
+  $("comboName").focus();
+  $("comboName").select();
+}
+
+async function saveCombos() {
+  try {
+    const data = await post("/api/combos/save", { combos: state.combos });
+    if (!data.ok) {
+      banner("err", ["保存失败", ...(data.errors || [])]);
+      return false;
+    }
+    state.combos = data.combos || state.combos;
+    banner("ok", data.messages || ["已保存"]);
+    renderComboList();
+    renderComboEditor();
+    return true;
+  } catch (error) {
+    banner("err", ["保存失败：" + error.message]);
+    return false;
+  }
+}
+
+async function deleteCombo() {
+  const combo = currentCombo();
+  if (!combo) return;
+  if (!confirm(`删除组合「${combo.name}」？`)) return;
+  state.combos.splice(state.comboIndex, 1);
+  state.comboIndex = Math.min(state.comboIndex, state.combos.length - 1);
+  await saveCombos();
+  if (state.comboIndex < 0 && state.combos.length) state.comboIndex = 0;
+  renderComboList();
+  renderComboEditor();
+}
+
+function addComboStep() {
+  const combo = currentCombo();
+  const entry = $("comboModule").value;
+  if (!combo || !entry) return;
+  combo.steps.push({ entry });
+  renderComboEditor();
+}
+
+function moveComboStep(index, delta) {
+  const combo = currentCombo();
+  if (!combo) return;
+  const target = index + delta;
+  if (target < 0 || target >= combo.steps.length) return;
+  const [step] = combo.steps.splice(index, 1);
+  combo.steps.splice(target, 0, step);
+  renderComboEditor();
+}
+
+function removeComboStep(index) {
+  const combo = currentCombo();
+  if (!combo) return;
+  combo.steps.splice(index, 1);
+  renderComboEditor();
+}
+
+async function gotoTaskOptions(entry) {
+  if (!state.tasks.length) await fetchTasks();
+  const index = state.tasks.findIndex((task) => task.entry === entry);
+  if (index < 0) {
+    banner("err", ["这个任务不在任务列表里（可能被隐藏了）"]);
+    return;
+  }
+  switchTab("tasks");
+  selectTask(index);
+}
+
+async function runCombo() {
+  const combo = currentCombo();
+  if (!combo) return;
+  if (!combo.steps.length) {
+    banner("err", ["至少添加一个步骤"]);
+    return;
+  }
+  try {
+    const data = await post("/api/combos/run", { combo });
+    if (!data.ok) {
+      banner("err", ["运行失败", ...(data.errors || [data.error || "未知错误"])]);
+      return;
+    }
+    state.comboRunning = data.running;
+    renderComboStatus();
+    banner("ok", [`开始运行：${combo.name}`]);
+  } catch (error) {
+    banner("err", ["运行失败：" + error.message]);
+  }
+}
+
+async function stopCombo() {
+  try {
+    const data = await post("/api/combos/stop", {});
+    state.comboRunning = data.running || state.comboRunning;
+    renderComboStatus();
+    banner("ok", ["已请求停止组合"]);
+  } catch (error) {
+    banner("err", ["停止失败：" + error.message]);
+  }
 }
 
 // 支持 #alerts 之类的深链接，方便直接打开某一页
 const startTab = (location.hash || "").replace(/^#/, "");
-if (["home", "tasks", "shot", "logs", "alerts", "records", "mercs", "notify"].includes(startTab)) {
+if (["home", "tasks", "combos", "shot", "logs", "alerts", "records", "mercs", "notify"].includes(startTab)) {
   switchTab(startTab);
 }
 

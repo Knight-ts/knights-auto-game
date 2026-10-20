@@ -21,6 +21,8 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from webapp.combos import ComboRunner, load as load_combos, normalize as normalize_combo
+from webapp.combos import save as save_combos, validate as validate_combos
 from webapp.runtime import ROOT, Runtime
 
 # 所有表/配置都用相对路径，统一到项目根目录
@@ -69,6 +71,15 @@ def load_config() -> dict:
 def save_config(data: dict) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def combo_selection(entry: str) -> dict:
+    """组合里每个步骤的选项：沿用「任务」页给该任务保存的选择。"""
+    selections = load_config().get("selections") or {}
+    return selections.get(entry) or {}
+
+
+combo_runner = ComboRunner(runtime, ROOT, selection_provider=combo_selection)
 
 
 def _persist_history(items: list[dict]) -> None:
@@ -177,6 +188,44 @@ class Handler(BaseHTTPRequestHandler):
                         config.get("hidden_tasks") or [],
                     ),
                 )
+            elif path == "/api/combos":
+                config = load_config()
+                combos_list = load_combos(ROOT)
+                if not combos_list and not (ROOT / "table" / "task_combos.json").exists():
+                    combos_list = [
+                        normalize_combo(
+                            {
+                                "id": "monthly",
+                                "name": "月度循环",
+                                "loops": 1,
+                                "steps": [{"entry": "Auto_YearlyTask"}],
+                            }
+                        )
+                    ]
+                modules = []
+                for task in runtime.interfaces.get("task", []):
+                    entry = task.get("entry", "")
+                    modules.append(
+                        {
+                            "entry": entry,
+                            "name": config.get("task_labels", {}).get(entry)
+                            or task.get("name", ""),
+                            "description": task.get("description", ""),
+                            "options": task.get("option", []) or [],
+                        }
+                    )
+                self._json(
+                    200,
+                    {
+                        "ok": True,
+                        "combos": combos_list,
+                        "modules": modules,
+                        "selections": config.get("selections") or {},
+                        "running": combo_runner.status(),
+                    },
+                )
+            elif path == "/api/combos/status":
+                self._json(200, {"ok": True, "running": combo_runner.status()})
             elif path == "/api/taskpack":
                 self._json(200, taskpack.status())
             elif path == "/api/screenshot":
@@ -377,6 +426,54 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 reload_interface(result)
                 self._json(200, result)
+            elif path == "/api/combos/save":
+                incoming = payload.get("combos")
+                if not isinstance(incoming, list):
+                    self._json(400, {"ok": False, "error": "缺少 combos 数组"})
+                    return
+                items = [normalize_combo(item) for item in incoming if isinstance(item, dict)]
+                entries = {
+                    task.get("entry", "") for task in runtime.interfaces.get("task", [])
+                }
+                errors = validate_combos(items, entries)
+                if errors:
+                    self._json(200, {"ok": False, "errors": errors})
+                    return
+                saved = save_combos(ROOT, items)
+                self._json(
+                    200,
+                    {
+                        "ok": True,
+                        "combos": saved,
+                        "messages": [f"已保存 {len(saved)} 个组合"],
+                    },
+                )
+            elif path == "/api/combos/run":
+                combo = payload.get("combo")
+                if combo is None and payload.get("id"):
+                    combo = next(
+                        (item for item in load_combos(ROOT) if item["id"] == payload["id"]),
+                        None,
+                    )
+                if not isinstance(combo, dict):
+                    self._json(400, {"ok": False, "error": "缺少组合"})
+                    return
+                normalized = normalize_combo(combo)
+                entries = {
+                    task.get("entry", "") for task in runtime.interfaces.get("task", [])
+                }
+                errors = validate_combos([normalized], entries)
+                if errors:
+                    self._json(200, {"ok": False, "errors": errors})
+                    return
+                try:
+                    running = combo_runner.start(normalized)
+                except Exception as exc:  # noqa: BLE001
+                    self._json(400, {"ok": False, "error": str(exc)})
+                    return
+                self._json(200, {"ok": True, "running": running})
+            elif path == "/api/combos/stop":
+                self._json(200, {"ok": True, "running": combo_runner.stop()})
             else:
                 self._json(404, {"error": "not found"})
         except Exception as exc:  # noqa: BLE001

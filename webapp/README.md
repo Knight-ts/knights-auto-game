@@ -19,6 +19,7 @@ python\python.exe webapp\server.py
 |---|---|
 | 主页 | 设备选择与连接、资源/Agent/任务状态、最近日志 |
 | 任务 | 读取 interface.json 的任务与选项（switch/checkbox/select/input），组合 pipeline_override 后执行 |
+| 推年计划 | 任务组合：选模块、排序、循环次数、命名保存（table/task_combos.json）并运行 |
 | 截图 | 设备实时画面（2 秒刷新、可下载） |
 | 日志 | 调度日志 + Agent stdout |
 | 好娃提醒 | 组合列表（点「详情」展开）+ 按种族分类的完整特性表，保存时同步条件表 / 检测节点 / 界面选项 |
@@ -64,9 +65,15 @@ webapp/
 | POST | `/api/taskpack/export` / `build` / `check` | 导出任务包 / 重建 interface.json / 检查 |
 | POST | `/api/taskpack/pack` | `{entry}` 打包任务为 `dist/tasks/<entry>.zip` |
 | POST | `/api/taskpack/unpack` | `{path, force?, build?}` 导入任务包 |
+| GET | `/api/combos` | 组合列表 + 可用任务模块 + 已保存的选项 + 运行状态 |
+| GET | `/api/combos/status` | 只查运行状态（页面轮询用） |
+| POST | `/api/combos/save` | `{combos}` 保存全部组合（table/task_combos.json） |
+| POST | `/api/combos/run` | `{combo}` 或 `{id}` 运行组合 |
+| POST | `/api/combos/stop` | 停止组合 |
 
 ## 页面补充
 
 - 任务页会记住上次选的任务与各选项（`config/webapp.json`），并显示最近任务记录；
 - 任务页底部有「任务包」卡片：导出 tasks/、重建 interface.json、打包当前任务、导入 zip，改完不用命令行也能用；
+- 「推年计划」页是任务组合编辑器：步骤按顺序执行，选项沿用任务页保存的选择，组合存在 `table/task_combos.json`；
 - 通知页可启用推送、选择飞书/通用 JSON、发送测试消息；webhook 留空时自动复用 `config/config.json` 的飞书地址。
