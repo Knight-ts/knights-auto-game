@@ -11,6 +11,7 @@ debug/
 temp/
 backup/
 *.log
+debug_faces/
 
 # 用户配置与生成文件
 config/config.json
