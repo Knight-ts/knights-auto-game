@@ -2,6 +2,9 @@
 
 # MaaPiCli 使用说明
 
+> ⚠️ **本项目不提供 PiCLI 版本**。本文档来自上游 MAAGC 的资料，仅作参考；
+> Knights Auto Game 只提供网页版，启动方式见「新手上路」。
+
 MaaPiCli 是 MaaFramework 提供的命令行版本，适合高级用户和服务器环境使用。
 
 ## 📦 一、下载与安装
