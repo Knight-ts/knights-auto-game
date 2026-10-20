@@ -20,7 +20,7 @@ tasks/
 
 1. 编辑 `tasks/<entry>/task.json`（名字、说明、勾选项）或 `tasks/_options.json`（选项和它的 pipeline_override）；
 2. 运行 `python tools/taskpack.py build`（或网页版「任务 → 任务包 → 重建 interface.json」）；
-3. 重启 MaaGC，新任务/新选项生效。
+3. 重启 Knights Auto Game，新任务/新选项生效。
 
 > `build` 会先校验：文件夹和 entry 是否一致、选项是否存在、pipeline_override 里的节点在 `resource/base/pipeline` 里找不找得到；有错就不写文件。
 
@@ -52,5 +52,5 @@ python tools\taskpack.py run Auto_DailyTask --set DailyTaskSubTaskSwitch=购买�
 ## 注意
 
 - `interface.json` 是 build 的产物；如果直接在 interface.json 里改了东西，用 `export --force` 同步回 tasks/（会覆盖 tasks/ 里的同名任务）。
-- 改完 tasks/ 一定要 build；只改 tasks/ 而不 build，MaaGC 和网页版看到的还是旧任务。
+- 改完 tasks/ 一定要 build；只改 tasks/ 而不 build，Knights Auto Game 和网页版看到的还是旧任务。
 - `run.py` 不会被覆盖，可以放心在里面加自己的调试代码。

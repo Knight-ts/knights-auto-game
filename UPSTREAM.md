@@ -1,6 +1,6 @@
 # 上游与来源说明（UPSTREAM）
 
-本仓库 **Knights-web-windows** 是一个非官方衍生项目，不是 MAAGC 的官方仓库，也不隶属于 MaaXYZ 或 KhazixW2。
+本项目 **Knights Auto Game**（仓库名 `Knights-web-windows`）是一个非官方衍生项目，不是 MAAGC 的官方仓库，也不隶属于 MaaXYZ 或 KhazixW2。
 
 ## 来源
 
@@ -32,4 +32,4 @@
 
 ## 与上游的关系（一句话）
 
-**Knights-web-windows 是 MAAGC（MIT）的网页版衍生重写，使用 MaaFramework（LGPL-3.0）驱动，与上游无 Git 历史关系、非官方。**
+**Knights Auto Game 是 MAAGC（MIT）的网页版衍生重写，使用 MaaFramework（LGPL-3.0）驱动，与上游无 Git 历史关系、非官方。**

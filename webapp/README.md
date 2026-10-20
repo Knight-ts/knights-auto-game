@@ -1,4 +1,4 @@
-# MaaGC 网页版（webapp）
+# Knights Auto Game 网页版（webapp）
 
 用 Python 直接驱动 MaaFramework 的网页控制台，**不再需要 MFAAvalonia**。
 

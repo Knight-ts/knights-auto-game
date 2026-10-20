@@ -1,8 +1,10 @@
-# Knights-web-windows
+# Knights Auto Game
 
 基于 [MaaFramework](https://github.com/MaaXYZ/MaaFramework) 的《诸神皇冠 / 百年骑士团》网页版自动化助手。
 
-> 本项目是 **MAAGC 的网页版衍生重写**（非官方）：后端用 Python 直接驱动 MaaFramework，浏览器作为控制台，不包含 MFAAvalonia 等桌面 UI。来源、上游与第三方素材说明见 [UPSTREAM.md](UPSTREAM.md)。
+> **Knights Auto Game** 是 [MAAGC](https://github.com/KhazixW2/MAAGC)（MIT）的网页版衍生重写（非官方）。
+> Agent、Pipeline 与资源等部分代码**借鉴自 MAAGC**，后端改为用 Python 直接驱动 MaaFramework、浏览器作为控制台，
+> 不包含 MFAAvalonia 等桌面 UI。来源、上游与第三方素材说明见 [UPSTREAM.md](UPSTREAM.md)、[NOTICE](NOTICE)。
 
 ## 功能
 
@@ -98,7 +100,7 @@ python tasks\CastleMarryTest\run.py --set 联姻方式=联姻
 ## 配置
 
 - interface.json：任务列表与选项（由 `tasks/` 重建，网页版任务页直接读取）
-- tasks/：任务的源文件；改完运行 `build` 再重启 MaaGC 生效
+- tasks/：任务的源文件；改完运行 `build` 再重启 Knights Auto Game 生效
 - table/child_alert_conditions.json：好娃提醒条件（也可在网页“好娃提醒”页编辑）
 - table/notify_config.json：平台推送；默认关闭，webhook 留空时复用 config/config.json 的飞书地址
 - config/webapp.json：上次设备 / 任务 / 选项（自动生成，不要提交）
@@ -114,7 +116,7 @@ python tasks\CastleMarryTest\run.py --set 联姻方式=联姻
    左侧点种族，右侧点「＋ 加入」，特性就加到当前组合里（再点一次取消）。搜索框可跨种族按特性名 / 效果筛选。
 2. **组合列表**：每行约 2cm，显示组合名、种族标签、特性、属性门槛摘要；点「详情」展开填写界面显示名、内部 ID、条件名、检测节点、说明、**备注**、必需特性、属性门槛和或条件。备注只给自己看，会存进 `table/child_alert_conditions.json`。
 
-「从特性表挑」会把加入目标切换到当前组合并展开特性表；「保存并同步」会写入条件表、检测节点和界面选项，勾选状态按实例保存，需要点「同步勾选到 MaaGC」并重启 MaaGC 生效。
+「从特性表挑」会把加入目标切换到当前组合并展开特性表；「保存并同步」会写入条件表、检测节点和界面选项，勾选状态按实例保存，需要点「同步勾选到 Knights Auto Game」并重启生效。
 
 ## 孩子命名速度（可调）
 

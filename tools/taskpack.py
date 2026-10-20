@@ -264,7 +264,7 @@ def build(dry_run: bool = False) -> dict:
         messages.append("（--dry-run，没有写入文件）")
         return _result(True, messages)
     _write(INTERFACE, new_iface)
-    messages.append("interface.json 已更新（旧文件备份为 interface.json.bak），重启 MaaGC 后生效")
+    messages.append("interface.json 已更新（旧文件备份为 interface.json.bak），重启 Knights Auto Game 后生效")
     return _result(True, messages)
 
 

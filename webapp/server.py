@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""MaaGC 网页版服务：http://127.0.0.1:8790/ 代替 MFAAvalonia。
+"""Knights Auto Game 网页版服务：http://127.0.0.1:8790/ 代替 MFAAvalonia。
 
 启动：python webapp/server.py [--port 8790] [--no-browser]
 """
@@ -141,7 +141,7 @@ def mask_webhook(url: str) -> str:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MaaGCWeb/1.0"
+    server_version = "KnightsAutoGame/1.0"
 
     def log_message(self, fmt: str, *args) -> None:  # noqa: A003
         return
@@ -401,7 +401,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/notify/test":
                 config = notifier.load_config()
-                ok = notifier.notify("MaaGC 测试消息", "如果你收到这条消息，说明推送配置可用。")
+                ok = notifier.notify("Knights Auto Game 测试消息", "如果你收到这条消息，说明推送配置可用。")
                 if ok:
                     message = "测试消息已发送，请检查平台"
                 elif not config.get("enabled"):
@@ -514,7 +514,7 @@ def main() -> int:
         return 1
 
     url = f"http://127.0.0.1:{args.port}/"
-    print(f"MaaGC 网页版已启动：{url}")
+    print(f"Knights Auto Game 网页版已启动：{url}")
     print("按 Ctrl+C 退出。")
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()

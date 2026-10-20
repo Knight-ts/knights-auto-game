@@ -1,4 +1,4 @@
-﻿# 好娃提醒 - 原生窗口版（WinForms，不依赖浏览器）
+# 好娃提醒 - 原生窗口版（WinForms，不依赖浏览器）
 # 数据通过本机控制台接口读写（默认 http://127.0.0.1:8790）
 
 param([string]$BaseUrl = "http://127.0.0.1:8790")
@@ -30,7 +30,7 @@ $grades = @("", "E", "D", "C", "B", "A", "S", "SS")
 function Get-State {
     $state = Invoke-RestMethod -Uri "$BaseUrl/api/state" -TimeoutSec 10
     if (-not ($state.PSObject.Properties.Name -contains 'conditions')) {
-        throw "这个地址不是网页控制台（/api/state 里没有 conditions）：$BaseUrl。请确认 MaaGC 的控制台在运行，端口没被网页版占用。"
+        throw "这个地址不是网页控制台（/api/state 里没有 conditions）：$BaseUrl。请确认 Knights Auto Game 的控制台在运行，端口没被网页版占用。"
     }
     $script:conditions = @(@($state.conditions) | Where-Object { $null -ne $_ })
     $script:groups = @(@($state.featureGroups) | Where-Object { $null -ne $_ })
@@ -47,7 +47,7 @@ function Post-Json([string]$path, $payload) {
 # ---------------------------------------------------------------- 界面
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "好娃提醒 - MaaGC"
+$form.Text = "好娃提醒 - Knights Auto Game"
 $form.Size = New-Object System.Drawing.Size(1120, 830)
 $form.StartPosition = "Manual"
 $form.Location = New-Object System.Drawing.Point(60, 40)
@@ -181,7 +181,7 @@ $btnDel = New-Button "删除组合" 110 90
 $btnReload = New-Button "重新读取" 208 90
 $btnFeature = New-Button "特性表…" 306 90
 $btnFeature.ForeColor = [System.Drawing.Color]::FromArgb(79, 140, 255)
-$btnSync = New-Button "同步到 MaaGC" 404 150
+$btnSync = New-Button "同步到 Knights Auto Game" 404 150
 $btnSave = New-Button "保存并同步" 562 130
 $btnSave.BackColor = [System.Drawing.Color]::FromArgb(79, 140, 255)
 $btnSave.ForeColor = [System.Drawing.Color]::White
@@ -450,7 +450,7 @@ function Load-All {
         Show-Item 0
         $status.Text = "已读取 $($script:conditions.Count) 个组合（$($script:groups.Count) 个种族分类）"
     } catch {
-        $status.Text = "读取失败：$($_.Exception.Message)。请先启动 MaaGC（Agent 会在后台启动控制台服务）。"
+        $status.Text = "读取失败：$($_.Exception.Message)。请先启动 Knights Auto Game（Agent 会在后台启动控制台服务）。"
     }
 }
 

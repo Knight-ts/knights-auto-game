@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""MaaGC 网页版运行时：直接用 Python 驱动 MaaFramework，不依赖 MFAAvalonia。
+"""Knights Auto Game 网页版运行时：直接用 Python 驱动 MaaFramework，不依赖 MFAAvalonia。
 
 职责：
     - 发现/连接模拟器（AdbController）

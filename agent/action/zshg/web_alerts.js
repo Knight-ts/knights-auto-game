@@ -235,7 +235,7 @@
       <input type="text" data-i="${index}" data-f="name" value="${esc(condition.name)}"></label>
     <label class="field">检测节点
       <input class="mono" type="text" data-i="${index}" data-f="node" value="${esc(condition.node)}"></label>
-    <label class="field wide">说明（写进 MaaGC 界面选项的描述）
+    <label class="field wide">说明（写进 Knights Auto Game 界面选项的描述）
       <input type="text" data-i="${index}" data-f="description" value="${esc(condition.description)}"
              placeholder="例：技巧SS + 力量S，只看特性不看属性"></label>
     <label class="field wide">备注（只给自己看，保存在条件表里）
@@ -655,7 +655,7 @@
       const names = data.conditions.filter((item) => item.defaultChecked).map((item) => item.caseName);
       const result = await request(ENDPOINTS.sync, { caseNames: names });
       toast(result.ok ? "ok" : "err", [
-        result.message || "已同步实例勾选，重启 MaaGC 后生效",
+        result.message || "已同步实例勾选，重启 Knights Auto Game 后生效",
       ]);
     } catch (error) {
       toast("err", ["同步失败：" + error.message]);

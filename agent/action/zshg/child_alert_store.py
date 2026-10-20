@@ -452,7 +452,7 @@ def save_state(root: Path | None, raw_conditions: list[dict]) -> dict:
 def sync_instance_selection(root: Path | None, case_names: list[str]) -> list[str]:
     """把勾选结果写入各实例配置的 selected_cases。
 
-    MaaGC 的「开启好娃提醒」勾选是按实例保存在 config/instances/*.json 里的，
+    Knights Auto Game 的「开启好娃提醒」勾选是按实例保存在 config/instances/*.json 里的，
     只改 interface.json 的 default_case 对已有实例无效，所以这里直接改实例配置。
     """
     root = root or project_root()

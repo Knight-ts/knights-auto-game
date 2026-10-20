@@ -1,10 +1,10 @@
 {
     "interface_version": 2,
-    "name": "Knights-web-windows",
-    "description": "《诸神皇冠 / 百年骑士团》网页版自动化助手（MAAGC 衍生，非官方）",
+    "name": "Knights Auto Game",
+    "description": "《诸神皇冠 / 百年骑士团》网页版自动化助手（借鉴 MAAGC，非官方）",
     "contact": "https://github.com/Knight-ts/Knights-web-windows/issues",
     "license": "MIT",
-    "welcome": "首次使用！欢迎使用 Knights 网页版。",
+    "welcome": "首次使用！欢迎使用 Knights Auto Game。",
     "github": "https://github.com/Knight-ts/Knights-web-windows",
     "version": "v1.6.1",
     "controller": [
@@ -144,19 +144,19 @@
             "doc": [
                 "### 好娃提醒（窗口版）",
                 "",
-                "在 MaaGC 里点一下就会弹出一个原生窗口，像普通桌面程序一样管理好娃提醒，**不需要浏览器**。",
+                "在 Knights Auto Game 里点一下就会弹出一个原生窗口，像普通桌面程序一样管理好娃提醒，**不需要浏览器**。",
                 "",
                 "**窗口里能做什么：**",
                 "- 左侧是组合列表（每行显示组合名和特性数），选中后在右侧填详情：显示名、内部 ID、条件名、检测节点、说明、备注",
                 "- 必需特性（一行一个）、六维属性等级与最小值、或条件（如 `敏捷>=0.3`）、默认勾选",
                 "- 「特性表…」打开按种族分类的完整特性表（血统 / 平民血 / 通用），点种族 → 勾选特性 → 应用，比手打特性名准",
                 "- 新增 / 删除组合；「保存并同步」写入条件表、检测节点、界面选项",
-                "- 「同步勾选到 MaaGC」把默认勾选写进当前实例，重启 MaaGC 后按此勾选",
+                "- 「同步勾选到 Knights Auto Game」把默认勾选写进当前实例，重启 Knights Auto Game 后按此勾选",
                 "",
                 "**说明：**",
-                "- 修改的是 `table/child_alert_conditions.json` 等三处配置，保存后重启 MaaGC 生效",
+                "- 修改的是 `table/child_alert_conditions.json` 等三处配置，保存后重启 Knights Auto Game 生效",
                 "- 同名功能还有浏览器版：任务「网页控制台」或 `tools\\打开控制台.bat`",
-                "- 需要 MaaGC 的 Agent 正常运行（即先能正常连接模拟器）"
+                "- 需要 Knights Auto Game 的 Agent 正常运行（即先能正常连接模拟器）"
             ]
         },
         {
@@ -169,7 +169,7 @@
                 "打开一个只监听本机的网页控制台（`http://127.0.0.1:8790/`），Agent 启动时也会自动拉起。",
                 "",
                 "**四个页面：**",
-                "- 主页：模拟器连接状态、MuMu 状态、MaaGC 进程、提醒类型数量、最近日志",
+                "- 主页：模拟器连接状态、MuMu 状态、Knights Auto Game 进程、提醒类型数量、最近日志",
                 "- 总控台：一键连接 / 断开 / 重启 ADB、设备列表、返回/主页等常用按键",
                 "- 截图：实时画面，可暂停、可下载当前帧",
                 "- 好娃提醒：组合列表（点「详情」展开填写）+ 按种族分类的完整特性表，保存时同步条件表、检测节点、界面选项",
@@ -177,10 +177,10 @@
                 "**使用方式：**",
                 "- 选中本任务并启动，会自动打开控制台",
                 "- 不连模拟器时，也可以双击 `tools\\打开控制台.bat` 单独使用",
-                "- 连不上模拟器时，双击 `tools\\启动MaaGC.bat`：先 adb connect，再启动 MaaGC",
+                "- 连不上模拟器时，双击 `启动网页版.bat`：先 adb connect，再启动 Knights Auto Game",
                 "",
                 "**注意：**",
-                "- 保存好娃提醒后需要重启 MaaGC，新类型才会出现在勾选列表里",
+                "- 保存好娃提醒后需要重启 Knights Auto Game，新类型才会出现在勾选列表里",
                 "- 重命名显示名会让老实例的勾选失效，需要重新勾一次",
                 "- 删除类型会同时移除对应检测节点和界面选项"
             ]
@@ -1040,5 +1040,5 @@
             ]
         }
     },
-    "title": "MaaGC v1.6.1 | 百年骑士团小助手"
+    "title": "Knights Auto Game v1.6.1 | 百年骑士团小助手"
 }

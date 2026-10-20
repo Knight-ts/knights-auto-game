@@ -2,7 +2,7 @@
 """好娃提醒入口。
 
 两个版本：
-    ChildAlertWindow  —— 原生窗口（WinForms，PowerShell 承载），在 MaaGC 里点任务直接弹窗
+    ChildAlertWindow  —— 原生窗口（WinForms，PowerShell 承载），在 Knights Auto Game 里点任务直接弹窗
     ChildAlertManager —— 浏览器版控制台（主页 / 总控台 / 截图 / 好娃提醒）
 
 数据都通过本机控制台接口读写（127.0.0.1:8790），窗口版不需要浏览器。
@@ -26,7 +26,7 @@ CREATE_NO_WINDOW = 0x08000000
 
 @AgentServer.custom_action("ChildAlertWindow")
 class ChildAlertWindow(CustomAction):
-    """在 MaaGC 里弹出原生「好娃提醒」管理窗口。"""
+    """在 Knights Auto Game 里弹出原生「好娃提醒」管理窗口。"""
 
     def run(self, context, argv) -> CustomAction.RunResult:
         script = project_root() / "tools" / WINDOW_SCRIPT
