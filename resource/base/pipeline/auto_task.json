@@ -106,6 +106,15 @@
     "Flag_EnableAprCastleMarry": {
         "enabled": false
     },
+    "Flag_AprCastleManual": {
+        "enabled": false
+    },
+    "Flag_EnableMaySpringMarry": {
+        "enabled": false
+    },
+    "Flag_MaySpringManual": {
+        "enabled": false
+    },
     "Auto_WeddingTask": {
         "recognition": "DirectHit",
         "action": "Custom",

@@ -420,7 +420,7 @@ def handle_festival_by_month(context: Context, month: int) -> bool:
         2: "祈灵日，跳过",
         3: "启航节",
         4: "城堡相亲（城堡主厅）",
-        5: "春林节，跳过（相亲已移到4月）",
+        5: "春林节相亲",
         6: "铸魂节，跳过",
         8: "丰收节",
         10: "勇士节",
@@ -435,8 +435,7 @@ def handle_festival_by_month(context: Context, month: int) -> bool:
     elif month == 4:
         return handle_marry_festival(context, month=4)
     elif month == 5:
-        logger.info("春林节不再重复相亲（已改为4月城堡主厅）")
-        return True
+        return handle_marry_festival(context, month=5)
     elif month == 8:
         return handle_harvest_festival(context)
     elif month == 10:
@@ -514,22 +513,44 @@ def handle_sailing_festival(context: Context) -> bool:
 
 
 def handle_marry_festival(context: Context, month: int = 4) -> bool:
-    """处理城堡相亲（4月，城堡-城堡主厅-联姻）"""
-    logger.info(f"处理 {month} 月城堡主厅相亲")
-
-    # 4月优先读新开关，旧开关作为兼容回退
-    apr = context.get_node_data("Flag_EnableAprCastleMarry")
-    if apr is not None:
-        EnableMarryTask = bool(apr.get("enabled"))
+    """4月城堡主厅相亲 / 5月春林节相亲。"""
+    if month == 5:
+        label = "5月春林节相亲"
+        enable_node = "Flag_EnableMaySpringMarry"
+        manual_node = "Flag_MaySpringManual"
     else:
-        EnableMarryTask = bool(
-            (context.get_node_data("Flag_EnableMarryTask") or {}).get("enabled")
-        )
-    if not EnableMarryTask:
-        logger.info("4月城堡相亲已关闭，跳过")
+        label = "4月城堡相亲（城堡主厅）"
+        enable_node = "Flag_EnableAprCastleMarry"
+        manual_node = "Flag_AprCastleManual"
+
+    def node_enabled(name: str) -> bool:
+        data = context.get_node_data(name)
+        return bool(data and data.get("enabled"))
+
+    if node_enabled(manual_node):
+        content = f"{label} 已到，请手动处理。处理完成后继续任务。"
+        logger.info(f"{label} 设为手动，暂停任务")
+        try:
+            from utils.notifier import notify
+
+            notify(label, content)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"{label} 推送失败：{exc}")
+        try:
+            context.run_task(
+                "UI_PopInform",
+                pipeline_override={"Node.Action.Succeeded": {"content": content}},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"{label} 弹窗失败：{exc}")
+        context.tasker.post_stop()
         return True
 
-    # 执行相亲处理器自定义动作
+    if not node_enabled(enable_node):
+        logger.info(f"{label} 已跳过")
+        return True
+
+    logger.info(f"处理 {label}")
     context.run_task("Auto_MarryTask")
 
     # 返回大地图
