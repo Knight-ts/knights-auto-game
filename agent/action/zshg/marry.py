@@ -553,15 +553,12 @@ class MarryProcessor(CustomAction):
         self._processed_count += 1
         logger.info(f"开始处理第{self._processed_count}个角色")
 
-        # 3.1 点击选中角色并长按进入详情
-        self._enter_role_details(context, roleBoxCenter)
-
-        # 3.2 检查年龄，大于等于45岁则跳过（不占用处理名额）
-        if not self._check_and_filter_by_age(context):
+        # 3.1 点击选中角色并进入详情
+        if not self._enter_role_details(context, roleBoxCenter):
             return
 
-        # 通过年龄检查，占用处理名额
-        self._processed_count += 1
+        # 3.2 记录年龄（不限年龄，列表按年龄从大到小）
+        self._check_and_filter_by_age(context)
 
         # 3.3 提取血统信息并确定联姻目标
         target_race, target_country = self._evaluate_bloodline_and_get_target(context)
@@ -588,44 +585,58 @@ class MarryProcessor(CustomAction):
         logger.info(f"完成第{self._processed_count}个角色的处理")
         self._candidate_index += 1
 
-    def _enter_role_details(self, context: Context, roleBoxCenter: tuple) -> None:
-        """点击角色并长按进入详情界面"""
-        context.tasker.controller.post_click(roleBoxCenter[0], roleBoxCenter[1]).wait()
+    def _enter_role_details(self, context: Context, roleBoxCenter: tuple) -> bool:
+        """选中角色并进入详情：优先点“了解TA”，不行再长按卡片。"""
+        x, y = roleBoxCenter
+        context.tasker.controller.post_click(x, y).wait()
+        time.sleep(0.4)
+
+        def detail_visible() -> bool:
+            img = context.tasker.controller.post_screencap().wait().get()
+            return context.run_recognition("CastleMarry_AgeCheck", img).hit
+
+        if detail_visible():
+            return True
+
+        # 选中后通常会出现“了解TA/了解全部”
+        for node in ("CastleMarryGetInfoButton", "CastleMarryGetInfoButtonAll"):
+            context.run_task(node)
+            time.sleep(0.5)
+            if detail_visible():
+                logger.info(f"已通过 {node} 进入角色详情")
+                return True
+
+        # 兜底：长按卡片中心（target 需要矩形，不能传点）
         context.run_task(
             "LongPressRole",
-            pipeline_override={"LongPressRole": {"target": roleBoxCenter}},
+            pipeline_override={"LongPressRole": {"target": [x - 6, y - 6, 12, 12]}},
         )
+        time.sleep(0.6)
+        if detail_visible():
+            logger.info("已通过长按进入角色详情")
+            return True
+
+        logger.warning("未能进入角色详情，跳过该候选人")
+        return False
 
     def _check_and_filter_by_age(self, context: Context) -> bool:
-        """检查年龄并过滤，大于等于45岁则跳过"""
+        """记录年龄，不做过滤。
+
+        年龄任意都可以；列表已按「年龄↑」从大到小排，越靠前年龄越大。
+        """
         RecoEmail = context.run_recognition(
             "CastleMarry_AgeCheck",
             context.tasker.controller.post_screencap().wait().get(),
         )
         if RecoEmail.hit:
             age_text = RecoEmail.best_result.text
-            logger.debug(f"识别到的年龄文本: {age_text}")
-
             match = re.search(r"\d+", age_text)
             if match:
-                age = int(match.group())
-                if age >= 45:
-                    logger.info(f"年龄 {age} 大于等于45岁，不考虑")
-                    context.run_task("BackButton_500ms")
-                    return False
-                pref = getattr(self, "_age_pref", "any")
-                if pref == "older" and age < 30:
-                    logger.info(f"年龄 {age} 小于30岁，不符合“年龄较大”偏好")
-                    context.run_task("BackButton_500ms")
-                    return False
-                if pref == "younger" and age >= 30:
-                    logger.info(f"年龄 {age} 大于等于30岁，不符合“年龄较小”偏好")
-                    context.run_task("BackButton_500ms")
-                    return False
-                logger.info(f"年龄 {age} 符合当前偏好({pref})")
+                logger.info(f"年龄 {int(match.group())}（不限年龄，越大越优先）")
+            else:
+                logger.info(f"年龄文本 {age_text}（不限年龄）")
         else:
-            logger.info("未识别到年龄信息, 跳过")
-
+            logger.info("未识别到年龄信息，继续（不限年龄）")
         return True
 
     def _evaluate_bloodline_and_get_target(self, context: Context) -> tuple:

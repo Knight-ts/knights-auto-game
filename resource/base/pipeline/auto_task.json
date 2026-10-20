@@ -81,6 +81,13 @@
         "post_delay": 500,
         "timeout": 3000
     },
+    "CastleMarryTest": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "CastleMarryTest",
+        "post_delay": 500,
+        "timeout": 30000
+    },
     "Flag_EnableMarryTask": {
         "enabled": true
     },

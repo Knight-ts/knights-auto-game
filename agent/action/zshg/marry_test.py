@@ -16,12 +16,12 @@ from maa.custom_action import CustomAction
 
 from utils import logger
 
-FILTER_BTN = (95, 645)
-DUKE_CHECKBOX = (300, 963)
-CONFIRM_BTN = (505, 1070)
-SORT_ICON = (678, 645)
-AGE_DESC = (600, 505)
-FIRST_CELL = (72, 740)
+FILTER_BTN = (97, 634)       # 筛选按钮（排序面板打开时也在同一条上）
+DUKE_CHECKBOX = (292, 964)   # 筛选弹窗里的「公爵」
+CONFIRM_BTN = (508, 1035)    # 筛选弹窗「确定」
+SORT_LABEL = (600, 630)      # 排序入口（显示「年龄↑ / 力量 …」），点开排序面板
+AGE_DESC = (565, 500)        # 排序面板里的「年龄↑」
+FIRST_CELL = (105, 800)      # 第一个候选格：也用来关掉排序面板
 MARRY_BTN = (365, 1218)
 FAST_MARRY_BTN = (635, 1218)
 
@@ -51,7 +51,7 @@ def _text(context: Context, roi, expected=None) -> str:
 
 
 def ensure_filter_and_sort(context: Context) -> None:
-    """在联姻界面执行：筛选公爵 → 确定 → 年龄↑（从大到小）。"""
+    """在联姻界面执行：筛选公爵 → 确定 → 年龄↑（从大到小）→ 关掉排序面板。"""
     logger.info("联姻界面：点击筛选")
     _click(context, *FILTER_BTN, wait=0.8)
 
@@ -68,13 +68,20 @@ def ensure_filter_and_sort(context: Context) -> None:
         _click(context, *DUKE_CHECKBOX, wait=0.3)
         _click(context, *CONFIRM_BTN, wait=1.0)
 
-    logger.info("联姻界面：打开排序菜单")
-    _click(context, *SORT_ICON, wait=0.8)
+    logger.info("联姻界面：打开排序面板")
+    _click(context, *SORT_LABEL, wait=0.8)
     sort_text = _text(context, [560, 630, 140, 40])
     logger.info(f"当前排序：{sort_text or '未识别'}")
-    if "↑" not in (sort_text or ""):
-        logger.info("联姻界面：选择年龄↑（从大到小）")
-        _click(context, *AGE_DESC, wait=0.8)
+    logger.info("联姻界面：选择年龄↑（从大到小）")
+    _click(context, *AGE_DESC, wait=0.6)
+
+    # 排序面板没有确定/取消，点面板外的排序图标关闭；
+    # 不能点候选格，否则会选中角色并打开详情，正式流程会读不到对象数量。
+    logger.info("联姻界面：关闭排序面板")
+    _click(context, 678, 645, wait=0.6)
+    if not _text(context, [230, 630, 260, 40]):
+        logger.warning("排序面板似乎还开着，再点一次空白处")
+        _click(context, 680, 420, wait=0.5)
 
 
 @AgentServer.custom_action("CastleMarryTest")
