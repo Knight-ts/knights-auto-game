@@ -1,0 +1,49 @@
+Knights-web-windows — 第三方作品与来源声明
+==========================================
+
+本仓库是 MAAGC 的非官方衍生项目，不隶属于 MaaXYZ 或 KhazixW2。
+以下列出本仓库包含或分发的第三方作品及其许可条件。
+
+1. 本仓库自身代码
+------------------
+Copyright (c) 2026 Knights
+License: MIT（全文见 LICENSE）
+
+
+2. 衍生来源
+------------
+MAAGC — https://github.com/KhazixW2/MAAGC
+License: MIT, Copyright (c) 2024 MaaXYZ
+说明：agent/、resource/base/pipeline/、table/ 等大量内容源自 MAAGC v1.6.1。
+      详见 UPSTREAM.md。
+
+
+3. 第三方组件
+--------------
+MaaFramework — https://github.com/MaaXYZ/MaaFramework
+License: GNU Lesser General Public License v3.0 (LGPL-3.0)
+许可证全文: licenses/LGPL-3.0.txt
+说明：本项目通过 Python 包 maafw 以动态库方式调用 MaaFramework，未修改其源码；
+      对应源码可直接从上述仓库获取。
+
+MaaFramework 文档 — docs/maafw_doc/
+License: LGPL-3.0（镜像自上游仓库，未修改）
+
+Android platform-tools（tools/adb/）
+License: Apache License 2.0
+许可证全文: licenses/Apache-2.0.txt
+来源: https://developer.android.com/tools/releases/platform-tools
+
+
+4. 游戏素材（不在任何开源许可证范围内）
+----------------------------------------
+resource/base/image/ 与 table/*.json 中包含游戏《诸神皇冠 / 百年骑士团》的界面截图
+模板与游戏数据整理。相关美术、文本与数据的著作权归游戏权利方所有，
+本项目不主张对其的任何权利，仅将其用于个人自动化场景中的界面识别。
+如需公开分发或商用，请自行评估并取得相应授权。
+
+
+5. 商标
+--------
+"MaaFramework"、"MAAGC" 等名称归各自权利人所有。本项目提及这些名称仅用于说明
+技术来源与衍生关系，不表示任何官方认可、赞助或关联。

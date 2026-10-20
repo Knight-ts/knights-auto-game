@@ -15,7 +15,7 @@
 | 项目 | 地址 | 许可证 | 用途 |
 |---|---|---|---|
 | MAAGC | <https://github.com/KhazixW2/MAAGC> | MIT | 原始项目：Agent、Pipeline、resource/base、table 数据 |
-| MaaFramework | <https://github.com/MaaXYZ/MaaFramework> | MIT（Copyright (c) MaaXYZ） | 自动化框架；`docs/maafw_doc/` 来自其文档 |
+| MaaFramework | <https://github.com/MaaXYZ/MaaFramework> | **LGPL-3.0**（Copyright (c) MaaXYZ） | 自动化框架，以动态库方式调用、未修改源码；`docs/maafw_doc/` 来自其文档 |
 | Android platform-tools | <https://developer.android.com/tools/releases/platform-tools> | Apache-2.0 | `tools/adb/` 下的 adb 与 DLL |
 
 ## 同步方式
@@ -28,7 +28,8 @@
 - `resource/base/image/` 为游戏《诸神皇冠 / 百年骑士团》的 UI 截图模板，`table/*.json` 为游戏数据整理；
   相关美术与数据版权归游戏权利方所有，本项目仅在私有仓库中用于个人自动化，**公开前需重新评估**。
 - `tools/adb/` 内的 adb 为 Android platform-tools（Apache-2.0），随仓库分发以固定调用路径。
+- 完整的第三方许可证清单与全文见 `NOTICE` 与 `licenses/` 目录。
 
 ## 与上游的关系（一句话）
 
-**Knights-web-windows 是 MAAGC（MIT）的网页版衍生重写，使用 MaaFramework（MIT）驱动，与上游无 Git 历史关系、非官方。**
+**Knights-web-windows 是 MAAGC（MIT）的网页版衍生重写，使用 MaaFramework（LGPL-3.0）驱动，与上游无 Git 历史关系、非官方。**

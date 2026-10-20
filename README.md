@@ -153,4 +153,4 @@ python tasks\CastleMarryTest\run.py --set 联姻方式=联姻
 
 ## 许可证
 
-MIT © 2026 Knights。部分实现参考了 MaaFramework（MIT，© MaaXYZ）与 MAAGC（MIT，KhazixW2），详见 [UPSTREAM.md](UPSTREAM.md) 与 [LICENSE](LICENSE)。
+MIT © 2026 Knights。部分实现源自 MAAGC（MIT，© MaaXYZ / KhazixW2）；运行时依赖 MaaFramework（**LGPL-3.0**，© MaaXYZ）与 Android platform-tools（Apache-2.0）。详见 [UPSTREAM.md](UPSTREAM.md)、[NOTICE](NOTICE) 与 [LICENSE](LICENSE)。
