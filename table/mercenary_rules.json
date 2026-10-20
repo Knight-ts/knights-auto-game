@@ -2,10 +2,10 @@
   "mode": "whitelist",
   "names": [],
   "name_roi": [
-    80,
-    300,
-    560,
-    420
+    40,
+    250,
+    640,
+    560
   ],
   "name_regex": "[一-龥·]{2,5}",
   "stopwords": [

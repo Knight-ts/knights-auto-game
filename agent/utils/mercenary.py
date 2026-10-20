@@ -22,8 +22,8 @@ PROBE_NODE = "Event_MercenaryDialogButton"
 CONFIRM_NODE = "Event_MercenaryJoinConfirm"
 CANCEL_NODE = "Event_MercenaryJoinCancel"
 
-BUTTON_ROI = [40, 480, 640, 700]
-BANNER_ROI = [40, 200, 640, 260]
+BUTTON_ROI = [20, 420, 680, 780]
+BANNER_ROI = [20, 180, 680, 300]
 
 CONFIRM_TEXTS = ["招募", "同意", "确认加入"]
 CANCEL_TEXTS = ["取消", "拒绝", "取消加入"]

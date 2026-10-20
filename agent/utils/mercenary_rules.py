@@ -19,7 +19,7 @@ PATH = ROOT / "table" / "mercenary_rules.json"
 DEFAULT = {
     "mode": "whitelist",
     "names": [],
-    "name_roi": [80, 300, 560, 420],
+    "name_roi": [40, 250, 640, 560],
     "name_regex": "[一-龥·]{2,5}",
     "stopwords": ["佣兵", "加入", "确定", "取消", "招募", "队伍", "想要", "你的", "成为", "伙伴"],
 }
