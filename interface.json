@@ -54,6 +54,7 @@
             "entry": "Auto_YearlyTask",
             "option": [
                 "开启5月城堡相亲",
+                "开启4月城堡相亲",
                 "开启3月启航节购买",
                 "开启好娃提醒",
                 "开启生娃自动起名",
@@ -61,6 +62,10 @@
                 "选择刷取任务国家",
                 "选择成长试炼难度",
                 "相亲模式",
+                "相亲范围",
+                "相亲种族",
+                "相亲爵位",
+                "相亲年龄",
                 "选择年度任务月份数",
                 "自定义任务黑名单"
             ],
@@ -265,6 +270,31 @@
                     "description": "关闭5月城堡相亲",
                     "pipeline_override": {
                         "Flag_EnableMarryTask": {
+                            "enabled": false
+                        }
+                    }
+                }
+            ],
+            "default_case": "Yes"
+        },
+        "开启4月城堡相亲": {
+            "type": "switch",
+            "description": "4月是否前往城堡-城堡主厅-联姻",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "description": "开启4月城堡相亲",
+                    "pipeline_override": {
+                        "Flag_EnableAprCastleMarry": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "description": "关闭4月城堡相亲",
+                    "pipeline_override": {
+                        "Flag_EnableAprCastleMarry": {
                             "enabled": false
                         }
                     }
@@ -697,7 +727,7 @@
         "相亲种族": {
             "type": "select",
             "description": "选择相亲种族，将会默认找到对应国家",
-            "default_case": "佩尔弗因王族",
+            "default_case": "高阶精灵",
             "cases": [
                 {
                     "name": "佩尔弗因王族",
@@ -816,6 +846,76 @@
                     "pipeline_override": {
                         "MarryRaceSelect": {
                             "expected": "瑞格王室"
+                        }
+                    }
+                }
+            ]
+        },
+        "相亲爵位": {
+            "type": "select",
+            "description": "优先选择哪个爵位的角色去相亲（默认公爵）",
+            "default_case": "公爵",
+            "cases": [
+                {
+                    "name": "公爵",
+                    "pipeline_override": {
+                        "MarryTitleSelect": {
+                            "expected": "公爵"
+                        }
+                    }
+                },
+                {
+                    "name": "侯爵",
+                    "pipeline_override": {
+                        "MarryTitleSelect": {
+                            "expected": "侯爵"
+                        }
+                    }
+                },
+                {
+                    "name": "伯爵",
+                    "pipeline_override": {
+                        "MarryTitleSelect": {
+                            "expected": "伯爵"
+                        }
+                    }
+                },
+                {
+                    "name": "不限",
+                    "pipeline_override": {
+                        "MarryTitleSelect": {
+                            "expected": "不限"
+                        }
+                    }
+                }
+            ]
+        },
+        "相亲年龄": {
+            "type": "select",
+            "description": "年龄偏好：较大=30~44岁，较小=18~29岁，不限=45岁以下",
+            "default_case": "年龄较大",
+            "cases": [
+                {
+                    "name": "年龄较大",
+                    "pipeline_override": {
+                        "MarryAgeSelect": {
+                            "expected": "older"
+                        }
+                    }
+                },
+                {
+                    "name": "年龄较小",
+                    "pipeline_override": {
+                        "MarryAgeSelect": {
+                            "expected": "younger"
+                        }
+                    }
+                },
+                {
+                    "name": "不限",
+                    "pipeline_override": {
+                        "MarryAgeSelect": {
+                            "expected": "any"
                         }
                     }
                 }

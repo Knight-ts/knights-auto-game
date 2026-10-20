@@ -296,7 +296,7 @@
     "CastleMarryJustThisReadName": {
         "recognition": "OCR",
         "expected": [
-            "确认向[\u4e00-\u9fa5]{1,5}发送"
+            "确认向[一-龥]{1,5}发送"
         ],
         "roi": [
             84,
@@ -433,6 +433,26 @@
         "recognition": "OCR",
         "expected": [
             "multi"
+        ],
+        "enabled": true
+    },
+    "MarryTitleSelect": {
+        "attach": {
+            "description": "相亲爵位偏好"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "公爵"
+        ],
+        "enabled": true
+    },
+    "MarryAgeSelect": {
+        "attach": {
+            "description": "相亲年龄偏好"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "older"
         ],
         "enabled": true
     }

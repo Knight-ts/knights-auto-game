@@ -99,6 +99,8 @@ class MarryProcessor(CustomAction):
         self._current_max_attempts = 5
         self._total_candidates = 0
         self._candidate_index = 0
+        self._target_title = "公爵"
+        self._age_pref = "older"
 
     def _load_blood_names(self) -> None:
         """
@@ -175,6 +177,8 @@ class MarryProcessor(CustomAction):
 
         # 获取并保存用户选择的模式
         self._mode = self._get_selected_mode(context)
+        self._target_title = self._get_selected_title(context)
+        self._age_pref = self._get_selected_age_pref(context)
 
         # 前处理：检查联姻资格
         candidates = self._pre_process(context)
@@ -197,6 +201,8 @@ class MarryProcessor(CustomAction):
 
         # 获取并保存用户选择的模式
         self._mode = self._get_selected_mode(context)
+        self._target_title = self._get_selected_title(context)
+        self._age_pref = self._get_selected_age_pref(context)
 
         # 检查联姻资格（界面进入、对象数量、回信数量）
         if not self._check_marriage_eligibility(context):
@@ -263,15 +269,39 @@ class MarryProcessor(CustomAction):
         race_data = context.get_node_data("MarryRaceSelect")
         if race_data is None:
             logger.warning("MarryRaceSelect 节点未定义，使用默认种族")
-            return "佩尔弗因王族"
+            return "高阶精灵"
 
         selected_race = (
             race_data.get("recognition", {})
             .get("param", {})
-            .get("expected", ["佩尔弗因王族"])[0]
+            .get("expected", ["高阶精灵"])[0]
         )
         logger.info(f"选择的联姻种族: {selected_race}")
         return selected_race
+
+    def _get_selected_title(self, context: Context) -> str:
+        """获取优先爵位（公爵/侯爵/伯爵/不限）。"""
+        data = context.get_node_data("MarryTitleSelect")
+        title = "公爵"
+        if data:
+            expected = data.get("recognition", {}).get("param", {}).get(
+                "expected", ["公爵"]
+            )
+            title = expected[0] if isinstance(expected, list) else expected
+        logger.info(f"优先爵位: {title}")
+        return title
+
+    def _get_selected_age_pref(self, context: Context) -> str:
+        """获取年龄偏好：older / younger / any。"""
+        data = context.get_node_data("MarryAgeSelect")
+        pref = "older"
+        if data:
+            expected = data.get("recognition", {}).get("param", {}).get(
+                "expected", ["older"]
+            )
+            pref = expected[0] if isinstance(expected, list) else expected
+        logger.info(f"年龄偏好: {pref}")
+        return pref
 
     def _get_selected_match_scope(self, context: Context) -> bool:
         """
@@ -308,6 +338,14 @@ class MarryProcessor(CustomAction):
 
         # 2. 寻找可相亲对象
         available_boxes = self._find_available_candidates(context)
+        if not available_boxes and getattr(self, "_target_title", "不限") != "不限":
+            logger.warning(
+                f"没有找到{self._target_title}爵位对象，放宽到全部爵位"
+            )
+            available_boxes = self._find_available_candidates(
+                context,
+                ["公爵", "侯爵", "伯爵", "子爵", "男爵", "骑士"],
+            )
         if not available_boxes:
             logger.info("未发现可相亲对象")
             return []
@@ -435,8 +473,17 @@ class MarryProcessor(CustomAction):
             logger.info("未识别到回信数量信息")
             return False
 
-    def _find_available_candidates(self, context: Context) -> list:
+    def _title_expected(self) -> list:
+        """按优先爵位生成 OCR expected；不限时匹配所有爵位。"""
+        if getattr(self, "_target_title", "不限") == "不限":
+            return ["公爵", "侯爵", "伯爵", "子爵", "男爵", "骑士"]
+        return [self._target_title]
+
+    def _find_available_candidates(
+        self, context: Context, title_expected: list | None = None
+    ) -> list:
         """扫描所有格子，找出可相亲的对象"""
+        expected = title_expected or self._title_expected()
         available_boxes = []
         img = context.tasker.controller.post_screencap().wait().get()
 
@@ -451,16 +498,18 @@ class MarryProcessor(CustomAction):
                     logger.debug(f"({row_idx + 1}, {col_idx + 1}) 正在相亲")
                     continue
 
-                # 检查是否有爵位（可相亲对象）
+                # 检查是否有目标爵位（可相亲对象）
                 if context.run_recognition(
                     "CastleMarryTitleCheck",
                     img,
-                    pipeline_override={"CastleMarryTitleCheck": {"roi": box}},
+                    pipeline_override={
+                        "CastleMarryTitleCheck": {"roi": box, "expected": expected}
+                    },
                 ).hit:
                     available_boxes.append((row_idx, col_idx, box))
                     logger.info(f"发现可相亲对象：({row_idx + 1}, {col_idx + 1})")
 
-        logger.info(f"可相亲队列大小：{len(available_boxes)}")
+        logger.info(f"可相亲队列大小：{len(available_boxes)}（爵位：{expected}）")
         return available_boxes
 
     # ==================== 正式处理阶段 ====================
@@ -565,8 +614,16 @@ class MarryProcessor(CustomAction):
                     logger.info(f"年龄 {age} 大于等于45岁，不考虑")
                     context.run_task("BackButton_500ms")
                     return False
-                else:
-                    logger.info(f"年龄 {age} 小于45岁，考虑")
+                pref = getattr(self, "_age_pref", "any")
+                if pref == "older" and age < 30:
+                    logger.info(f"年龄 {age} 小于30岁，不符合“年龄较大”偏好")
+                    context.run_task("BackButton_500ms")
+                    return False
+                if pref == "younger" and age >= 30:
+                    logger.info(f"年龄 {age} 大于等于30岁，不符合“年龄较小”偏好")
+                    context.run_task("BackButton_500ms")
+                    return False
+                logger.info(f"年龄 {age} 符合当前偏好({pref})")
         else:
             logger.info("未识别到年龄信息, 跳过")
 
@@ -791,6 +848,7 @@ class MarryProcessor(CustomAction):
                 )
                 # 橙色特征 = 直接接受
                 profile.has_orange_feature = True
+                self._alert_good_feature(context, facial_feature_node)
                 return True
             else:
                 logger.info(f"面部特征识别未命中")
@@ -798,11 +856,32 @@ class MarryProcessor(CustomAction):
             logger.info(f"当前种族 {self._current_race} 没有配置面部特征识别节点")
         return False
 
+    def _alert_good_feature(self, context: Context, node: str) -> None:
+        """相亲对象命中特殊特征时提示好娃（弹窗 + 平台推送）。"""
+        content = (
+            "相亲对象发现特殊特征！\n"
+            f"种族：{self._current_race}\n"
+            f"检测节点：{node}\n"
+            "建议手动确认是否联姻。"
+        )
+        try:
+            from utils.notifier import notify
+
+            notify("相亲发现好娃特征", content)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"相亲好娃推送失败：{exc}")
+        try:
+            context.run_task(
+                "UI_PopInform",
+                pipeline_override={"Node.Action.Succeeded": {"content": content}},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"相亲好娃弹窗失败：{exc}")
+
     def _get_facial_feature_node(self, race: str) -> str | None:
         """获取种族对应的面部特征识别节点"""
         mapping = {
-            "佩尔弗因王族": "佩尔面部特征_科内塔之怒",
-            "塞宁王族": "塞宁面部特征_太阳之子",
+            "佩尔弗因王族": "佩尔面部特征_科内塔之怒",            "塞宁王族": "塞宁面部特征_太阳之子",
             "高阶精灵": "精灵面部特征_专注之瞳",
             # 后续添加更多种族...
         }

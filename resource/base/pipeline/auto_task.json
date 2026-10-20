@@ -89,6 +89,9 @@
     "Flag_SmartMercenary": {
         "enabled": false
     },
+    "Flag_EnableAprCastleMarry": {
+        "enabled": false
+    },
     "Auto_WeddingTask": {
         "recognition": "DirectHit",
         "action": "Custom",

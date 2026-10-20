@@ -419,7 +419,8 @@ def handle_festival_by_month(context: Context, month: int) -> bool:
     festival_info = {
         2: "祈灵日，跳过",
         3: "启航节",
-        5: "春林节，执行相亲",
+        4: "城堡相亲（城堡主厅）",
+        5: "春林节，跳过（相亲已移到4月）",
         6: "铸魂节，跳过",
         8: "丰收节",
         10: "勇士节",
@@ -431,8 +432,11 @@ def handle_festival_by_month(context: Context, month: int) -> bool:
 
     if month == 3:
         return handle_sailing_festival(context)
+    elif month == 4:
+        return handle_marry_festival(context, month=4)
     elif month == 5:
-        return handle_marry_festival(context)
+        logger.info("春林节不再重复相亲（已改为4月城堡主厅）")
+        return True
     elif month == 8:
         return handle_harvest_festival(context)
     elif month == 10:
@@ -509,14 +513,20 @@ def handle_sailing_festival(context: Context) -> bool:
     return True
 
 
-def handle_marry_festival(context: Context) -> bool:
-    """处理春林节相亲（5月）"""
-    logger.info("处理春林节相亲")
+def handle_marry_festival(context: Context, month: int = 4) -> bool:
+    """处理城堡相亲（4月，城堡-城堡主厅-联姻）"""
+    logger.info(f"处理 {month} 月城堡主厅相亲")
 
-    # 检查是否开启了自动相亲
-    EnableMarryTask = context.get_node_data("Flag_EnableMarryTask").get("enabled")
+    # 4月优先读新开关，旧开关作为兼容回退
+    apr = context.get_node_data("Flag_EnableAprCastleMarry")
+    if apr is not None:
+        EnableMarryTask = bool(apr.get("enabled"))
+    else:
+        EnableMarryTask = bool(
+            (context.get_node_data("Flag_EnableMarryTask") or {}).get("enabled")
+        )
     if not EnableMarryTask:
-        logger.info("自动相亲已关闭，跳过")
+        logger.info("4月城堡相亲已关闭，跳过")
         return True
 
     # 执行相亲处理器自定义动作
