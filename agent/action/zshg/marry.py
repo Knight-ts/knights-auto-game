@@ -1247,6 +1247,9 @@ class WeddingProcessor(CustomAction):
             else:
                 logger.warning(f"未找到「{target_banquet}」档位按钮，继续尝试确认")
 
+        # 选完档位会弹「婚宴确认」；资源不够时先点快捷补齐的加号
+        self._handle_banquet_confirm(context)
+
         context.run_task("PopUpWindowConfirm")
         # 3.1 确认婚礼 点击四次确认
         time.sleep(2)
@@ -1279,6 +1282,73 @@ class WeddingProcessor(CustomAction):
         )
         status = getattr(result, "status", None)
         return bool(status is not None and getattr(status, "succeeded", False))
+
+    @staticmethod
+    def _task_ok(result) -> bool:
+        status = getattr(result, "status", None)
+        return bool(status is not None and getattr(status, "succeeded", False))
+
+    def _handle_banquet_confirm(self, context: Context) -> bool:
+        """处理「婚宴确认」弹窗：资源不足时先点「快捷补齐缺少资源」的加号。
+
+        规则（按游戏实际界面）：
+            - 弹窗只有一个加号 -> 点它
+            - 多个加号 -> 点最下面那个「快捷补齐缺少资源」的加号
+            - 点完加号会弹「市场供应充足…」购买提示，点确定用银币补齐
+            - 资源齐了再点婚宴确认的确定，婚礼才开始
+
+        Returns:
+            是否出现了婚宴确认弹窗
+        """
+        if not self._wait_node(context, "Wedding_BanquetConfirm", 6):
+            logger.info("没有出现婚宴确认弹窗，直接继续确认")
+            return False
+
+        logger.info("婚宴确认弹窗已出现")
+        for _ in range(8):
+            if context.tasker.stopping:
+                return True
+            img = context.tasker.controller.post_screencap().wait().get()
+
+            if context.run_recognition("Wedding_FillTip", img).hit:
+                logger.info("弹出「市场供应充足」提示，点确定用银币补齐")
+                context.run_task("PopUpWindowConfirm")
+                time.sleep(1.2)
+                continue
+
+            if not context.run_recognition("Wedding_BanquetConfirm", img).hit:
+                logger.info("婚宴确认弹窗已关闭，婚礼开始")
+                break
+
+            if context.run_recognition("Wedding_MissingResource", img).hit:
+                self._click_fill_plus(context)
+                time.sleep(1.5)
+            else:
+                logger.info("婚宴资源已齐，点婚宴确认的确定")
+                context.run_task("PopUpWindowConfirm")
+                time.sleep(1.5)
+        return True
+
+    def _wait_node(self, context: Context, node: str, times: int) -> bool:
+        """轮询等待某个识别节点命中。"""
+        for _ in range(times):
+            time.sleep(0.4)
+            img = context.tasker.controller.post_screencap().wait().get()
+            if context.run_recognition(node, img).hit:
+                return True
+        return False
+
+    def _click_fill_plus(self, context: Context) -> bool:
+        """点「快捷补齐缺少资源」的加号：优先最下面那个，其次唯一加号，最后固定坐标。"""
+        if self._task_ok(context.run_task("Wedding_FillPlus")):
+            logger.info("已点最下面的加号（快捷补齐）")
+            return True
+        if self._task_ok(context.run_task("Wedding_AnyPlus")):
+            logger.info("弹窗里只有一个加号，已点它")
+            return True
+        logger.warning("没找到加号，按固定坐标点快捷补齐（532, 868）")
+        context.tasker.controller.post_click(532, 868).wait()
+        return False
 
     def _compare_titles(self, left_title: str, right_title: str) -> str:
         """

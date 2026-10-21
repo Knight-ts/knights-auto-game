@@ -610,5 +610,94 @@
         "target": true,
         "post_delay": 800,
         "timeout": 2000
+    },
+    "Wedding_BanquetConfirm": {
+        "attach": {
+            "description": "婚宴确认弹窗（选完宴会档位后出现）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "婚宴确认"
+        ],
+        "roi": [
+            220,
+            440,
+            320,
+            110
+        ],
+        "timeout": 2000,
+        "enabled": true
+    },
+    "Wedding_MissingResource": {
+        "attach": {
+            "description": "婚宴确认弹窗底部「快捷补齐缺少资源」"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "快捷补齐"
+        ],
+        "roi": [
+            180,
+            820,
+            360,
+            90
+        ],
+        "timeout": 2000,
+        "enabled": true
+    },
+    "Wedding_FillTip": {
+        "attach": {
+            "description": "点加号后弹出的「市场供应充足…」购买提示"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "市场供应充足"
+        ],
+        "roi": [
+            60,
+            430,
+            610,
+            140
+        ],
+        "timeout": 2000,
+        "enabled": true
+    },
+    "Wedding_FillPlus": {
+        "attach": {
+            "description": "最下面的加号＝快捷补齐缺少资源（资源不足时点它）"
+        },
+        "recognition": "TemplateMatch",
+        "template": [
+            "Marry/plus.png"
+        ],
+        "roi": [
+            470,
+            830,
+            220,
+            110
+        ],
+        "threshold": 0.8,
+        "action": "Click",
+        "post_delay": 800,
+        "timeout": 2000
+    },
+    "Wedding_AnyPlus": {
+        "attach": {
+            "description": "婚宴确认弹窗里任意一个加号（只有一个加号时用）"
+        },
+        "recognition": "TemplateMatch",
+        "template": [
+            "Marry/plus.png"
+        ],
+        "roi": [
+            470,
+            440,
+            220,
+            500
+        ],
+        "threshold": 0.8,
+        "action": "Click",
+        "post_delay": 800,
+        "timeout": 2000
     }
 }
