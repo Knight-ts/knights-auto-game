@@ -544,9 +544,18 @@
     },
     "相亲种族": {
         "type": "select",
-        "description": "选择相亲种族，将会默认找到对应国家",
-        "default_case": "高阶精灵",
+        "description": "只和这个种族的候选人相亲：多角色模式下会跳过种族不符的候选人；单角色模式用它决定去哪个国家相亲。「不限」= 不按种族过滤（默认）。",
+        "default_case": "不限",
         "cases": [
+            {
+                "name": "不限",
+                "description": "不按种族过滤，候选人是哪个种族就用哪个国家",
+                "pipeline_override": {
+                    "MarryRaceSelect": {
+                        "expected": "不限"
+                    }
+                }
+            },
             {
                 "name": "佩尔弗因王族",
                 "pipeline_override": {
@@ -716,36 +725,39 @@
             }
         ]
     },
-    "相亲年龄": {
-        "type": "select",
-        "description": "年龄偏好（不限年龄；列表按年龄从大到小，年龄越大越优先）",
-        "default_case": "年龄较大",
-        "cases": [
+    "相亲年龄区间": {
+        "type": "input",
+        "description": "只和这个年龄段的候选人相亲（0 或留空 = 该侧不限）。例：小于 60 岁 → 最小 0 / 最大 60；60~120 岁 → 最小 60 / 最大 120；大于 120 岁 → 最小 120 / 最大 0。",
+        "inputs": [
             {
-                "name": "年龄较大",
-                "pipeline_override": {
-                    "MarryAgeSelect": {
-                        "expected": "older"
-                    }
-                }
+                "name": "最小年龄",
+                "description": "年龄下限，0 = 不限",
+                "default": "0",
+                "pipeline_type": "string",
+                "verify": "^[0-9]*$",
+                "pattern_msg": "只能填数字，0 或留空表示不限"
             },
             {
-                "name": "年龄较小",
-                "pipeline_override": {
-                    "MarryAgeSelect": {
-                        "expected": "younger"
-                    }
-                }
-            },
-            {
-                "name": "不限",
-                "pipeline_override": {
-                    "MarryAgeSelect": {
-                        "expected": "any"
-                    }
-                }
+                "name": "最大年龄",
+                "description": "年龄上限，0 = 不限",
+                "default": "0",
+                "pipeline_type": "string",
+                "verify": "^[0-9]*$",
+                "pattern_msg": "只能填数字，0 或留空表示不限"
             }
-        ]
+        ],
+        "pipeline_override": {
+            "MarryAgeMin": {
+                "expected": [
+                    "{最小年龄}"
+                ]
+            },
+            "MarryAgeMax": {
+                "expected": [
+                    "{最大年龄}"
+                ]
+            }
+        }
     },
     "联姻方式": {
         "type": "select",

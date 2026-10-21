@@ -100,7 +100,9 @@ class MarryProcessor(CustomAction):
         self._total_candidates = 0
         self._candidate_index = 0
         self._target_title = "公爵"
-        self._age_pref = "older"
+        self._age_min = 0  # 年龄下限，0 = 不限
+        self._age_max = 0  # 年龄上限，0 = 不限
+        self._target_race_option = "不限"  # 「相亲种族」选项，不限 = 不按种族过滤
         self._feature_mode = "orange"
         self._reject_gold_mode = "giveup"  # 被拒处理：giveup 放弃 / keep 花金币挽留
 
@@ -180,7 +182,8 @@ class MarryProcessor(CustomAction):
         # 获取并保存用户选择的模式
         self._mode = self._get_selected_mode(context)
         self._target_title = self._get_selected_title(context)
-        self._age_pref = self._get_selected_age_pref(context)
+        self._age_min, self._age_max = self._get_selected_age_range(context)
+        self._target_race_option = self._get_selected_race(context)
         self._feature_mode = self._get_selected_feature_mode(context)
         self._reject_gold_mode = self._get_selected_reject_mode(context)
 
@@ -206,7 +209,8 @@ class MarryProcessor(CustomAction):
         # 获取并保存用户选择的模式
         self._mode = self._get_selected_mode(context)
         self._target_title = self._get_selected_title(context)
-        self._age_pref = self._get_selected_age_pref(context)
+        self._age_min, self._age_max = self._get_selected_age_range(context)
+        self._target_race_option = self._get_selected_race(context)
         self._feature_mode = self._get_selected_feature_mode(context)
         self._reject_gold_mode = self._get_selected_reject_mode(context)
 
@@ -217,8 +221,11 @@ class MarryProcessor(CustomAction):
         # 正式处理阶段
         self._current_max_attempts = self._objects_count
 
-        # 获取用户选择的相亲种族
-        self._target_race = self._get_selected_race(context)
+        # 获取用户选择的相亲种族（单角色模式必须指定种族；「不限」按高阶精灵处理）
+        self._target_race = self._target_race_option
+        if self._target_race == "不限":
+            logger.warning("单角色相亲必须指定种族，「不限」按高阶精灵处理")
+            self._target_race = "高阶精灵"
         self._target_country = self.race_country_mapping.get(self._target_race, "未知")
         self._current_race = self._target_race  # 用于面部特征识别
 
@@ -300,17 +307,51 @@ class MarryProcessor(CustomAction):
         logger.info(f"优先爵位: {title}")
         return title
 
-    def _get_selected_age_pref(self, context: Context) -> str:
-        """获取年龄偏好：older / younger / any。"""
-        data = context.get_node_data("MarryAgeSelect")
-        pref = "older"
-        if data:
+    def _get_selected_age_range(self, context: Context) -> tuple:
+        """获取年龄区间 (最小, 最大)，0 表示不限。"""
+
+        def _value(node: str) -> int:
+            data = context.get_node_data(node)
+            if not data:
+                return 0
             expected = data.get("recognition", {}).get("param", {}).get(
-                "expected", ["older"]
+                "expected", ["0"]
             )
-            pref = expected[0] if isinstance(expected, list) else expected
-        logger.info(f"年龄偏好: {pref}")
-        return pref
+            raw = expected[0] if isinstance(expected, list) and expected else expected
+            try:
+                return max(0, int(str(raw).strip() or 0))
+            except (TypeError, ValueError):
+                return 0
+
+        age_min = _value("MarryAgeMin")
+        age_max = _value("MarryAgeMax")
+        if age_min and age_max and age_min > age_max:
+            logger.warning(f"年龄区间下限 {age_min} > 上限 {age_max}，已自动交换")
+            age_min, age_max = age_max, age_min
+        logger.info(
+            "年龄区间: "
+            + (
+                "不限"
+                if not age_min and not age_max
+                else f"{age_min or '不限'} ~ {age_max or '不限'}"
+            )
+        )
+        return age_min, age_max
+
+    def _age_matches(self, age: int) -> bool:
+        """年龄是否落在用户设定的区间内（0 表示该侧不限）。"""
+        if self._age_min and age < self._age_min:
+            return False
+        if self._age_max and age > self._age_max:
+            return False
+        return True
+
+    def _race_matches(self, target_race: str) -> bool:
+        """候选人种族是否命中「相亲种族」选项（不限 = 全收）。"""
+        wanted = getattr(self, "_target_race_option", "不限") or "不限"
+        if wanted == "不限":
+            return True
+        return target_race == wanted
 
     def _get_selected_feature_mode(self, context: Context) -> str:
         """目标特性：orange（只接受橙色特征）/ any（不要求）。"""
@@ -471,7 +512,7 @@ class MarryProcessor(CustomAction):
             ensure_filter_and_sort(
                 context,
                 getattr(self, "_target_title", "公爵"),
-                getattr(self, "_age_pref", "older"),
+                "older",
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"联姻筛选/排序失败：{exc}")
@@ -592,6 +633,13 @@ class MarryProcessor(CustomAction):
                     age_text = (
                         detail.best_result.text if detail.best_result is not None else ""
                     )
+                    match = re.search(r"\d+", age_text)
+                    age = int(match.group()) if match else None
+                    if age is not None and not self._age_matches(age):
+                        logger.debug(
+                            f"({row_idx + 1}, {col_idx + 1}) 年龄 {age} 不在区间，跳过"
+                        )
+                        continue
                     available_boxes.append((row_idx, col_idx, box))
                     logger.info(
                         f"发现可相亲对象：({row_idx + 1}, {col_idx + 1}) 年龄 {age_text}"
@@ -653,6 +701,15 @@ class MarryProcessor(CustomAction):
         # 3.3 提取血统信息并确定联姻目标
         target_race, target_country = self._evaluate_bloodline_and_get_target(context)
         self._current_race = target_race  # 记录当前种族，供后续面部特征识别使用
+
+        # 3.3.1 按「相亲种族」选项过滤：选了具体种族就只跟这个种族相亲
+        if not self._race_matches(target_race):
+            logger.info(
+                f"候选人种族 {target_race} 与「相亲种族」"
+                f"{self._target_race_option} 不符，跳过"
+            )
+            return
+
         if not target_country or target_country == "未知":
             logger.warning(f"未识别到联姻国家")
             return
@@ -710,21 +767,29 @@ class MarryProcessor(CustomAction):
         return False
 
     def _check_and_filter_by_age(self, context: Context) -> bool:
-        """记录年龄，不做过滤：不限年龄，列表按年龄从大到小，越大越优先。"""
-        RecoEmail = context.run_recognition(
+        """读年龄并按「相亲年龄区间」过滤：超出区间返回 False（跳过该候选人）。"""
+        rec = context.run_recognition(
             "CastleMarry_AgeCheck",
             context.tasker.controller.post_screencap().wait().get(),
         )
-        if not RecoEmail.hit:
-            logger.info("未识别到年龄信息，继续（不限年龄）")
+        if not rec.hit:
+            logger.info("未识别到年龄信息，按不限处理，继续")
             return True
 
-        age_text = RecoEmail.best_result.text
+        age_text = rec.best_result.text if rec.best_result is not None else ""
         match = re.search(r"\d+", age_text)
-        if match:
-            logger.info(f"年龄 {int(match.group())}（不限年龄，越大越优先）")
-        else:
-            logger.info(f"年龄文本无法解析：{age_text}（不限年龄）")
+        if not match:
+            logger.info(f"年龄文本无法解析：{age_text}，按不限处理")
+            return True
+
+        age = int(match.group())
+        if not self._age_matches(age):
+            logger.info(
+                f"年龄 {age} 不在区间 "
+                f"{self._age_min or '不限'}~{self._age_max or '不限'}，跳过该候选人"
+            )
+            return False
+        logger.info(f"年龄 {age} 符合区间，继续")
         return True
 
     def _evaluate_bloodline_and_get_target(self, context: Context) -> tuple:

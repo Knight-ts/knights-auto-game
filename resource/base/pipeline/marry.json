@@ -446,14 +446,38 @@
         ],
         "enabled": true
     },
-    "MarryAgeSelect": {
+    "MarryAgeMin": {
         "attach": {
-            "description": "相亲年龄偏好"
+            "description": "相亲年龄下限（0 = 不限）"
         },
         "recognition": "OCR",
         "expected": [
-            "older"
+            "0"
         ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "MarryAgeMax": {
+        "attach": {
+            "description": "相亲年龄上限（0 = 不限）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "0"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
         "enabled": true
     },
     "CastleMarryUITitle": {
