@@ -122,6 +122,34 @@
         "post_delay": 500,
         "timeout": 3000
     },
+    "Auto_MercenaryJoinEvent": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "MercenaryJoinTask",
+        "post_delay": 500,
+        "timeout": 60000
+    },
+    "Auto_MercenaryBabyEvent": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "MercenaryBabyTask",
+        "post_delay": 500,
+        "timeout": 120000
+    },
+    "Auto_ConfessionFailEvent": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "ConfessionFailTask",
+        "post_delay": 500,
+        "timeout": 30000
+    },
+    "Auto_SailingFestivalEvent": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "SailingFestivalTask",
+        "post_delay": 500,
+        "timeout": 120000
+    },
     "Auto_DailyTask": {
         "recognition": "DirectHit",
         "action": "Custom",

@@ -1,0 +1,15 @@
+{
+    "name": "事件：丰收节结算",
+    "entry": "Event_HarvestFestivalDealWith",
+    "option": [],
+    "description": "事件任务：停在丰收节事件页时运行 → 走 年末结算 / 预付 / 拜祭 处理链",
+    "doc": [
+        "### 事件：丰收节结算",
+        "",
+        "入口 `Event_HarvestFestivalDealWith` 的 `next` 依次尝试：回大地图 / 拜祭（`Event_HarvestFestivalWorship`）/ 年末结算（`Event_HarvestFestivalPrePay` → `AnnuaClosing`）/ 丰收节节点。",
+        "",
+        "**使用前：**停在丰收节事件页（或点开事件页）再启动。",
+        "",
+        "**注意：**8 月「丰收节」节日本身在 `handle_harvest_festival()` 里目前只有日志（空实现），这里处理的是地图上的丰收节事件。"
+    ]
+}

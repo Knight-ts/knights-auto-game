@@ -9,6 +9,16 @@
         "Auto_MarryTask",
         "CastleMarryTest",
         "Auto_WeddingTask",
+        "Event_ConfessionSuccess",
+        "Auto_ConfessionFailEvent",
+        "Auto_MercenaryJoinEvent",
+        "Auto_MercenaryBabyEvent",
+        "事件_孩子夭折了",
+        "Event_MercenarieRetire",
+        "Event_HarvestFestivalDealWith",
+        "Event_PirateRaid_Dispatch",
+        "PopUpWindowTip",
+        "Auto_SailingFestivalEvent",
         "AutoFight_Start"
     ]
 }

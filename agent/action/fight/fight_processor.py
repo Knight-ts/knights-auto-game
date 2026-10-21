@@ -358,64 +358,76 @@ def handle_confession_fail(context: Context) -> str:
     return "gaveup"
 
 
+def handle_mercenary_join(context: Context, screenshot=None) -> bool:
+    """佣兵加入事件：按「开启自动接受佣兵」选项接受 / 拒绝。"""
+    from utils.mercenary import dismiss_join, handle_join
+
+    img = screenshot
+    if img is None:
+        img = context.tasker.controller.post_screencap().wait().get()
+
+    smart = bool((context.get_node_data("Flag_SmartMercenary") or {}).get("enabled"))
+    if smart:
+        handle_join(context, img)
+        return True
+
+    join_data = context.get_node_data("Event_MercenaryJoin") or {}
+    accept = "Event_MercenaryJoinConfirm" in (join_data.get("next") or [])
+    dismiss_join(context, accept)
+    return True
+
+
+def handle_mercenary_baby(context: Context) -> bool:
+    """佣兵生娃事件：按「开启生娃自动起名」决定自动起名还是默认确认。"""
+    AutoNameChild = (context.get_node_data("Flag_AutoNameChild") or {}).get("enabled")
+    if not AutoNameChild:
+        logger.info("佣兵生娃自动起名已关闭，保留游戏默认名字")
+        context.run_task("Event_MercenaryBaby")
+        return True
+
+    from utils.baby_ocr import current_index
+
+    logger.info("佣兵生娃自动起名已开启，执行起名与好苗子检测")
+    done = False
+    for _ in range(3):
+        before = current_index(context)
+        context.run_task("Auto_PannelCheck")
+        remaining_img = context.tasker.controller.post_screencap().wait().get()
+        event_remaining = context.run_recognition("Event_MercenaryBaby", remaining_img).hit
+        if not event_remaining:
+            done = True
+            break
+        after = current_index(context, remaining_img)
+        if before and after and after != before:
+            logger.info(f"检测到新的孩子出生页（{before} → {after}），继续自动起名")
+            continue
+        logger.warning("自动起名未完成或出生页仍存在，回退到默认确认流程")
+        fallback_img = remaining_img
+        if not context.run_recognition("Event_MercenaryBaby", fallback_img).hit:
+            # ChildRec 失败后若详情页不再保留出生文案，有界返回一层。
+            context.run_task("BackButton_500ms")
+            fallback_img = context.tasker.controller.post_screencap().wait().get()
+        if context.run_recognition("Event_MercenaryBaby", fallback_img).hit:
+            fallback_result = context.run_task("Event_MercenaryBaby")
+            if not fight_utils._task_succeeded(fallback_result):
+                logger.error("佣兵生娃默认确认流程执行失败")
+        done = True
+        break
+    if not done:
+        logger.warning("连续多个孩子未能全部自动起名，回退到默认确认")
+        context.run_task("Event_MercenaryBaby")
+    return True
+
+
 def detect_and_manage_event(context: Context, screenshot) -> str:
     """检测事件类型"""
     if context.run_recognition("Event_MercenaryJoin", screenshot).hit:
         logger.info("检测到佣兵加入事件")
-        from utils.mercenary import dismiss_join, handle_join
-
-        smart = bool((context.get_node_data("Flag_SmartMercenary") or {}).get("enabled"))
-        if smart:
-            handle_join(context, screenshot)
-        else:
-            join_data = context.get_node_data("Event_MercenaryJoin") or {}
-            accept = "Event_MercenaryJoinConfirm" in (join_data.get("next") or [])
-            dismiss_join(context, accept)
+        handle_mercenary_join(context, screenshot)
         return "mercenary_join"
     elif context.run_recognition("Event_MercenaryBaby", screenshot).hit:
         logger.info("检测到佣兵生娃事件")
-        AutoNameChild = context.get_node_data("Flag_AutoNameChild").get("enabled")
-        if AutoNameChild:
-            from utils.baby_ocr import current_index
-
-            logger.info("佣兵生娃自动起名已开启，执行起名与好苗子检测")
-            done = False
-            for _ in range(3):
-                before = current_index(context)
-                auto_result = context.run_task("Auto_PannelCheck")
-                remaining_img = context.tasker.controller.post_screencap().wait().get()
-                event_remaining = context.run_recognition(
-                    "Event_MercenaryBaby", remaining_img
-                ).hit
-                if not event_remaining:
-                    done = True
-                    break
-                after = current_index(context, remaining_img)
-                if before and after and after != before:
-                    logger.info(
-                        f"检测到新的孩子出生页（{before} → {after}），继续自动起名"
-                    )
-                    continue
-                logger.warning("自动起名未完成或出生页仍存在，回退到默认确认流程")
-                fallback_img = remaining_img
-                if not context.run_recognition(
-                    "Event_MercenaryBaby", fallback_img
-                ).hit:
-                    # ChildRec 失败后若详情页不再保留出生文案，有界返回一层。
-                    context.run_task("BackButton_500ms")
-                    fallback_img = context.tasker.controller.post_screencap().wait().get()
-                if context.run_recognition("Event_MercenaryBaby", fallback_img).hit:
-                    fallback_result = context.run_task("Event_MercenaryBaby")
-                    if not fight_utils._task_succeeded(fallback_result):
-                        logger.error("佣兵生娃默认确认流程执行失败")
-                done = True
-                break
-            if not done:
-                logger.warning("连续多个孩子未能全部自动起名，回退到默认确认")
-                context.run_task("Event_MercenaryBaby")
-        else:
-            logger.info("佣兵生娃自动起名已关闭，保留游戏默认名字")
-            context.run_task("Event_MercenaryBaby")
+        handle_mercenary_baby(context)
         return "mercenary_baby"
     elif context.run_recognition("事件_孩子夭折了", screenshot).hit:
         logger.info("检测到孩子夭折事件")
@@ -797,3 +809,71 @@ class YearlyTaskProcessor(CustomAction):
 
         logger.info("年度任务处理完成")
         return CustomAction.RunResult(success=True)
+
+
+# ==================== 事件任务的单独入口 ====================
+# 这些 Custom Action 和事件扫描跑的是同一批处理函数，只是给任务列表一个入口，
+# 方便停在对应事件页面单独跑、单独调选项。
+
+
+@AgentServer.custom_action("MercenaryJoinTask")
+class MercenaryJoinTask(CustomAction):
+    """任务入口：佣兵加入事件（当前画面是加入弹窗时运行）。"""
+
+    def run(
+        self, context: Context, argv: CustomAction.RunArg
+    ) -> CustomAction.RunResult:
+        logger.info("任务入口：处理佣兵加入事件")
+        if not context.run_recognition(
+            "Event_MercenaryJoin",
+            context.tasker.controller.post_screencap().wait().get(),
+        ).hit:
+            logger.error("当前画面不是佣兵加入弹窗，任务入口要求先停在弹窗上")
+            return CustomAction.RunResult(success=False)
+        return CustomAction.RunResult(success=handle_mercenary_join(context))
+
+
+@AgentServer.custom_action("MercenaryBabyTask")
+class MercenaryBabyTask(CustomAction):
+    """任务入口：佣兵生娃事件（当前画面是孩子出生页时运行）。"""
+
+    def run(
+        self, context: Context, argv: CustomAction.RunArg
+    ) -> CustomAction.RunResult:
+        logger.info("任务入口：处理佣兵生娃事件")
+        if not context.run_recognition(
+            "Event_MercenaryBaby",
+            context.tasker.controller.post_screencap().wait().get(),
+        ).hit:
+            logger.error("当前画面不是孩子出生页，任务入口要求先停在出生页上")
+            return CustomAction.RunResult(success=False)
+        return CustomAction.RunResult(success=handle_mercenary_baby(context))
+
+
+@AgentServer.custom_action("ConfessionFailTask")
+class ConfessionFailTask(CustomAction):
+    """任务入口：告白失败事件（当前画面是告白失败弹窗时运行）。"""
+
+    def run(
+        self, context: Context, argv: CustomAction.RunArg
+    ) -> CustomAction.RunResult:
+        logger.info("任务入口：处理告白失败事件")
+        if not context.run_recognition(
+            "Event_ConfessionFail",
+            context.tasker.controller.post_screencap().wait().get(),
+        ).hit:
+            logger.error("当前画面不是告白失败弹窗，任务入口要求先停在弹窗上")
+            return CustomAction.RunResult(success=False)
+        mode = handle_confession_fail(context)
+        return CustomAction.RunResult(success=mode in ("kept", "gaveup"))
+
+
+@AgentServer.custom_action("SailingFestivalTask")
+class SailingFestivalTask(CustomAction):
+    """任务入口：3 月启航节购买（开启「开启3月启航节购买」才执行）。"""
+
+    def run(
+        self, context: Context, argv: CustomAction.RunArg
+    ) -> CustomAction.RunResult:
+        logger.info("任务入口：处理启航节购买")
+        return CustomAction.RunResult(success=handle_sailing_festival(context))

@@ -1,0 +1,13 @@
+{
+    "name": "事件：佣兵退休",
+    "entry": "Event_MercenarieRetire",
+    "option": [],
+    "description": "事件任务：停在佣兵退休弹窗时运行 → 同意退休并发放退休金",
+    "doc": [
+        "### 事件：佣兵退休",
+        "",
+        "节点链：`Event_MercenarieRetire` → `_Agree`（同意）→ `_Finish`（发放退休金）→ `_Finish_Confirm`（确定）。",
+        "",
+        "**使用前：**停在「我觉得累了…」退休弹窗上再启动。"
+    ]
+}
