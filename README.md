@@ -17,6 +17,7 @@
 - **孩子记录**：查看 table/child_records.xlsx 对应记录，可标记已招募
 - **佣兵记录**：智能接受佣兵（按名字白/黑名单）、记录佣兵名字与游戏年月
 - **通知**：飞书 / 通用 JSON 推送配置与测试发送
+- **问题自纠**：报错时自动保存现场截图 + 日志尾巴，用户判断「保留 / 删除」，Harness 读 `debug/errors/REPORT.md` 复盘修改
 
 ## 环境
 
@@ -97,13 +98,44 @@ python tasks\CastleMarryTest\run.py --set 联姻方式=联姻
 
 好娃提醒触发时，Agent 会写 `temp/child_alert.json` 标记，组合据此执行「好娃提醒」规则（默认停止并提示手动处理）。原来的整月推年流程保留为任务模块 **月度循环（原推年计划）**，可以直接放进组合里，也可以单独运行。
 
+## 问题自纠（报错截图）
+
+任务失败、任务异常、Agent 抛异常 / 启动失败 / 意外退出、接口 500、页面脚本报错，都会在**报错那一刻**抓一张设备截图，连同任务名、错误文字、最近日志一起存到 `debug/errors/`：
+
+```
+debug/errors/
+  index.json                 全部记录（状态 / 错误 / 备注 / 截图路径）
+  REPORT.md                  自动生成的复盘报告
+  snapshots/<id>/            screen.png + meta.json + logs.txt
+  trash/<id>/                用户删除的记录（可恢复，按设置自动清理）
+```
+
+网页「问题自纠」页：
+
+- 左侧列表看缩略图、来源、时间和错误摘要；右侧看完整截图、错误、日志；
+- 每条可以标 **保留**（值得修）/ **待判定** / **删除**（进回收站），也可以写备注说明哪里不对；
+- 「立即抓取当前画面」可手动存一张；「设置」里调条数、体积、保留天数、去重窗口；
+- 自动规则：默认最多 200 条 / 400 MB，待判定 7 天后进回收站、回收站 3 天后彻底删除；超限时只丢最旧的待判定 / 回收站记录，**永远不动已保留的**；
+- 设置存在 `config/webapp.json` 的 `selfheal` 节，可关掉自动截图。
+
+给 DeepSeek Harness 的入口（不需要开网页）：
+
+```bat
+python tools\selfheal.py list --status kept --json   :: 只看用户确认有价值的（含 image_path）
+python tools\selfheal.py show <id>                   :: 错误 + 日志 + 截图路径
+python tools\selfheal.py keep <id> --note "第 3 步识别不到按钮"
+python tools\selfheal.py report                      :: 打印 REPORT.md
+```
+
+约定：**保留** = 用户确认值得修，优先据此改代码；**待判定** = 还没看；**已删除** = 用户认为没价值，不要据此修复。
+
 ## 配置
 
 - interface.json：任务列表与选项（由 `tasks/` 重建，网页版任务页直接读取）
 - tasks/：任务的源文件；改完运行 `build` 再重启 Knights Auto Game 生效
 - table/child_alert_conditions.json：好娃提醒条件（也可在网页“好娃提醒”页编辑）
 - table/notify_config.json：平台推送；默认关闭，webhook 留空时复用 config/config.json 的飞书地址
-- config/webapp.json：上次设备 / 任务 / 选项（自动生成，不要提交）
+- config/webapp.json：上次设备 / 任务 / 选项、问题自纠设置（`selfheal` 节，自动生成，不要提交）
 
 ## 好娃提醒怎么配组合
 

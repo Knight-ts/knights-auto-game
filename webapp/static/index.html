@@ -22,6 +22,7 @@
     <button data-tab="combos">推年计划</button>
     <button data-tab="shot">截图</button>
     <button data-tab="logs">日志</button>
+    <button data-tab="selfheal">问题自纠</button>
     <button data-tab="alerts">好娃提醒</button>
     <button data-tab="records">孩子记录</button>
     <button data-tab="mercs">佣兵记录</button>
@@ -200,6 +201,87 @@
     </div>
     <div class="card" style="margin-top:14px">
       <pre id="logView" style="max-height:calc(100vh - 250px)"></pre>
+    </div>
+  </section>
+
+  <!-- 问题自纠 -->
+  <section id="tab-selfheal" class="hidden">
+    <div class="card">
+      <div class="row">
+        <button class="btn primary" id="btnSelfhealCapture">立即抓取当前画面</button>
+        <button class="btn" id="btnSelfhealReload">刷新</button>
+        <select id="selfhealFilter">
+          <option value="all">全部</option>
+          <option value="pending">待判定</option>
+          <option value="kept">已保留</option>
+          <option value="deleted">已删除</option>
+        </select>
+        <label class="row" style="gap:6px"><input type="checkbox" id="selfhealAuto" checked> 自动保存报错截图</label>
+        <span class="hint" id="selfhealHint">读取中…</span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <span class="hint">保留 = 这张值得修；待判定 = 还没看；删除 = 进回收站。Harness 读 debug/errors/REPORT.md 按保留项改代码。</span>
+        <span style="flex:1"></span>
+        <button class="btn" id="btnSelfhealReport">导出报告</button>
+        <button class="btn" id="btnSelfhealCleanup">清理过期</button>
+        <button class="btn danger" id="btnSelfhealPurgeDeleted">彻底删除回收站</button>
+      </div>
+      <div id="selfhealSettings" class="sh-settings" hidden>
+        <label class="field">最多条数
+          <input type="number" id="shMaxItems" min="10" max="5000" title="超过后自动丢最旧的待判定记录">
+        </label>
+        <label class="field">最大占用（MB）
+          <input type="number" id="shMaxMB" min="10" max="10000" title="超过后按体积自动清理">
+        </label>
+        <label class="field">待判定保留（天）
+          <input type="number" id="shPendingDays" min="0" max="365" title="0 = 不自动清理">
+        </label>
+        <label class="field">回收站保留（天）
+          <input type="number" id="shTrashDays" min="0" max="365" title="0 = 不自动清理，只能手动彻底删除">
+        </label>
+        <label class="field">同类去重（秒）
+          <input type="number" id="shDedupeSeconds" min="0" max="600" title="同一类报错在这个时间内只存一张">
+        </label>
+        <button class="btn primary" id="btnSelfhealSaveConfig">保存设置</button>
+      </div>
+    </div>
+
+    <div class="selfheal-layout" style="margin-top:14px">
+      <div class="card">
+        <div class="row">
+          <h3 style="margin:0">报错列表</h3>
+          <span class="hint" id="selfhealCount"></span>
+          <span style="flex:1"></span>
+          <button class="btn small" id="btnSelfhealSettings">设置</button>
+        </div>
+        <div id="selfhealList" class="selfheal-list"></div>
+      </div>
+      <div class="card selfheal-detail">
+        <div class="row">
+          <div class="big" id="shTitle">选择一条报错</div>
+          <span class="sh-badge" id="shStatus"></span>
+          <span style="flex:1"></span>
+          <button class="btn" id="btnShKeep">保留</button>
+          <button class="btn" id="btnShPending">待判定</button>
+          <button class="btn danger" id="btnShDelete">删除</button>
+          <button class="btn danger" id="btnShPurge">彻底删除</button>
+        </div>
+        <div class="sh-meta" id="shMeta"></div>
+        <pre id="shError" style="display:none;max-height:180px;margin-top:10px"></pre>
+        <div class="sh-image-wrap" id="shImageWrap" style="display:none">
+          <a id="shImageLink" target="_blank" rel="noreferrer"><img id="shImage" alt="报错截图"></a>
+        </div>
+        <div id="shNoImage" class="hint" style="margin-top:10px;display:none">这条没有截图（采集时设备未连接）</div>
+        <label class="field" style="margin-top:12px">备注（给 Harness 的说明，例如“第 3 步识别不到按钮”）
+          <textarea id="shNote" placeholder="可选"></textarea>
+        </label>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="btnShSaveNote">保存备注</button>
+          <span class="hint" id="shSaved"></span>
+        </div>
+        <h3 style="margin-top:16px">最近日志</h3>
+        <pre id="shLogs" style="max-height:260px">—</pre>
+      </div>
     </div>
   </section>
 

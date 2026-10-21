@@ -65,6 +65,7 @@ class Runtime:
         self.last_error = ""
         self.history: deque[dict] = deque(maxlen=50)
         self.history_sink = None
+        self.error_sink = None
 
     # ------------------------------------------------------------ 日志
 
@@ -274,6 +275,50 @@ class Runtime:
             raise RuntimeError("截图编码失败")
         return buffer.tobytes()
 
+    # ------------------------------------------------------------ 报错现场
+
+    def capture_error(
+        self,
+        source: str,
+        title: str,
+        error: str = "",
+        *,
+        entry: str = "",
+        task_name: str | None = None,
+        state: str | None = None,
+        extra: dict | None = None,
+        dedupe_key: str | None = None,
+    ) -> None:
+        """把当前画面和上下文交给 error_sink（server 里接的是 webapp.selfheal.ErrorStore）。
+
+        截图失败不影响主流程：设备没连上时只存日志和错误文字。
+        """
+        sink = getattr(self, "error_sink", None)
+        if sink is None:
+            return
+        image = None
+        try:
+            if self.controller is not None:
+                image = self.screenshot()
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"报错截图失败：{exc}")
+        event = {
+            "source": source,
+            "title": title,
+            "error": error,
+            "entry": entry,
+            "task_name": self.task_name if task_name is None else task_name,
+            "state": self.task_state if state is None else state,
+            "logs": self.tail_logs(120),
+            "image": image,
+            "extra": extra or {},
+            "dedupe_key": dedupe_key,
+        }
+        try:
+            sink(event)
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"保存报错现场失败：{exc}")
+
     # ------------------------------------------------------------ Agent
 
     def start_agent(self) -> dict:
@@ -282,6 +327,16 @@ class Runtime:
                 return self.status()
             if self.resource is None:
                 raise RuntimeError("资源未加载，无法启动 Agent")
+
+            # 上一次启动失败可能留下半死的进程，先收掉再开新的
+            if self.agent_proc is not None and self.agent_proc.poll() is None:
+                try:
+                    self.agent_proc.terminate()
+                    self.agent_proc.wait(timeout=3)
+                except Exception:  # noqa: BLE001
+                    pass
+            self.agent_proc = None
+            self.agent = None
 
             identifier = "maagc" + "".join(
                 random.choices(string.ascii_letters + string.digits, k=6)
@@ -312,6 +367,7 @@ class Runtime:
 
             def pump() -> None:
                 assert proc.stdout is not None
+                trace: list[str] = []
                 for raw in iter(proc.stdout.readline, b""):
                     if not raw:
                         break
@@ -320,8 +376,26 @@ class Runtime:
                     except UnicodeDecodeError:
                         line = raw.decode("gbk", errors="replace")
                     line = ansi.sub("", line).rstrip()
-                    if line:
-                        self.log("[agent] " + line)
+                    if not line:
+                        continue
+                    self.log("[agent] " + line)
+
+                    # Agent 里抛异常时，把整段 Traceback 存成一条“问题现场”
+                    if "Traceback (most recent call last)" in line:
+                        trace = [line]
+                        continue
+                    if trace:
+                        trace.append(line)
+                        # Traceback 的最后一层（ValueError: ...）顶格，遇到就收尾
+                        if len(trace) >= 60 or not line[:1].isspace():
+                            self.capture_error(
+                                "agent",
+                                "Agent 异常",
+                                "\n".join(trace[-40:]),
+                                extra={"kind": "traceback"},
+                                dedupe_key="agent-traceback",
+                            )
+                            trace = []
 
             self.agent_lines = threading.Thread(target=pump, name="agent-stdout", daemon=True)
             self.agent_lines.start()
@@ -343,18 +417,50 @@ class Runtime:
             if not connected:
                 self.last_error = "Agent 连接失败"
                 self.log("Agent 连接失败")
+                self.capture_error(
+                    "agent",
+                    "Agent 启动失败",
+                    "60 秒内没有连上 Agent，进程可能已经崩溃",
+                    state="failed",
+                    extra={"returncode": proc.poll()},
+                    dedupe_key="agent-start",
+                )
+                self.agent = None
+                try:
+                    if proc.poll() is None:
+                        proc.terminate()
+                except Exception:  # noqa: BLE001
+                    pass
+                self.agent_proc = None
                 raise RuntimeError("Agent 连接失败")
             self.log("Agent 已连接")
+
+            def watch() -> None:
+                """Agent 进程非主动退出时留一张现场图。"""
+                code = proc.wait()
+                if self.agent is None or self.agent_proc is not proc:
+                    return  # 用户主动停止 / 重启，不算报错
+                self.log(f"Agent 进程退出，code={code}")
+                self.capture_error(
+                    "agent",
+                    f"Agent 进程退出（code={code}）",
+                    "Agent 进程意外退出，任务无法继续",
+                    extra={"returncode": code},
+                    dedupe_key="agent-exit",
+                )
+
+            threading.Thread(target=watch, name="agent-watch", daemon=True).start()
             return self.status()
 
     def stop_agent(self) -> None:
         with self.lock:
-            if self.agent:
+            agent = self.agent
+            self.agent = None  # 先置空，避免 watch 线程把“主动停止”当成崩溃
+            if agent:
                 try:
-                    self.agent.disconnect()
+                    agent.disconnect()
                 except Exception:  # noqa: BLE001
                     pass
-                self.agent = None
             if self.agent_proc and self.agent_proc.poll() is None:
                 try:
                     self.agent_proc.terminate()
@@ -396,14 +502,38 @@ class Runtime:
                 job.wait()
                 ok = job.succeeded
                 state = "done" if ok else "failed"
+                if not ok:
+                    error = "MaaFramework 返回失败：任务节点没有走完（多为识别超时或界面卡住）"
                 with self.lock:
                     self.task_state = state
+                if not ok:
+                    self.capture_error(
+                        "task",
+                        f"任务失败：{name or entry}",
+                        error,
+                        entry=entry,
+                        task_name=name or entry,
+                        extra={
+                            "override_nodes": len(override),
+                            "selection": selection or {},
+                        },
+                        dedupe_key=f"task|{entry}",
+                    )
                 self.log(f"任务结束：{self.task_name} → {'成功' if ok else '失败'}")
             except Exception as exc:  # noqa: BLE001
                 error = str(exc)
                 with self.lock:
                     self.task_state = "failed"
                     self.last_error = error
+                self.capture_error(
+                    "task",
+                    f"任务异常：{name or entry}",
+                    error,
+                    entry=entry,
+                    task_name=name or entry,
+                    extra={"selection": selection or {}},
+                    dedupe_key=f"task-exc|{entry}",
+                )
                 self.log(f"任务异常：{exc}")
             finally:
                 with self.lock:

@@ -22,6 +22,7 @@ python\python.exe webapp\server.py
 | 推年计划 | 任务组合：选模块、逐步改选项、排序、循环次数、简介、自动处理规则，命名保存（table/task_combos.json）并运行 |
 | 截图 | 设备实时画面（2 秒刷新、可下载） |
 | 日志 | 调度日志 + Agent stdout |
+| 问题自纠 | 报错现场：截图 + 错误 + 日志，标记保留/删除，生成 REPORT.md 给 Harness |
 | 好娃提醒 | 组合列表（点「详情」展开）+ 按种族分类的完整特性表，保存时同步条件表 / 检测节点 / 界面选项 |
 | 孩子记录 | 读取 table/child_records.xlsx 对应的记录，可标记已招募 |
 
@@ -29,8 +30,10 @@ python\python.exe webapp\server.py
 
 ```
 webapp/
-  runtime.py         连接、资源、Tasker、Agent、任务执行
+  runtime.py         连接、资源、Tasker、Agent、任务执行（失败时回调 error_sink）
   server.py          HTTP 服务与 JSON API（127.0.0.1）
+  selfheal.py        问题自纠：报错截图存储、保留/删除、REPORT.md
+  combos.py          任务组合
   static/index.html  页面骨架
   static/app.js      前端逻辑
   static/style.css   样式
@@ -70,6 +73,17 @@ webapp/
 | POST | `/api/combos/save` | `{combos}` 保存全部组合（table/task_combos.json） |
 | POST | `/api/combos/run` | `{combo}` 或 `{id}` 运行组合 |
 | POST | `/api/combos/stop` | 停止组合 |
+| GET | `/api/selfheal` | 报错列表 + 统计 + 配置（可选 `status=pending/kept/deleted`） |
+| GET | `/api/selfheal/detail?id=` | 单条详情（含日志尾巴与截图路径） |
+| GET | `/api/selfheal/image?id=` | 报错截图 PNG |
+| GET | `/api/selfheal/report` | `debug/errors/REPORT.md`（text/markdown，给 Harness） |
+| POST | `/api/selfheal/capture` | 手动抓一张现场 `{title?, note?}` |
+| POST | `/api/selfheal/frontend` | 页面脚本报错上报 `{title, message, stack, source, line, column, url}` |
+| POST | `/api/selfheal/mark` | `{id, status, note?}`，status=`pending/kept/deleted` |
+| POST | `/api/selfheal/note` | `{id, note}` 只改备注 |
+| POST | `/api/selfheal/purge` | `{id?}` 彻底删除单条 / 清空回收站 |
+| POST | `/api/selfheal/cleanup` | 立即按设置清理过期 / 超限记录 |
+| POST | `/api/selfheal/config` | 保存 `selfheal` 设置（条数 / 体积 / 天数 / 去重） |
 
 ## 页面补充
 

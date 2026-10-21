@@ -114,3 +114,40 @@ select.grade { width: 74px; } input.min { width: 92px; }
   padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--panel2); font-size: 13px;
 }
+
+/* 问题自纠 */
+.selfheal-layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 14px; }
+.selfheal-layout > .card { min-width: 0; }
+.selfheal-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px;
+                 max-height: calc(100vh - 300px); overflow: auto; padding-right: 2px; }
+.sh-item { display: flex; gap: 10px; padding: 8px; border: 1px solid var(--line);
+           border-radius: 10px; cursor: pointer; min-width: 0; }
+.sh-item:hover { background: var(--panel2); }
+.sh-item.active { border-color: var(--accent); background: var(--panel2); }
+.sh-thumb { width: 104px; height: 59px; flex: none; object-fit: cover;
+            border: 1px solid var(--line); border-radius: 6px; background: #0b0e13; }
+.sh-thumb-empty { display: flex; align-items: center; justify-content: center;
+                  color: var(--muted); font-size: 11px; }
+.sh-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.sh-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh-sub { font-size: 11px; color: var(--muted); }
+.sh-error { font-size: 11px; color: #c7a0a0; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; }
+.sh-badge { font-size: 11px; padding: 1px 8px; border-radius: 99px;
+            border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.sh-badge.pending { color: var(--warn); border-color: #5a4a1f; }
+.sh-badge.kept { color: var(--ok); border-color: #2f6b4f; }
+.sh-badge.deleted { color: var(--err); border-color: #7a3434; }
+.sh-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px;
+           color: var(--muted); margin-top: 8px; }
+.sh-image-wrap { background: #0b0e13; border: 1px solid var(--line); border-radius: 10px;
+                 padding: 8px; display: flex; justify-content: center; margin-top: 10px; }
+.sh-image-wrap img { max-width: 100%; max-height: 46vh; border-radius: 6px; }
+.sh-settings { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+               margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.sh-settings[hidden] { display: none; }
+.sh-settings .field { flex: 0 0 130px; }
+@media (max-width: 980px) {
+  .selfheal-layout { grid-template-columns: 1fr; }
+  .selfheal-list { max-height: 320px; }
+}

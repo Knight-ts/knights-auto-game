@@ -24,6 +24,7 @@ if str(ROOT_DIR) not in sys.path:
 from webapp.combos import ComboRunner, load as load_combos, normalize as normalize_combo
 from webapp.combos import save as save_combos, validate as validate_combos
 from webapp.runtime import ROOT, Runtime
+from webapp.selfheal import ErrorStore
 
 # 所有表/配置都用相对路径，统一到项目根目录
 os.chdir(ROOT)
@@ -71,6 +72,55 @@ def load_config() -> dict:
 def save_config(data: dict) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+# 问题自纠：报错现场（截图 + 日志尾巴）存到 debug/errors/，网页上可保留/删除
+selfheal = ErrorStore(ROOT, config_provider=load_config)
+runtime.error_sink = selfheal.capture_event
+
+
+def _capture_api_error(path: str, exc: Exception) -> None:
+    """接口 500 也留一张现场；放后台线程，别拖慢错误响应。"""
+    if path.startswith("/api/selfheal"):
+        return  # 自纠接口自己的错不再递归截图
+    message = str(exc)
+    # 设备没连 / 任务在跑这类“正常状态提示”不是 bug，别刷屏
+    expected = (
+        "设备未连接",
+        "Tasker 未就绪",
+        "Agent 未连接",
+        "已有任务在运行",
+        "资源未加载",
+        "资源加载失败",
+        "找不到任务",
+    )
+    if message.startswith(expected):
+        return
+
+    def run() -> None:
+        image = None
+        try:
+            if runtime.controller is not None:
+                image = runtime.screenshot()
+        except Exception:  # noqa: BLE001
+            image = None
+        try:
+            selfheal.capture(
+                source="api",
+                title=f"接口报错：{path}",
+                error=f"{type(exc).__name__}: {exc}",
+                image=image,
+                logs=runtime.tail_logs(80),
+                entry=path,
+                task_name=runtime.task_name,
+                state=runtime.task_state,
+                extra={"path": path},
+                dedupe_key=f"api|{path}|{exc}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    threading.Thread(target=run, name="selfheal-api", daemon=True).start()
 
 
 def combo_selection(entry: str) -> dict:
@@ -255,6 +305,36 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, taskpack.status())
             elif path == "/api/screenshot":
                 self._send(200, runtime.screenshot(), "image/png")
+            elif path == "/api/selfheal":
+                query = parse_qs(parsed.query)
+                status = (query.get("status") or ["all"])[0]
+                limit = int((query.get("limit") or ["300"])[0])
+                payload = selfheal.state(
+                    status=status if status in ("pending", "kept", "deleted") else None,
+                    limit=limit,
+                )
+                payload["ok"] = True
+                self._json(200, payload)
+            elif path == "/api/selfheal/detail":
+                sid = (parse_qs(parsed.query).get("id") or [""])[0]
+                record = selfheal.detail(sid)
+                if record is None:
+                    self._json(404, {"ok": False, "error": "没有这条记录"})
+                else:
+                    self._json(200, {"ok": True, **record})
+            elif path == "/api/selfheal/image":
+                sid = (parse_qs(parsed.query).get("id") or [""])[0]
+                data = selfheal.image_bytes(sid)
+                if data is None:
+                    self._json(404, {"ok": False, "error": "没有截图"})
+                else:
+                    self._send(200, data, "image/png")
+            elif path == "/api/selfheal/report":
+                self._send(
+                    200,
+                    selfheal.report().encode("utf-8"),
+                    "text/markdown; charset=utf-8",
+                )
             elif path == "/api/logs":
                 limit = int(parse_qs(parsed.query).get("limit", ["200"])[0])
                 self._json(200, {"logs": runtime.tail_logs(limit)})
@@ -292,6 +372,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "not found"})
         except Exception as exc:  # noqa: BLE001
             runtime.log(f"接口失败 {path}：{exc}")
+            _capture_api_error(path, exc)
             self._json(500, {"error": str(exc)})
 
     # ------------------------------------------------------------ POST
@@ -451,6 +532,107 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 reload_interface(result)
                 self._json(200, result)
+            elif path == "/api/selfheal/frontend":
+                message = str(payload.get("message") or "").strip()
+                if not message:
+                    self._json(400, {"ok": False, "error": "缺少 message"})
+                    return
+                image = None
+                try:
+                    image = runtime.screenshot()
+                except Exception:  # noqa: BLE001
+                    image = None
+                stack = str(payload.get("stack") or "")
+                url = str(payload.get("url") or "")
+                where = (
+                    f"{payload.get('source') or '页面'}:"
+                    f"{payload.get('line') or 0}:{payload.get('column') or 0}"
+                )
+                record = selfheal.capture(
+                    source="frontend",
+                    title=str(payload.get("title") or "页面脚本报错"),
+                    error="\n".join(part for part in (message, stack, where, url) if part),
+                    image=image,
+                    logs=runtime.tail_logs(60),
+                    entry=url,
+                    extra={
+                        "url": url,
+                        "line": payload.get("line"),
+                        "column": payload.get("column"),
+                    },
+                    dedupe_key=f"frontend|{message}|{where}",
+                )
+                self._json(200, {"ok": bool(record), "item": record, "hasImage": bool(image)})
+            elif path == "/api/selfheal/capture":
+                image = None
+                try:
+                    image = runtime.screenshot()
+                except Exception as exc:  # noqa: BLE001
+                    runtime.log(f"手动抓取现场截图失败：{exc}")
+                record = selfheal.capture(
+                    source="manual",
+                    title=payload.get("title") or "手动抓取现场",
+                    image=image,
+                    logs=runtime.tail_logs(120),
+                    task_name=runtime.task_name,
+                    state=runtime.task_state,
+                    note=payload.get("note") or "",
+                    force=True,
+                )
+                self._json(
+                    200,
+                    {
+                        "ok": bool(record),
+                        "item": record,
+                        "hasImage": bool(image),
+                        "stats": selfheal.stats(),
+                        "config": selfheal.config(),
+                    },
+                )
+            elif path == "/api/selfheal/mark":
+                sid = str(payload.get("id") or "")
+                status = str(payload.get("status") or "")
+                if status not in ("pending", "kept", "deleted"):
+                    self._json(400, {"ok": False, "error": "状态只能是 pending / kept / deleted"})
+                    return
+                record = selfheal.mark(sid, status, payload.get("note"))
+                if record is None:
+                    self._json(404, {"ok": False, "error": "没有这条记录"})
+                else:
+                    self._json(200, {"ok": True, "item": record, "stats": selfheal.stats()})
+            elif path == "/api/selfheal/note":
+                sid = str(payload.get("id") or "")
+                record = selfheal.note(sid, str(payload.get("note") or ""))
+                if record is None:
+                    self._json(404, {"ok": False, "error": "没有这条记录"})
+                else:
+                    self._json(200, {"ok": True, "item": record})
+            elif path == "/api/selfheal/purge":
+                sid = payload.get("id")
+                removed = selfheal.purge(str(sid) if sid else None)
+                self._json(200, {"ok": True, "removed": removed, "stats": selfheal.stats()})
+            elif path == "/api/selfheal/cleanup":
+                result = selfheal.cleanup()
+                self._json(200, {"ok": True, **result})
+            elif path == "/api/selfheal/config":
+                config = load_config()
+                section = config.get("selfheal")
+                if not isinstance(section, dict):
+                    section = {}
+                for key in (
+                    "enabled",
+                    "autoCapture",
+                    "maxItems",
+                    "maxMB",
+                    "pendingDays",
+                    "trashDays",
+                    "dedupeSeconds",
+                ):
+                    if key in payload:
+                        section[key] = payload[key]
+                config["selfheal"] = section
+                save_config(config)
+                self._json(200, {"ok": True, "config": selfheal.config()})
             elif path == "/api/combos/save":
                 incoming = payload.get("combos")
                 if not isinstance(incoming, list):
@@ -503,6 +685,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "not found"})
         except Exception as exc:  # noqa: BLE001
             runtime.log(f"接口失败 {path}：{exc}")
+            _capture_api_error(path, exc)
             self._json(500, {"error": str(exc)})
 
 

@@ -12,6 +12,7 @@ const state = {
   devices: [], selectedTask: 0, activeTab: "home", prefs: {}, prefsLoaded: false,
   combos: [], comboModules: [], comboSelections: {}, comboIndex: -1, comboRunning: null,
   comboOpenSteps: new Set(),
+  selfheal: { items: [], detail: null, selected: "", stats: {} },
 };
 const timers = {};
 let selectionTimer = null;
@@ -34,6 +35,44 @@ function post(path, payload) {
   });
 }
 
+/* 页面脚本报错也存一份现场，避免只在 F12 里一闪而过 */
+function reportFrontendError(payload) {
+  try {
+    fetch("/api/selfheal/frontend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  } catch (error) { /* 忽略 */ }
+}
+
+window.addEventListener("error", (event) => {
+  try {
+    if (!event.message) return;
+    reportFrontendError({
+      title: "页面脚本报错",
+      message: event.message,
+      source: event.filename || "",
+      line: event.lineno || 0,
+      column: event.colno || 0,
+      stack: event.error && event.error.stack ? event.error.stack : "",
+      url: location.href,
+    });
+  } catch (error) { /* 忽略 */ }
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  try {
+    const reason = event.reason;
+    reportFrontendError({
+      title: "页面未处理的 Promise 异常",
+      message: reason && reason.message ? reason.message : String(reason),
+      stack: reason && reason.stack ? reason.stack : "",
+      url: location.href,
+    });
+  } catch (error) { /* 忽略 */ }
+});
+
 function banner(kind, lines) {
   const el = $("banner");
   el.className = "banner " + kind;
@@ -47,15 +86,20 @@ function banner(kind, lines) {
 function switchTab(name) {
   state.activeTab = name;
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  ["home", "tasks", "combos", "shot", "logs", "alerts", "records", "mercs", "notify"].forEach((tab) => {
+  ["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "notify"].forEach((tab) => {
     $("tab-" + tab).classList.toggle("hidden", tab !== name);
   });
   clearInterval(timers.shot);
   clearInterval(timers.logs);
   clearInterval(timers.combos);
+  clearInterval(timers.selfheal);
   if (name === "shot") { refreshShot(); timers.shot = setInterval(() => { if ($("shotAuto").checked) refreshShot(); }, 2000); }
   if (name === "logs") { loadLogs(); timers.logs = setInterval(() => { if ($("logAuto").checked) loadLogs(); }, 1500); }
   if (name === "tasks") { loadTasks(); loadTaskpack(); }
+  if (name === "selfheal") {
+    loadSelfheal();
+    timers.selfheal = setInterval(() => { if (state.activeTab === "selfheal") loadSelfheal(true); }, 5000);
+  }
   if (name === "combos") {
     loadCombos();
     timers.combos = setInterval(pollComboStatus, 2000);
@@ -627,6 +671,248 @@ async function loadMercRecords() {
   }
 }
 
+/* ------------------------------------------------------------ 问题自纠 */
+
+const SELFHEAL_SOURCE = { task: "任务", agent: "Agent", api: "接口", manual: "手动", combo: "组合", frontend: "页面" };
+const SELFHEAL_STATUS = { pending: "待判定", kept: "已保留", deleted: "已删除" };
+
+async function loadSelfheal(silent) {
+  try {
+    const filter = $("selfhealFilter").value || "all";
+    const data = await api("/api/selfheal?status=" + encodeURIComponent(filter));
+    state.selfheal.items = data.items || [];
+    state.selfheal.stats = data.stats || {};
+    applySelfhealConfig(data.config || {});
+    renderSelfhealStats();
+    renderSelfhealList();
+    const ids = state.selfheal.items.map((item) => item.id);
+    if (!state.selfheal.selected && ids.length) {
+      await selectSelfheal(ids[0]);
+    } else if (state.selfheal.selected && !ids.includes(state.selfheal.selected) && !silent) {
+      state.selfheal.selected = "";
+      clearSelfhealDetail();
+      if (ids.length) await selectSelfheal(ids[0]);
+    }
+  } catch (error) {
+    if (!silent) banner("err", ["读取报错记录失败：" + error.message]);
+  }
+}
+
+function renderSelfhealStats() {
+  const stats = state.selfheal.stats || {};
+  $("selfhealHint").textContent =
+    `待判定 ${stats.pending || 0} · 保留 ${stats.kept || 0} · 已删除 ${stats.deleted || 0}` +
+    (stats.mb != null ? ` · 占用 ${stats.mb} MB` : "");
+  $("selfhealHint").title = stats.dir ? "目录：" + stats.dir : "";
+  $("selfhealCount").textContent = `${state.selfheal.items.length} 条`;
+}
+
+function renderSelfhealList() {
+  const box = $("selfhealList");
+  if (!box) return;
+  const items = state.selfheal.items;
+  box.innerHTML = items.length
+    ? items.map((item) => {
+        const thumb = item.image_url
+          ? `<img class="sh-thumb" src="${esc(item.image_url)}" alt="" loading="lazy">`
+          : '<div class="sh-thumb sh-thumb-empty">无图</div>';
+        const error = (item.error || "").split("\n")[0];
+        return `<div class="sh-item ${item.id === state.selfheal.selected ? "active" : ""}" data-id="${esc(item.id)}">
+          ${thumb}
+          <div class="sh-main">
+            <div class="sh-title" title="${esc(item.title)}">${esc(item.title)}</div>
+            <div class="sh-sub">${esc(item.created_at)} · ${esc(item.source_label || SELFHEAL_SOURCE[item.source] || item.source)}${item.note ? " · 有备注" : ""}</div>
+            ${error ? `<div class="sh-error" title="${esc(error)}">${esc(error)}</div>` : ""}
+            <span class="sh-badge ${esc(item.status)}">${esc(SELFHEAL_STATUS[item.status] || item.status)}</span>
+          </div>
+        </div>`;
+      }).join("")
+    : '<div class="empty">还没有报错记录。<br>任务失败、Agent 异常、接口报错时会自动抓图。</div>';
+}
+
+async function selectSelfheal(id) {
+  if (!id) return;
+  state.selfheal.selected = id;
+  renderSelfhealList();
+  try {
+    const detail = await api("/api/selfheal/detail?id=" + encodeURIComponent(id));
+    state.selfheal.detail = detail;
+    renderSelfhealDetail(detail);
+  } catch (error) {
+    banner("err", ["读取详情失败：" + error.message]);
+  }
+}
+
+function clearSelfhealDetail() {
+  state.selfheal.detail = null;
+  $("shTitle").textContent = "选择一条报错";
+  $("shStatus").className = "sh-badge";
+  $("shStatus").textContent = "";
+  $("shMeta").innerHTML = "";
+  $("shError").style.display = "none";
+  $("shImageWrap").style.display = "none";
+  $("shNoImage").style.display = "none";
+  $("shNote").value = "";
+  $("shLogs").textContent = "—";
+  ["btnShKeep", "btnShPending", "btnShDelete", "btnShPurge", "btnShSaveNote"].forEach((key) => {
+    $(key).disabled = true;
+  });
+}
+
+function renderSelfhealDetail(data) {
+  $("shTitle").textContent = data.title || "报错";
+  const badge = $("shStatus");
+  badge.className = "sh-badge " + data.status;
+  badge.textContent = SELFHEAL_STATUS[data.status] || data.status;
+  const meta = [
+    "时间：" + esc(data.created_at),
+    "来源：" + esc(data.source_label || SELFHEAL_SOURCE[data.source] || data.source),
+    data.task_name || data.entry ? "任务：" + esc(data.task_name || data.entry) : "",
+    data.state ? "状态：" + esc(data.state) : "",
+    data.path ? "路径：" + esc(data.path) : "",
+    data.width ? "尺寸：" + data.width + "×" + data.height : "",
+  ].filter(Boolean);
+  $("shMeta").innerHTML = meta.map((line) => `<span>${line}</span>`).join("");
+
+  const errorBox = $("shError");
+  errorBox.textContent = data.error || "";
+  errorBox.style.display = data.error ? "" : "none";
+
+  const image = $("shImage");
+  if (data.has_image && data.image_url) {
+    const src = data.image_url + "&t=" + Date.now();
+    image.src = src;
+    $("shImageLink").href = src;
+    $("shImageWrap").style.display = "";
+    $("shNoImage").style.display = "none";
+  } else {
+    image.removeAttribute("src");
+    $("shImageWrap").style.display = "none";
+    $("shNoImage").style.display = "";
+  }
+
+  $("shNote").value = data.note || "";
+  $("shSaved").textContent = "";
+  $("shLogs").textContent = data.log_text || "（没有日志）";
+  ["btnShKeep", "btnShPending", "btnShDelete", "btnShPurge", "btnShSaveNote"].forEach((key) => {
+    $(key).disabled = false;
+  });
+}
+
+async function markSelfheal(status) {
+  const detail = state.selfheal.detail;
+  if (!detail) { banner("err", ["先选择一条报错"]); return; }
+  try {
+    await post("/api/selfheal/mark", { id: detail.id, status, note: $("shNote").value });
+    banner("ok", ["已标记为：" + SELFHEAL_STATUS[status]]);
+    await loadSelfheal(true);
+    await selectSelfheal(detail.id);
+  } catch (error) {
+    banner("err", ["标记失败：" + error.message]);
+  }
+}
+
+async function saveSelfhealNote() {
+  const detail = state.selfheal.detail;
+  if (!detail) return;
+  try {
+    await post("/api/selfheal/note", { id: detail.id, note: $("shNote").value });
+    $("shSaved").textContent = "已保存 " + new Date().toLocaleTimeString();
+    await loadSelfheal(true);
+  } catch (error) {
+    banner("err", ["保存备注失败：" + error.message]);
+  }
+}
+
+async function purgeSelfheal() {
+  const detail = state.selfheal.detail;
+  if (!detail) return;
+  if (!confirm(`彻底删除「${detail.title}」？截图和记录都会消失，不能恢复。`)) return;
+  try {
+    await post("/api/selfheal/purge", { id: detail.id });
+    banner("ok", ["已彻底删除"]);
+    state.selfheal.selected = "";
+    state.selfheal.detail = null;
+    clearSelfhealDetail();
+    await loadSelfheal(true);
+  } catch (error) {
+    banner("err", ["删除失败：" + error.message]);
+  }
+}
+
+async function purgeSelfhealDeleted() {
+  if (!confirm("彻底删除回收站里的全部记录？此操作不能恢复。")) return;
+  try {
+    const data = await post("/api/selfheal/purge", {});
+    banner("ok", [`已彻底删除 ${data.removed || 0} 条`]);
+    state.selfheal.selected = "";
+    state.selfheal.detail = null;
+    clearSelfhealDetail();
+    await loadSelfheal();
+  } catch (error) {
+    banner("err", ["删除失败：" + error.message]);
+  }
+}
+
+async function cleanupSelfheal() {
+  try {
+    const data = await post("/api/selfheal/cleanup", {});
+    const parts = [`已彻底删除 ${data.removed || 0} 条`];
+    if (data.trashed) parts.push(`${data.trashed} 条进入回收站`);
+    banner("ok", [parts.join("，")]);
+    await loadSelfheal();
+  } catch (error) {
+    banner("err", ["清理失败：" + error.message]);
+  }
+}
+
+async function captureSelfheal() {
+  $("btnSelfhealCapture").disabled = true;
+  try {
+    const data = await post("/api/selfheal/capture", {});
+    if (!data.item) {
+      banner("err", ["没有保存：检查「自动保存报错截图」开关"]);
+      return;
+    }
+    banner("ok", ["已保存现场" + (data.hasImage ? "（含截图）" : "（设备未连接，只有日志）")]);
+    await loadSelfheal(true);
+    await selectSelfheal(data.item.id);
+  } catch (error) {
+    banner("err", ["抓取失败：" + error.message]);
+  } finally {
+    $("btnSelfhealCapture").disabled = false;
+  }
+}
+
+function applySelfhealConfig(config) {
+  if ($("selfhealSettings").contains(document.activeElement)) return;
+  $("selfhealAuto").checked = config.autoCapture !== false;
+  $("shMaxItems").value = config.maxItems ?? 200;
+  $("shMaxMB").value = config.maxMB ?? 400;
+  $("shPendingDays").value = config.pendingDays ?? 7;
+  $("shTrashDays").value = config.trashDays ?? 3;
+  $("shDedupeSeconds").value = config.dedupeSeconds ?? 15;
+}
+
+async function saveSelfhealConfig() {
+  const payload = {
+    autoCapture: $("selfhealAuto").checked,
+    maxItems: Number($("shMaxItems").value) || 200,
+    maxMB: Number($("shMaxMB").value) || 400,
+    pendingDays: Number($("shPendingDays").value) || 0,
+    trashDays: Number($("shTrashDays").value) || 0,
+    dedupeSeconds: Number($("shDedupeSeconds").value) || 0,
+  };
+  try {
+    const data = await post("/api/selfheal/config", payload);
+    applySelfhealConfig(data.config || {});
+    banner("ok", ["问题自纠设置已保存"]);
+    await loadSelfheal(true);
+  } catch (error) {
+    banner("err", ["保存设置失败：" + error.message]);
+  }
+}
+
 /* ------------------------------------------------------------ 事件绑定 */
 
 document.getElementById("tabs").addEventListener("click", (e) => {
@@ -662,6 +948,32 @@ $("btnMercSave").addEventListener("click", saveMercRules);
 $("btnMercReload").addEventListener("click", loadMercRecords);
 $("btnNotifySave").addEventListener("click", saveNotify);
 $("btnNotifyTest").addEventListener("click", testNotify);
+
+$("selfhealList").addEventListener("click", (e) => {
+  const item = e.target.closest(".sh-item[data-id]");
+  if (item) selectSelfheal(item.dataset.id);
+});
+$("selfhealFilter").addEventListener("change", () => {
+  state.selfheal.selected = "";
+  state.selfheal.detail = null;
+  clearSelfhealDetail();
+  loadSelfheal();
+});
+$("btnSelfhealReload").addEventListener("click", () => loadSelfheal());
+$("btnSelfhealCapture").addEventListener("click", captureSelfheal);
+$("btnSelfhealReport").addEventListener("click", () => window.open("/api/selfheal/report", "_blank"));
+$("btnSelfhealCleanup").addEventListener("click", cleanupSelfheal);
+$("btnSelfhealPurgeDeleted").addEventListener("click", purgeSelfhealDeleted);
+$("btnSelfhealSettings").addEventListener("click", () => {
+  $("selfhealSettings").hidden = !$("selfhealSettings").hidden;
+});
+$("btnSelfhealSaveConfig").addEventListener("click", saveSelfhealConfig);
+$("selfhealAuto").addEventListener("change", saveSelfhealConfig);
+$("btnShKeep").addEventListener("click", () => markSelfheal("kept"));
+$("btnShPending").addEventListener("click", () => markSelfheal("pending"));
+$("btnShDelete").addEventListener("click", () => markSelfheal("deleted"));
+$("btnShPurge").addEventListener("click", purgeSelfheal);
+$("btnShSaveNote").addEventListener("click", saveSelfhealNote);
 
 $("btnTaskpackCheck").addEventListener("click", () => runTaskpack("/api/taskpack/check"));
 $("btnTaskpackExport").addEventListener("click", () => {
@@ -1137,10 +1449,11 @@ async function stopCombo() {
 
 // 支持 #alerts 之类的深链接，方便直接打开某一页
 const startTab = (location.hash || "").replace(/^#/, "");
-if (["home", "tasks", "combos", "shot", "logs", "alerts", "records", "mercs", "notify"].includes(startTab)) {
+if (["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "notify"].includes(startTab)) {
   switchTab(startTab);
 }
 
 renderRuleSelects();
+clearSelfhealDetail();
 refreshState();
 setInterval(refreshState, 3000);
