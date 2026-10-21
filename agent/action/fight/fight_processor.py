@@ -446,6 +446,11 @@ def detect_and_manage_event(context: Context, screenshot) -> str:
         mode = handle_confession_fail(context)
         logger.info(f"告白失败处理：{'金币挽留' if mode == 'kept' else '放弃'}")
         return "confession_fail"
+    elif context.run_recognition("Event_WeddingPage", screenshot).hit:
+        # 告白成功那条链走完、或结婚后直接进婚礼页时，页面可能停在婚礼上没人处理
+        logger.info("检测到婚礼页面，交给 WeddingProcessor")
+        context.run_task("Auto_WeddingTask")
+        return "wedding"
     elif context.run_recognition("PopUpWindowTip", screenshot).hit:
         logger.info("检测到提示事件")
         context.run_task("PopUpWindowTip")

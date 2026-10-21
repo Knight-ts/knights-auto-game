@@ -810,20 +810,38 @@
                 }
             },
             {
-                "name": "乡村宴会",
-                "description": "无论爵位都用最高档的乡村宴会",
+                "name": "秘密婚礼",
+                "description": "固定用秘密婚礼（最贵的一档，会扣绿币/金币）",
                 "pipeline_override": {
                     "MarryBanquetSelect": {
-                        "expected": "乡村宴会"
+                        "expected": "秘密婚礼"
+                    }
+                }
+            },
+            {
+                "name": "简约聚会",
+                "description": "固定用简约聚会",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "简约聚会"
                     }
                 }
             },
             {
                 "name": "祝福婚宴",
-                "description": "无论爵位都用祝福婚宴",
+                "description": "固定用祝福婚宴",
                 "pipeline_override": {
                     "MarryBanquetSelect": {
                         "expected": "祝福婚宴"
+                    }
+                }
+            },
+            {
+                "name": "乡村宴会",
+                "description": "固定用乡村宴会（列表最下面一档，可能需要下滑）",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "乡村宴会"
                     }
                 }
             }
