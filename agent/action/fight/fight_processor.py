@@ -315,6 +315,49 @@ def _ensure_at_target_city(context: Context, target_city: str) -> tuple:
     return False, False
 
 
+def _confession_fail_mode(context: Context) -> str:
+    """告白失败处理：giveup（放弃）/ keep（花金币挽留）。"""
+    data = context.get_node_data("ConfessionFailSelect")
+    mode = "giveup"
+    if data:
+        expected = data.get("recognition", {}).get("param", {}).get(
+            "expected", ["giveup"]
+        )
+        if isinstance(expected, list) and expected:
+            mode = expected[0]
+        elif isinstance(expected, str) and expected:
+            mode = expected
+    return mode
+
+
+def handle_confession_fail(context: Context) -> str:
+    """处理告白失败弹窗：按用户选项花金币挽留，找不到按钮则回退到放弃。
+
+    Returns:
+        kept（已花金币挽留）/ gaveup（已放弃）
+    """
+    if _confession_fail_mode(context) == "keep":
+        result = context.run_task("Event_ConfessionFailKeepGold")
+        if fight_utils._task_succeeded(result):
+            time.sleep(0.8)
+            img = context.tasker.controller.post_screencap().wait().get()
+            # 部分版本点完会再弹一次确认框；没有就不点，避免误触别的按钮
+            if context.run_recognition("PopUpWindowConfirm", img).hit:
+                context.run_task("PopUpWindowConfirm")
+            logger.info("告白失败：已花金币挽留，对方被留下")
+            time.sleep(1.0)
+            img = context.tasker.controller.post_screencap().wait().get()
+            # 挽留成功有时会直接进婚礼页，交给 WeddingProcessor（它自己会再校验界面）
+            if context.run_recognition("Event_WeddingPage", img).hit:
+                logger.info("挽留后进入婚礼页面，交给 WeddingProcessor")
+                context.run_task("Auto_WeddingTask")
+            return "kept"
+        logger.warning("未找到金币挽留按钮，回退到放弃该角色")
+
+    context.run_task("Event_ConfessionFailGiveUp")
+    return "gaveup"
+
+
 def detect_and_manage_event(context: Context, screenshot) -> str:
     """检测事件类型"""
     if context.run_recognition("Event_MercenaryJoin", screenshot).hit:
@@ -388,7 +431,8 @@ def detect_and_manage_event(context: Context, screenshot) -> str:
         return "confession_success"
     elif context.run_recognition("Event_ConfessionFail", screenshot).hit:
         logger.info("检测到告白失败事件")
-        context.run_task("Event_ConfessionFailGiveUp")
+        mode = handle_confession_fail(context)
+        logger.info(f"告白失败处理：{'金币挽留' if mode == 'kept' else '放弃'}")
         return "confession_fail"
     elif context.run_recognition("PopUpWindowTip", screenshot).hit:
         logger.info("检测到提示事件")

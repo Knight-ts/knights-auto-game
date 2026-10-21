@@ -853,5 +853,30 @@
                 }
             }
         ]
+    },
+    "告白失败处理": {
+        "type": "select",
+        "description": "推年途中遇到「告白失败」事件怎么处理。选「金币挽留」会点弹窗里含「金币/挽留」的按钮把对方留下（会花金币），找不到按钮会自动回退到放弃。",
+        "default_case": "放弃",
+        "cases": [
+            {
+                "name": "放弃",
+                "description": "点「放弃」结束这次告白，保持原有行为",
+                "pipeline_override": {
+                    "ConfessionFailSelect": {
+                        "expected": "giveup"
+                    }
+                }
+            },
+            {
+                "name": "金币挽留",
+                "description": "告白失败后花金币留住对方（需要界面有含「金币/挽留」的按钮）",
+                "pipeline_override": {
+                    "ConfessionFailSelect": {
+                        "expected": "keep"
+                    }
+                }
+            }
+        ]
     }
 }
