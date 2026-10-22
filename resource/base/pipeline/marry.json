@@ -654,7 +654,7 @@
     },
     "Wedding_MissingResource": {
         "attach": {
-            "description": "婚宴确认弹窗底部「快捷补齐缺少资源」"
+            "description": "（已废弃）早期用「快捷补齐缺少资源」文案判断缺材料；只有一行缺材料时这行不出现，改用 Wedding_AnyPlus 判断"
         },
         "recognition": "OCR",
         "expected": [
@@ -667,11 +667,11 @@
             90
         ],
         "timeout": 2000,
-        "enabled": true
+        "enabled": false
     },
     "Wedding_FillTip": {
         "attach": {
-            "description": "点加号后弹出的「市场供应充足…」购买提示"
+            "description": "点「快捷补齐」加号后弹出的「市场供应充足…」提示"
         },
         "recognition": "OCR",
         "expected": [
@@ -686,9 +686,26 @@
         "timeout": 2000,
         "enabled": true
     },
+    "Wedding_BuyDialog": {
+        "attach": {
+            "description": "点单行加号后弹出的「购买」窗口（数量 + 确定）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "购买"
+        ],
+        "roi": [
+            200,
+            290,
+            320,
+            110
+        ],
+        "timeout": 2000,
+        "enabled": true
+    },
     "Wedding_FillPlus": {
         "attach": {
-            "description": "最下面的加号＝快捷补齐缺少资源（资源不足时点它）"
+            "description": "最下面的加号＝快捷补齐缺少资源（多个加号时点它）"
         },
         "recognition": "TemplateMatch",
         "template": [
@@ -703,7 +720,7 @@
         "threshold": 0.8,
         "action": "Click",
         "post_delay": 800,
-        "timeout": 2000
+        "timeout": 800
     },
     "Wedding_AnyPlus": {
         "attach": {

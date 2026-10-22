@@ -1354,13 +1354,12 @@ class WeddingProcessor(CustomAction):
         return bool(status is not None and getattr(status, "succeeded", False))
 
     def _handle_banquet_confirm(self, context: Context) -> bool:
-        """处理「婚宴确认」弹窗：资源不足时先点「快捷补齐缺少资源」的加号。
+        """处理「婚宴确认」弹窗：缺材料时先点加号补齐，资源齐了才点确定。
 
-        规则（按游戏实际界面）：
-            - 弹窗只有一个加号 -> 点它
-            - 多个加号 -> 点最下面那个「快捷补齐缺少资源」的加号
-            - 点完加号会弹「市场供应充足…」购买提示，点确定用银币补齐
-            - 资源齐了再点婚宴确认的确定，婚礼才开始
+        判定依据是弹窗里有没有加号（加号 = 缺材料，此时确定是灰的、点了没反应）：
+            - 只有一个加号 -> 点它（会弹「购买」窗口，点确定买缺的量）
+            - 多个加号 -> 点最下面那个「快捷补齐缺少资源」的加号（会弹「市场供应充足…」提示）
+            - 没有加号 = 资源齐了，直接点确定
 
         Returns:
             是否出现了婚宴确认弹窗
@@ -1381,18 +1380,33 @@ class WeddingProcessor(CustomAction):
                 time.sleep(1.2)
                 continue
 
+            if context.run_recognition("Wedding_BuyDialog", img).hit:
+                logger.info("弹出「购买」窗口，点确定买缺的材料")
+                context.run_task("PopUpWindowConfirm")
+                time.sleep(1.2)
+                continue
+
             if not context.run_recognition("Wedding_BanquetConfirm", img).hit:
                 logger.info("婚宴确认弹窗已关闭，婚礼开始")
                 break
 
-            if context.run_recognition("Wedding_MissingResource", img).hit:
+            if self._plus_present(context, img):
+                logger.info("弹窗里有加号（缺材料，确定是灰的），先点加号补齐")
                 self._click_fill_plus(context)
                 time.sleep(1.5)
             else:
-                logger.info("婚宴资源已齐，点婚宴确认的确定")
+                logger.info("没有加号，说明资源已齐，点婚宴确认的确定")
                 context.run_task("PopUpWindowConfirm")
                 time.sleep(1.5)
         return True
+
+    def _plus_present(self, context: Context, img) -> bool:
+        """婚宴确认弹窗里有没有加号：有 = 缺材料、确定是灰的。"""
+        return context.run_recognition(
+            "Wedding_AnyPlus",
+            img,
+            pipeline_override={"Wedding_AnyPlus": {"action": "DoNothing"}},
+        ).hit
 
     def _wait_node(self, context: Context, node: str, times: int) -> bool:
         """轮询等待某个识别节点命中。"""
