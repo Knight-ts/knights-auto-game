@@ -86,7 +86,7 @@ function banner(kind, lines) {
 function switchTab(name) {
   state.activeTab = name;
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  ["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "notify"].forEach((tab) => {
+  ["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "tprec", "notify"].forEach((tab) => {
     $("tab-" + tab).classList.toggle("hidden", tab !== name);
   });
   clearInterval(timers.shot);
@@ -110,6 +110,7 @@ function switchTab(name) {
   }
   if (name === "records") loadRecords();
   if (name === "mercs") { loadMercRules(); loadMercRecords(); }
+  if (name === "tprec") loadTaskRecords();
   if (name === "notify") loadNotify();
 }
 
@@ -671,6 +672,72 @@ async function loadMercRecords() {
   }
 }
 
+/* ------------------------------------------------------------ 刷取任务记录 */
+
+async function loadTaskRecords() {
+  try {
+    const data = await api("/api/task-records");
+    const cities = data.cities || {};
+    const names = Object.keys(cities).sort();
+    if (!names.length) {
+      $("tprecBody").innerHTML = '<div class="card"><div class="empty">还没有任务记录</div></div>';
+    } else {
+      $("tprecBody").innerHTML = names.map((city) => {
+        const tasks = cities[city] || {};
+        const rows = Object.keys(tasks).sort().map((name) => {
+          const t = tasks[name] || {};
+          const avg = typeof t.rounds_avg === "number" ? t.rounds_avg.toFixed(1) : "-";
+          return `<tr>
+            <td>${esc(name)}</td>
+            <td>${esc(t.type || "")}</td>
+            <td>${esc(t.level || "")}</td>
+            <td>${t.count || 0}</td>
+            <td>${avg}</td>
+            <td>${t.last_rounds === undefined ? "-" : t.last_rounds}</td>
+            <td class="mono">${esc(t.last || "")}</td>
+            <td><button class="btn danger" data-black="${esc(name)}">拉黑</button></td>
+          </tr>`;
+        }).join("");
+        return `<div class="card" style="margin-bottom:12px">
+          <div class="row"><strong>${esc(city)}</strong><span class="hint">${Object.keys(tasks).length} 个任务</span></div>
+          <table style="margin-top:8px">
+            <thead><tr><th>任务</th><th>类型</th><th>等级</th><th>次数</th><th>平均回合</th><th>最近回合</th><th>最近时间</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+      }).join("");
+    }
+
+    const blacklist = data.blacklist || [];
+    $("tprecBlackHint").textContent = blacklist.length ? `共 ${blacklist.length} 个任务不再接取` : "为空";
+    $("tprecBlacklist").innerHTML = blacklist.length
+      ? blacklist.map((name) => `<span style="display:inline-flex;align-items:center;gap:6px;margin:0 12px 8px 0">${esc(name)}<button class="btn" data-unblack="${esc(name)}">解除</button></span>`).join("")
+      : '<span class="hint">还没有拉黑任何任务</span>';
+  } catch (error) {
+    banner("err", ["读取任务记录失败：" + error.message]);
+  }
+}
+
+async function blacklistTask(name) {
+  try {
+    await post("/api/task-records/blacklist", { task: name });
+    banner("ok", [`已拉黑：${name}`]);
+    loadTaskRecords();
+  } catch (error) {
+    banner("err", ["拉黑失败：" + error.message]);
+  }
+}
+
+async function unblacklistTask(name) {
+  try {
+    await post("/api/task-records/unblacklist", { task: name });
+    banner("ok", [`已解除：${name}`]);
+    loadTaskRecords();
+  } catch (error) {
+    banner("err", ["解除失败：" + error.message]);
+  }
+}
+
 /* ------------------------------------------------------------ 问题自纠 */
 
 const SELFHEAL_SOURCE = { task: "任务", agent: "Agent", api: "接口", manual: "手动", combo: "组合", frontend: "页面" };
@@ -946,6 +1013,15 @@ $("btnChildSpeedSave").addEventListener("click", saveChildSpeed);
 $("btnRecordReload").addEventListener("click", loadRecords);
 $("btnMercSave").addEventListener("click", saveMercRules);
 $("btnMercReload").addEventListener("click", loadMercRecords);
+$("btnTprecReload").addEventListener("click", loadTaskRecords);
+$("tprecBody").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-black]");
+  if (btn) blacklistTask(btn.dataset.black);
+});
+$("tprecBlacklist").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-unblack]");
+  if (btn) unblacklistTask(btn.dataset.unblack);
+});
 $("btnNotifySave").addEventListener("click", saveNotify);
 $("btnNotifyTest").addEventListener("click", testNotify);
 
@@ -1449,7 +1525,7 @@ async function stopCombo() {
 
 // 支持 #alerts 之类的深链接，方便直接打开某一页
 const startTab = (location.hash || "").replace(/^#/, "");
-if (["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "notify"].includes(startTab)) {
+if (["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "tprec", "notify"].includes(startTab)) {
   switchTab(startTab);
 }
 

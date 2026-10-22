@@ -26,6 +26,7 @@
     <button data-tab="alerts">好娃提醒</button>
     <button data-tab="records">孩子记录</button>
     <button data-tab="mercs">佣兵记录</button>
+    <button data-tab="tprec">刷取任务</button>
     <button data-tab="notify">通知</button>
   </nav>
 </header>
@@ -384,6 +385,24 @@
         </thead>
         <tbody id="mercBody"></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- 刷取任务记录 -->
+  <section id="tab-tprec" class="hidden">
+    <div class="card" style="margin-bottom:14px">
+      <div class="row">
+        <button class="btn" id="btnTprecReload">刷新</button>
+        <span class="hint">按城市分组；数据来自 table/task_records.json（明细 table/task_records.jsonl）</span>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        每次接取任务都会记录 任务名 + 花费回合数；点「拉黑」写入 <code>table/task_blacklist.json</code>，之后任务板不再接取同名任务（不用重启）。
+      </div>
+    </div>
+    <div id="tprecBody"></div>
+    <div class="card" style="margin-top:14px">
+      <div class="row"><strong>任务黑名单</strong><span class="hint" id="tprecBlackHint"></span></div>
+      <div id="tprecBlacklist" style="margin-top:8px"></div>
     </div>
   </section>
 

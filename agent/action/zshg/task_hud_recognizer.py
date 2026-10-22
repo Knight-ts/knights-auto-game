@@ -44,7 +44,23 @@ class TaskBlacklist:
 
         self.blacklist_file = os.path.join(cwd_dir, "table", "task_blacklist.json")
         self._blacklist_cache = self._load_blacklist()
+        self._mtime = self._file_mtime()
         logger.debug(f"黑名单文件路径: {self.blacklist_file}")
+
+    def _file_mtime(self) -> float:
+        try:
+            return os.path.getmtime(self.blacklist_file)
+        except OSError:
+            return -1.0
+
+    def _reload_if_changed(self) -> None:
+        """网页上「一键拉黑」直接改文件，这里按 mtime 自动重载，不必重启。"""
+        mtime = self._file_mtime()
+        if mtime == self._mtime:
+            return
+        self._mtime = mtime
+        self._blacklist_cache = self._load_blacklist()
+        logger.info(f"检测到黑名单文件变化，已重新载入（{len(self._blacklist_cache)} 个）")
 
     def _load_blacklist(self):
         try:
@@ -65,6 +81,7 @@ class TaskBlacklist:
         """动态添加任务名到黑名单（同时持久化到文件）"""
         if not task_names:
             return
+        self._reload_if_changed()
         names = [
             name.strip()
             for name in task_names.replace("，", ",").split(",")
@@ -87,12 +104,14 @@ class TaskBlacklist:
                     ensure_ascii=False,
                     indent=4,
                 )
+            self._mtime = self._file_mtime()
             logger.info(f"黑名单已保存到文件: {self.blacklist_file}")
         except Exception as e:
             logger.error(f"保存黑名单到文件失败: {e}")
 
     def is_in_blacklist(self, task_name: str) -> bool:
-        """检查任务是否在黑名单中"""
+        """检查任务是否在黑名单中（文件被网页改过会自动重载）"""
+        self._reload_if_changed()
         return task_name in self._blacklist_cache
 
 

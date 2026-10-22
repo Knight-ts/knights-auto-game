@@ -6,6 +6,7 @@ import time
 from typing import Any, Optional, Set
 
 from utils import logger
+from utils import task_records
 from utils.game_state import update as update_game_state
 from action.zshg.battle_world_map import BattleSessionRegistry, session_key
 from action.zshg.task_hud_recognizer import TaskHudRecognizer
@@ -337,6 +338,33 @@ def abandon_noncombat_accepted_task(context: Context, max_swipes: int = 5) -> bo
     return ensure_at_bigmap(context)
 
 
+def _current_city(context: Context) -> str:
+    """当前刷取任务的目标城市（来自「选择刷取任务国家」选项）。"""
+    data = context.get_node_data("EnterCity")
+    if not data:
+        return ""
+    expected = data.get("recognition", {}).get("param", {}).get("expected", [])
+    if isinstance(expected, list) and expected:
+        return str(expected[0])
+    if isinstance(expected, str):
+        return expected
+    return ""
+
+
+def _read_accepted_task_name(context: Context) -> str:
+    """已接取任务时，从任务板里读一下任务名（按钮为「放弃」的那条）。"""
+    try:
+        img = _screencap(context)
+        if img is None:
+            return ""
+        for task in TaskHudRecognizer().recognize_tasks(context, img):
+            if "放弃" in task.action_text and task.task_name:
+                return task.task_name
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"读取已接取任务名失败：{exc}")
+    return ""
+
+
 def start_task(context: Context) -> bool:
     """
     开始执行任务流程
@@ -401,6 +429,11 @@ def _preprocess_accept_task(context: Context) -> bool:
         return False
 
     if ensure_task_accepted(context):
+        # 已接取的任务也要记一笔，任务名尽量从任务板读出来
+        task_records.set_pending(
+            city=_current_city(context),
+            task_name=_read_accepted_task_name(context),
+        )
         return True
 
     # 左右滑动会快速锁定当前任务城市的主城
@@ -446,6 +479,12 @@ def _accept_new_task(context: Context) -> bool:
                 accept_y = accept_box[1] + accept_box[3] // 2
                 context.tasker.controller.post_click(accept_x, accept_y).wait()
                 time.sleep(0.5)
+                task_records.set_pending(
+                    city=_current_city(context),
+                    task_name=best_task.task_name,
+                    task_type=best_task.task_type,
+                    task_level=best_task.task_level,
+                )
                 return True
 
             if swipe_count < max_swipe_times:
@@ -564,26 +603,30 @@ def _process_fighting(context: Context) -> bool:
         timeout=5.0,
     )
     battle_session_key = session_key(context)
+
+    def _finish(ok: bool) -> bool:
+        """收尾：结束战斗会话，并把 城市/任务名/回合数 记进任务记录。"""
+        session = BattleSessionRegistry.end(battle_session_key)
+        rounds = session.confirmed_rounds if session else 0
+        task_records.finish(rounds=rounds, result="胜利" if ok else "失败")
+        return ok
+
     if initial_state == "victory":
         logger.info("进入主动战斗前已识别到胜利结算页")
-        BattleSessionRegistry.end(battle_session_key)
-        return True
+        return _finish(True)
     if initial_state == "fail":
         logger.error("进入主动战斗前已识别到失败结算页")
-        BattleSessionRegistry.end(battle_session_key)
-        return False
+        return _finish(False)
     entered_from_start = initial_state == "start"
     if initial_state == "start":
         initial_state = _start_battle_and_wait_ready(context)
 
     if initial_state == "victory":
         logger.info("战斗开始后直接进入胜利结算页")
-        BattleSessionRegistry.end(battle_session_key)
-        return True
+        return _finish(True)
     if initial_state == "fail":
         logger.error("战斗开始后直接进入失败结算页")
-        BattleSessionRegistry.end(battle_session_key)
-        return False
+        return _finish(False)
     if initial_state != "ready":
         logger.error("等待稳定战斗界面超时，未识别到结束回合按钮")
         return False
@@ -608,12 +651,10 @@ def _process_fighting(context: Context) -> bool:
     )
     if terminal_state == "victory":
         logger.info("AutoFightProcessor 已完成正式战斗并识别到胜利结算页")
-        BattleSessionRegistry.end(battle_session_key)
-        return True
+        return _finish(True)
     if terminal_state == "fail":
         logger.error("AutoFightProcessor 结束后识别到战斗失败结算页")
-        BattleSessionRegistry.end(battle_session_key)
-        return False
+        return _finish(False)
     if not _task_succeeded(auto_result):
         logger.error("AutoFightProcessor 执行失败，且未出现胜负结算页")
         return False

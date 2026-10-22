@@ -25,6 +25,8 @@ python\python.exe webapp\server.py
 | 问题自纠 | 报错现场：截图 + 错误 + 日志，标记保留/删除，生成 REPORT.md 给 Harness |
 | 好娃提醒 | 组合列表（点「详情」展开）+ 按种族分类的完整特性表，保存时同步条件表 / 检测节点 / 界面选项 |
 | 孩子记录 | 读取 table/child_records.xlsx 对应的记录，可标记已招募 |
+| 佣兵记录 | 智能接受规则 + table/mercenary_records.csv |
+| 刷取任务 | 按城市分组展示任务接取次数 / 平均回合 / 最近回合，可一键拉黑（table/task_blacklist.json，立即生效） |
 
 ## 结构
 
