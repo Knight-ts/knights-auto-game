@@ -218,6 +218,23 @@
     "post_delay": 800,
     "timeout": 2000
   },
+  "HudTaskName": {
+    "attach": {
+      "description": "大地图左下角：当前已接取任务的名字（女王密令下面、剩余时间上面）"
+    },
+    "recognition": "OCR",
+    "expected": [
+      "[一-龥0-9·]{2,20}"
+    ],
+    "roi": [
+      45,
+      792,
+      320,
+      40
+    ],
+    "timeout": 1000,
+    "enabled": true
+  },
   "BigMapRewardTokenFull": {
     "recognition": "OCR",
     "expected": [

@@ -101,8 +101,14 @@ def clear_pending() -> None:
     _pending = None
 
 
-def finish(rounds: int, result: str = "胜利") -> Optional[dict]:
-    """战斗结束：把当前任务连同回合数落盘，并更新按城市分组的汇总。"""
+def finish(
+    rounds: int, result: str = "胜利", task_name: Optional[str] = None
+) -> Optional[dict]:
+    """战斗结束：把当前任务连同回合数落盘，并更新按城市分组的汇总。
+
+    ``task_name`` 用于补名：接取时没读到任务名（例如续跑已接取任务），
+    战斗结束后回大地图从左下角 HUD 读到再传进来。
+    """
     global _pending
     if not _pending:
         return None
@@ -110,7 +116,7 @@ def finish(rounds: int, result: str = "胜利") -> Optional[dict]:
     record = {
         "time": _now(),
         "city": _pending["city"],
-        "task": _pending["task"],
+        "task": (task_name or _pending["task"] or "").strip(),
         "type": _pending["type"],
         "level": _pending["level"],
         "rounds": max(0, int(rounds or 0)),

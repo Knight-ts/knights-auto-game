@@ -365,6 +365,45 @@ def _read_accepted_task_name(context: Context) -> str:
     return ""
 
 
+def _read_map_task_name(context: Context) -> str:
+    """大地图左下角：女王密令下面、剩余时间上面那行就是当前任务名。"""
+    try:
+        img = _screencap(context)
+        if img is None:
+            return ""
+        detail = context.run_recognition("HudTaskName", img)
+        if detail.hit and detail.best_result is not None:
+            text = (detail.best_result.text or "").strip()
+            if text and text not in ("未制定目标", "剩余时间"):
+                return text
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"读取大地图任务名失败：{exc}")
+    return ""
+
+
+_last_fight_result: Optional[dict] = None
+
+
+def finalize_task_record(context: Context) -> None:
+    """战斗 + 战后流程结束后写任务记录；任务名缺就回大地图从左下角 HUD 补。"""
+    global _last_fight_result
+    if _last_fight_result is None:
+        return
+    info, _last_fight_result = _last_fight_result, None
+
+    pending = task_records.get_pending() or {}
+    name = (pending.get("task") or "").strip()
+    if not name:
+        name = _read_map_task_name(context)
+        if name:
+            logger.info(f"任务记录：从大地图补到任务名「{name}」")
+    task_records.finish(
+        rounds=info.get("rounds", 0),
+        result=info.get("result", "胜利"),
+        task_name=name,
+    )
+
+
 def start_task(context: Context) -> bool:
     """
     开始执行任务流程
@@ -379,7 +418,9 @@ def start_task(context: Context) -> bool:
     if not _preprocess_accept_task(context):
         return False
 
-    return _process_fight(context)
+    ok = _process_fight(context)
+    finalize_task_record(context)
+    return ok
 
 
 @AgentServer.custom_action("SingleFightTaskProcessor")
@@ -428,12 +469,13 @@ def _preprocess_accept_task(context: Context) -> bool:
     if not ensure_at_bigmap(context):
         return False
 
+    # 大地图左下角（女王密令下面、剩余时间上面）就是当前已接取任务的名字
+    hud_name = _read_map_task_name(context)
+
     if ensure_task_accepted(context):
-        # 已接取的任务也要记一笔，任务名尽量从任务板读出来
-        task_records.set_pending(
-            city=_current_city(context),
-            task_name=_read_accepted_task_name(context),
-        )
+        # 已接取的任务也要记一笔：优先用大地图 HUD 的名字，其次任务板
+        name = hud_name or _read_accepted_task_name(context)
+        task_records.set_pending(city=_current_city(context), task_name=name)
         return True
 
     # 左右滑动会快速锁定当前任务城市的主城
@@ -605,10 +647,13 @@ def _process_fighting(context: Context) -> bool:
     battle_session_key = session_key(context)
 
     def _finish(ok: bool) -> bool:
-        """收尾：结束战斗会话，并把 城市/任务名/回合数 记进任务记录。"""
+        """收尾：结束战斗会话，暂存胜负与回合数（真正写盘在 finalize_task_record）。"""
+        global _last_fight_result
         session = BattleSessionRegistry.end(battle_session_key)
-        rounds = session.confirmed_rounds if session else 0
-        task_records.finish(rounds=rounds, result="胜利" if ok else "失败")
+        _last_fight_result = {
+            "rounds": session.confirmed_rounds if session else 0,
+            "result": "胜利" if ok else "失败",
+        }
         return ok
 
     if initial_state == "victory":
