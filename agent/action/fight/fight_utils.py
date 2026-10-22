@@ -404,6 +404,132 @@ def finalize_task_record(context: Context) -> None:
     )
 
 
+def _task_fail_mode(context: Context) -> str:
+    """任务失败处理：switch 换任务 / retry 继续任务 / blacklist 拉黑并换任务。"""
+    data = context.get_node_data("TaskFailSelect")
+    mode = "switch"
+    if data:
+        expected = data.get("recognition", {}).get("param", {}).get(
+            "expected", ["switch"]
+        )
+        if isinstance(expected, list) and expected:
+            mode = str(expected[0])
+        elif isinstance(expected, str) and expected:
+            mode = expected
+    return mode
+
+
+def abandon_accepted_task(context: Context, max_swipes: int = 5) -> bool:
+    """放弃当前已接取的任务（任务板里按钮为「放弃」的那条），然后回大地图。"""
+    img = _screencap(context)
+    if img is None:
+        return False
+    if not context.run_recognition("TaskQuickLocation", img).hit:
+        # 没有已接取任务，直接回大地图
+        return ensure_at_bigmap(context)
+
+    if context.run_recognition("UI_TaskPannelPageClose", img).hit:
+        if not _task_succeeded(context.run_task("UI_TaskPannelPageClose")):
+            return False
+
+    if not open_city_task_panel(context):
+        logger.error("无法打开任务板放弃失败的任务")
+        return False
+
+    recognizer = TaskHudRecognizer()
+    for swipe_index in range(max_swipes + 1):
+        board_img = _screencap(context)
+        if board_img is None:
+            return False
+        for task in recognizer.recognize_tasks(context, board_img):
+            if "放弃" not in task.action_text or task.accept_button_box is None:
+                continue
+            box = task.accept_button_box
+            x, y = box[0] + box[2] // 2, box[1] + box[3] // 2
+            logger.warning(f"放弃失败的任务：{task.task_name}")
+            if not context.tasker.controller.post_click(x, y).wait().succeeded:
+                return False
+            time.sleep(0.5)
+
+            confirm_img = _screencap(context)
+            if confirm_img is not None and context.run_recognition(
+                "PopUpWindowConfirm", confirm_img
+            ).hit:
+                context.run_task("PopUpWindowConfirm")
+                time.sleep(0.5)
+            context.run_task("BackButton_500ms")
+            return ensure_at_bigmap(context)
+
+        if swipe_index < max_swipes:
+            context.run_task("FindCityTask_SwipeDown")
+
+    logger.warning("任务板里没找到「放弃」按钮，失败任务保持接取状态")
+    context.run_task("BackButton_500ms")
+    return ensure_at_bigmap(context)
+
+
+def dismiss_battle_result(context: Context, max_steps: int = 6) -> bool:
+    """点掉失败结算页和残留的确认框，尽量回到大地图。
+
+    不点掉的话，月度恢复 `_recover_yearly_to_bigmap` 会判定“战斗失败结算页”
+    并直接停止整个年度任务——失败任务也就没法“继续循环”。
+    """
+    for _ in range(max_steps):
+        img = _screencap(context)
+        if img is None:
+            return False
+        if context.run_recognition("UI_MainWindows", img).hit:
+            return True
+        if context.run_recognition("FightFail", img).hit:
+            logger.info("点掉战斗失败结算页")
+            context.run_task("FightFail")
+            time.sleep(0.6)
+            continue
+        if context.run_recognition("FightResultConfirm", img).hit:
+            context.run_task("FightResultConfirm")
+            time.sleep(0.5)
+            continue
+        if context.run_recognition("PopUpWindowConfirm", img).hit:
+            context.run_task("PopUpWindowConfirm")
+            time.sleep(0.5)
+            continue
+        context.run_task("ClickCenter_500ms")
+        time.sleep(0.5)
+
+    if ensure_at_bigmap(context):
+        return True
+    logger.warning("失败结算页没能清干净，仍按继续循环处理")
+    return False
+
+
+def _handle_task_failure(context: Context) -> bool:
+    """刷取任务失败后的走向；返回 True 表示本次月度循环可以继续。"""
+    mode = _task_fail_mode(context)
+    pending = task_records.get_pending() or {}
+    name = (pending.get("task") or "").strip() or _read_map_task_name(context)
+
+    logger.warning(f"刷取任务失败（{name or '未知任务'}），处理方式：{mode}")
+
+    dismiss_battle_result(context)
+
+    if mode == "retry":
+        logger.info("继续任务：不放弃当前任务，交给月度重试再打一次")
+        return False
+
+    if mode == "blacklist":
+        if name:
+            task_records.add_blacklist(name)
+            logger.info(f"已把失败任务「{name}」加入黑名单，以后不再接取")
+        else:
+            logger.warning("任务名未知，没法拉黑，按换任务处理")
+
+    if abandon_accepted_task(context):
+        logger.info("失败任务已放弃，已回到大地图，循环继续")
+    else:
+        logger.warning("放弃失败任务没有成功，仍继续循环")
+    return True
+
+
 def start_task(context: Context) -> bool:
     """
     开始执行任务流程
@@ -420,7 +546,9 @@ def start_task(context: Context) -> bool:
 
     ok = _process_fight(context)
     finalize_task_record(context)
-    return ok
+    if ok:
+        return True
+    return _handle_task_failure(context)
 
 
 @AgentServer.custom_action("SingleFightTaskProcessor")
@@ -645,11 +773,14 @@ def _process_fighting(context: Context) -> bool:
         timeout=5.0,
     )
     battle_session_key = session_key(context)
+    session_ref: dict = {}
 
     def _finish(ok: bool) -> bool:
         """收尾：结束战斗会话，暂存胜负与回合数（真正写盘在 finalize_task_record）。"""
         global _last_fight_result
-        session = BattleSessionRegistry.end(battle_session_key)
+        session = session_ref.get("session") or BattleSessionRegistry.end(
+            battle_session_key
+        )
         _last_fight_result = {
             "rounds": session.confirmed_rounds if session else 0,
             "result": "胜利" if ok else "失败",
@@ -680,6 +811,7 @@ def _process_fighting(context: Context) -> bool:
         battle_session_key,
         force_new=entered_from_start,
     )
+    session_ref["session"] = session
     logger.info(
         "稳定战斗界面已就绪，接入 AutoFightProcessor: "
         f"new={entered_from_start}, confirmed_rounds={session.confirmed_rounds}, "

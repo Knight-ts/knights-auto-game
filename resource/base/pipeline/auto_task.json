@@ -115,6 +115,23 @@
     "Flag_MaySpringManual": {
         "enabled": false
     },
+    "TaskFailSelect": {
+        "attach": {
+            "description": "刷取任务失败处理：switch 换任务 / retry 继续任务 / blacklist 拉黑并换任务"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "switch"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
     "Auto_WeddingTask": {
         "recognition": "DirectHit",
         "action": "Custom",

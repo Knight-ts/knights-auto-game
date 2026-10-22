@@ -908,5 +908,39 @@
                 }
             }
         ]
+    },
+    "任务失败处理": {
+        "type": "select",
+        "description": "刷取任务失败（战斗失败 / 打不起来）时怎么办。默认「换任务」：放弃当前任务、回大地图，月度循环继续跑下个月，不会整轮停掉。",
+        "default_case": "换任务",
+        "cases": [
+            {
+                "name": "换任务",
+                "description": "放弃当前任务并回大地图，循环继续（下个月重新接任务）",
+                "pipeline_override": {
+                    "TaskFailSelect": {
+                        "expected": "switch"
+                    }
+                }
+            },
+            {
+                "name": "继续任务",
+                "description": "不放弃，交给月度重试再打一次（连续两次仍失败才停）",
+                "pipeline_override": {
+                    "TaskFailSelect": {
+                        "expected": "retry"
+                    }
+                }
+            },
+            {
+                "name": "拉黑并换任务",
+                "description": "把失败任务写进黑名单（以后不再接），再放弃并继续循环",
+                "pipeline_override": {
+                    "TaskFailSelect": {
+                        "expected": "blacklist"
+                    }
+                }
+            }
+        ]
     }
 }
