@@ -132,6 +132,30 @@
         "timeout": 1000,
         "enabled": true
     },
+    "MapTargetSelect": {
+        "attach": {
+            "description": "功能：地图切换目标（archipelago 瑞格群岛 / continent 加尔提兰）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "archipelago"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "Func_MapSwitch": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "MapSwitchProcessor",
+        "post_delay": 500,
+        "timeout": 60000
+    },
     "Auto_WeddingTask": {
         "recognition": "DirectHit",
         "action": "Custom",

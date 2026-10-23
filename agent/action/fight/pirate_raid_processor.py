@@ -1,18 +1,11 @@
 """海盗袭击庄园事件处理器。
 
-「海盗正在袭扰你的庄园」是跨地图事件：横幅出现在大地图大陆层，
+「海盗正在袭扰你的庄园」是跨地图事件：横幅出现在大陆层，
 玩家需要点击横幅 → 战斗准备页 → 进入战斗 → 航海确认 → 战斗画面
 → 战斗开始 → AutoFightProcessor 跑全场 → 结算收尾 → 切回大陆层。
 
-切层方式（新版界面）：底部中间的页签显示当前区域（大陆时是「加尔提兰」），
-点它弹出区域面板，面板左侧就是「瑞格群岛」——所以要两步：
-    1. 点底部「加尔提兰」页签
-    2. 点面板里的「瑞格群岛」
-旧版是一步「前往群岛」按钮，仍然保留作为兼容信号。
+切层统一走 ``map_layer``：底部页签 → 区域面板 → 目标区域（大陆/群岛同两套逻辑）。
 """
-
-import time
-from typing import Optional
 
 from maa.agent.agent_server import AgentServer
 from maa.context import Context
@@ -21,120 +14,24 @@ from maa.custom_action import CustomAction
 from utils import logger
 
 import action.fight.fight_utils as fight_utils
+import action.fight.map_layer as map_layer
 
 
-# 群岛层就绪信号（任一命中即可）：旧版「前往大陆」按钮，或底部页签显示「瑞格群岛」
-ARCHIPELAGO_READY_NODES = ("ClickGoToContinent", "RegionTabArchipelago")
 BATTLE_READY_NODE = "Event_PirateRaid_BattlePage"
 ACTIVE_BATTLE_NODE = "FightEndRound"
-# 大陆层就绪信号：旧版「前往群岛」按钮、底部页签「加尔提兰」，或 EnterCity 主城可见
-CONTINENT_READY_NODES = ("ClickGoToArchipelago", "ClickRegionTab", "EnterCity")
-LAYER_SWITCH_TIMEOUT = 10.0
-
-
-def _screencap(context: Context):
-    job = context.tasker.controller.post_screencap().wait()
-    if not job.succeeded:
-        return None
-    return job.get()
 
 
 def _layer_hit(context: Context, img, nodes: tuple) -> bool:
-    return any(context.run_recognition(node, img).hit for node in nodes)
-
-
-def _dialog_visible(context: Context, img) -> bool:
-    """旅行弹窗存在时，不能使用弹窗背后的地图按钮作为就绪信号。"""
-    return bool(
-        context.run_recognition("Event_PirateRaid_TravelDialog", img).hit
-        or context.run_recognition("TravelDialog", img).hit
-    )
-
-
-def _wait_for_dialog_closed(context: Context, timeout: float = 6.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if context.tasker.stopping:
-            return False
-        img = _screencap(context)
-        if img is not None and not _dialog_visible(context, img):
-            return True
-        time.sleep(0.25)
-    logger.error("旅行弹窗点击后仍未关闭")
-    return False
-
-
-def _handle_visible_travel_dialog(context: Context, img) -> bool:
-    """只处理当前截图已经确认存在的弹窗，并验证弹窗确实消失。"""
-    if context.run_recognition("Event_PirateRaid_TravelDialog", img).hit:
-        # 两行布局才有庄园传送；先识别选项再点击，不能把 task 的返回值
-        # 误当成“庄园传送真实存在”。单行布局只能点击下方航海确认。
-        if context.run_recognition("Event_PirateRaid_ChooseEstate", img).hit:
-            node = "Event_PirateRaid_ChooseEstate"
-            label = "庄园传送"
-        else:
-            node = "Event_PirateRaid_ChooseSailSingle"
-            label = "单行航海"
-        if not _tap(context, node, label):
-            return False
-        return _wait_for_dialog_closed(context)
-
-    if context.run_recognition("TravelDialog", img).hit:
-        if context.run_recognition("TravelDialog_ChooseFast", img).hit:
-            node = "TravelDialog_ChooseFast"
-            label = "快速传送"
-        else:
-            node = "TravelDialog_ChooseSlow"
-            label = "步行/航海"
-        if not _tap(context, node, label):
-            return False
-        return _wait_for_dialog_closed(context)
-
-    return True
-
-
-def _wait_for_layer_ready(
-    context: Context,
-    ready_nodes: tuple,
-    timeout: float,
-    label: str,
-) -> bool:
-    """轮询截图，先处理旅行弹窗，再接受无遮挡的地图就绪信号。"""
-    deadline = time.monotonic() + timeout
-    # 地图按钮会先于旅行弹窗出现，至少留出一小段弹窗生成时间。
-    accept_ready_after = time.monotonic() + 1.5
-    while time.monotonic() < deadline:
-        if context.tasker.stopping:
-            return False
-        img = _screencap(context)
-        if img is None:
-            time.sleep(0.2)
-            continue
-        if _dialog_visible(context, img):
-            if not _handle_visible_travel_dialog(context, img):
-                return False
-            accept_ready_after = time.monotonic() + 0.5
-            continue
-        if time.monotonic() < accept_ready_after:
-            time.sleep(0.25)
-            continue
-        for node in ready_nodes:
-            if context.run_recognition(node, img).hit:
-                logger.info(f"{label}层就绪（识别命中 {node}）")
-                return True
-        time.sleep(0.25)
-    logger.error(f"等待{label}层就绪超时 ({timeout}s)")
-    return False
+    return map_layer.layer_hit(context, img, nodes)
 
 
 def _tap(context: Context, node: str, label: str) -> bool:
-    """点击节点并验证成功。"""
-    result = context.run_task(node)
-    if not fight_utils._task_succeeded(result):
+    ok = map_layer.tap(context, node, label)
+    if ok:
+        logger.info(f"{label} 节点 {node} 点击成功")
+    else:
         logger.error(f"{label} 节点 {node} 点击失败")
-        return False
-    logger.info(f"{label} 节点 {node} 点击成功")
-    return True
+    return ok
 
 
 @AgentServer.custom_action("PirateRaidProcessor")
@@ -147,9 +44,9 @@ class PirateRaidProcessor(CustomAction):
         logger.info("=== 海盗袭击庄园事件开始 ===")
 
         # 0/1. 支持从大陆、已在群岛、旅行弹窗、战斗准备页或已开战状态续跑。
-        initial_img = _screencap(context)
+        initial_img = map_layer.screencap(context)
         initial_dialog = bool(
-            initial_img is not None and _dialog_visible(context, initial_img)
+            initial_img is not None and map_layer.dialog_visible(context, initial_img)
         )
         at_victory = bool(
             initial_img is not None
@@ -171,21 +68,21 @@ class PirateRaidProcessor(CustomAction):
         already_archipelago = bool(
             initial_img is not None
             and not initial_dialog
-            and _layer_hit(context, initial_img, ARCHIPELAGO_READY_NODES)
+            and _layer_hit(context, initial_img, map_layer.ARCHIPELAGO_READY_NODES)
         )
 
         if initial_dialog:
             logger.info("海盗事件：当前在旅行弹窗，从航海确认继续")
-            if not _handle_visible_travel_dialog(context, initial_img):
+            if not map_layer.handle_travel_dialog(context, initial_img):
                 return CustomAction.RunResult(success=False)
-            if not _wait_for_layer_ready(
+            if not map_layer.wait_for_layer_ready(
                 context,
-                ARCHIPELAGO_READY_NODES + (BATTLE_READY_NODE, ACTIVE_BATTLE_NODE),
-                LAYER_SWITCH_TIMEOUT,
-                "群岛/战斗准备",
+                map_layer.ARCHIPELAGO_READY_NODES
+                + (BATTLE_READY_NODE, ACTIVE_BATTLE_NODE),
+                label="群岛/战斗准备",
             ):
                 return CustomAction.RunResult(success=False)
-            resumed_img = _screencap(context)
+            resumed_img = map_layer.screencap(context)
             if resumed_img is None:
                 return CustomAction.RunResult(success=False)
             at_battle_page = context.run_recognition(
@@ -195,7 +92,7 @@ class PirateRaidProcessor(CustomAction):
                 ACTIVE_BATTLE_NODE, resumed_img
             ).hit
             already_archipelago = _layer_hit(
-                context, resumed_img, ARCHIPELAGO_READY_NODES
+                context, resumed_img, map_layer.ARCHIPELAGO_READY_NODES
             )
 
         if at_victory:
@@ -210,18 +107,18 @@ class PirateRaidProcessor(CustomAction):
             if not fight_utils.ensure_at_bigmap(context):
                 logger.error("海盗事件：无法回到大地图，放弃")
                 return CustomAction.RunResult(success=False)
-            if not self._switch_to_archipelago(context):
+            if not map_layer.switch_to_archipelago(context):
+                logger.error("海盗事件：切群岛失败")
                 return CustomAction.RunResult(success=False)
             # 海盗袭击期间，切层后可能直接落到战斗准备页，
             # 也可能先落到群岛地图；二者都是合法的切层终态。
-            if not _wait_for_layer_ready(
+            if not map_layer.wait_for_layer_ready(
                 context,
-                ARCHIPELAGO_READY_NODES + (BATTLE_READY_NODE,),
-                LAYER_SWITCH_TIMEOUT,
-                "群岛/战斗准备",
+                map_layer.ARCHIPELAGO_READY_NODES + (BATTLE_READY_NODE,),
+                label="群岛/战斗准备",
             ):
                 return CustomAction.RunResult(success=False)
-            switched_img = _screencap(context)
+            switched_img = map_layer.screencap(context)
             if switched_img is None:
                 return CustomAction.RunResult(success=False)
             at_battle_page = context.run_recognition(
@@ -231,7 +128,7 @@ class PirateRaidProcessor(CustomAction):
                 ACTIVE_BATTLE_NODE, switched_img
             ).hit
             already_archipelago = _layer_hit(
-                context, switched_img, ARCHIPELAGO_READY_NODES
+                context, switched_img, map_layer.ARCHIPELAGO_READY_NODES
             )
 
         # 2. 走「点横幅 → 准备页 → 进入战斗 → 航海 → 战斗画面 →
@@ -250,7 +147,7 @@ class PirateRaidProcessor(CustomAction):
             for node in nodes:
                 if not _tap(context, node, "海盗链"):
                     # 任一节点失败都尝试切回大陆，避免下一轮被卡。
-                    self._recover_to_continent(context)
+                    map_layer.switch_to_continent(context)
                     return CustomAction.RunResult(success=False)
 
         # 3. AutoFightProcessor 跑全场战斗，胜负检测由其内部完成。
@@ -258,7 +155,7 @@ class PirateRaidProcessor(CustomAction):
             result = context.run_task("AutoFight_Start")
             if not fight_utils._task_succeeded(result):
                 logger.error("海盗事件：群岛层战斗未成功结束")
-                self._recover_to_continent(context)
+                map_layer.switch_to_continent(context)
                 return CustomAction.RunResult(success=False)
 
         # 4. 战斗胜利 → 战利品页「确定」+ 经验页「确定」。
@@ -266,71 +163,19 @@ class PirateRaidProcessor(CustomAction):
         #    直到命中 Event_PirateRaid_ArchipelagoBack（即回到群岛层）。
         if not _tap(context, "Event_PirateRaid_VictoryConfirm", "结算"):
             logger.warning("海盗事件：战利品/经验结算未完成，但继续切回大陆")
-        if not _wait_for_layer_ready(
+        if not map_layer.wait_for_layer_ready(
             context, ("Event_PirateRaid_ArchipelagoBack",), 10.0, "群岛(战结)"
         ):
             logger.warning("海盗事件：未确认回到群岛层，仍尝试切回大陆")
 
-        # 5. 切回大陆层。
-        if not self._recover_to_continent(context):
+        # 5. 切回大陆层（和切群岛同一套两步逻辑：页签 → 加尔提兰）。
+        if not map_layer.switch_to_continent(context):
             logger.error("海盗事件：未能切回大陆层")
             return CustomAction.RunResult(success=False)
+        if not map_layer.wait_for_layer_ready(
+            context, map_layer.CONTINENT_READY_NODES, label="大陆"
+        ):
+            logger.warning("海盗事件：切回大陆后未确认图层就绪")
 
         logger.info("=== 海盗袭击庄园事件完成 ===")
         return CustomAction.RunResult(success=True)
-
-    # ------------------------------------------------------------ 切层
-
-    def _switch_to_archipelago(self, context: Context) -> bool:
-        """切到群岛：底部「加尔提兰」页签 → 区域面板里的「瑞格群岛」。
-
-        面板已经开着（能看到瑞格群岛）时直接点，省一步。
-        """
-        img = _screencap(context)
-        if img is None:
-            return False
-        if not _dialog_visible(context, img) and _layer_hit(
-            context, img, ARCHIPELAGO_READY_NODES
-        ):
-            logger.info("切群岛：已经在群岛层")
-            return True
-
-        if not context.run_recognition("ClickRegionArchipelago", img).hit:
-            if not _tap(context, "ClickRegionTabAny", "区域页签"):
-                return False
-            time.sleep(0.6)
-
-        if not _tap(context, "ClickRegionArchipelago", "瑞格群岛"):
-            return False
-
-        if not _wait_for_dialog_closed(context):
-            logger.warning("切群岛：点完瑞格群岛后旅行弹窗没有关闭，继续观察")
-        return True
-
-    def _recover_to_continent(self, context: Context) -> bool:
-        img = _screencap(context)
-        if (
-            img is not None
-            and not _dialog_visible(context, img)
-            and _layer_hit(context, img, CONTINENT_READY_NODES)
-        ):
-            logger.info("恢复大陆：当前已经在大陆层")
-            return True
-
-        # 旧版一步「前往大陆」；新版没有这个按钮，先识别再点，失败不浪费时间
-        img = _screencap(context)
-        if img is not None and context.run_recognition("ClickGoToContinent", img).hit:
-            if _tap(context, "ClickGoToContinent", "切大陆") and _wait_for_layer_ready(
-                context, CONTINENT_READY_NODES, LAYER_SWITCH_TIMEOUT, "大陆"
-            ):
-                return True
-
-        # 新版：底部页签 → 区域面板里的「加尔提兰」
-        logger.info("恢复大陆：改用「区域页签 → 加尔提兰」两步切层")
-        if _tap(context, "ClickRegionTabAny", "区域页签") and _tap(
-            context, "ClickRegionContinent", "加尔提兰"
-        ):
-            return _wait_for_layer_ready(
-                context, CONTINENT_READY_NODES, LAYER_SWITCH_TIMEOUT, "大陆"
-            )
-        return False

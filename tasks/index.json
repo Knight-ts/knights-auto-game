@@ -19,6 +19,7 @@
         "Event_PirateRaid_Dispatch",
         "PopUpWindowTip",
         "Auto_SailingFestivalEvent",
+        "Func_MapSwitch",
         "AutoFight_Start"
     ]
 }

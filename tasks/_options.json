@@ -942,5 +942,30 @@
                 }
             }
         ]
+    },
+    "地图切换目标": {
+        "type": "select",
+        "description": "「功能：地图切换」任务要切到哪个区域。两个方向走同一套逻辑：点底部区域页签 → 区域面板里选目标。",
+        "default_case": "瑞格群岛",
+        "cases": [
+            {
+                "name": "瑞格群岛",
+                "description": "切到群岛层",
+                "pipeline_override": {
+                    "MapTargetSelect": {
+                        "expected": "archipelago"
+                    }
+                }
+            },
+            {
+                "name": "加尔提兰",
+                "description": "切回大陆层",
+                "pipeline_override": {
+                    "MapTargetSelect": {
+                        "expected": "continent"
+                    }
+                }
+            }
+        ]
     }
 }
