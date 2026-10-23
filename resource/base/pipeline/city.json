@@ -653,6 +653,96 @@
         "post_delay": 500,
         "timeout": 2000
     },
+    "ClickRegionTab": {
+        "attach": {
+            "description": "底部中间的当前区域页签（在大陆时显示「加尔提兰」），点开区域面板"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "加尔提兰"
+        ],
+        "roi": [
+            280,
+            1190,
+            190,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 600,
+        "timeout": 2000
+    },
+    "RegionTabArchipelago": {
+        "attach": {
+            "description": "群岛层：底部页签显示「瑞格群岛」（只识别，用于判断当前图层）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "瑞格群岛"
+        ],
+        "roi": [
+            280,
+            1190,
+            190,
+            90
+        ],
+        "timeout": 2000,
+        "enabled": true
+    },
+    "ClickRegionTabAny": {
+        "attach": {
+            "description": "底部中间的当前区域页签（加尔提兰/瑞格群岛都点它，打开区域面板）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "加尔提兰",
+            "瑞格群岛"
+        ],
+        "roi": [
+            280,
+            1190,
+            190,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 600,
+        "timeout": 2000
+    },
+    "ClickRegionArchipelago": {
+        "attach": {
+            "description": "区域面板里的「瑞格群岛」（第一步点页签后点它）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "瑞格群岛"
+        ],
+        "roi": [
+            200,
+            1055,
+            190,
+            95
+        ],
+        "action": "Click",
+        "post_delay": 600,
+        "timeout": 2000
+    },
+    "ClickRegionContinent": {
+        "attach": {
+            "description": "区域面板里的「加尔提兰」（从群岛切回大陆）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "加尔提兰"
+        ],
+        "roi": [
+            200,
+            1045,
+            330,
+            115
+        ],
+        "action": "Click",
+        "post_delay": 600,
+        "timeout": 2000
+    },
     "CastleSwipeDown": {
         "action": "Swipe",
         "begin": [

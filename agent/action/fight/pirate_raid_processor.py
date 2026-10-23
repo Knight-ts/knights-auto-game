@@ -4,9 +4,11 @@
 玩家需要点击横幅 → 战斗准备页 → 进入战斗 → 航海确认 → 战斗画面
 → 战斗开始 → AutoFightProcessor 跑全场 → 结算收尾 → 切回大陆层。
 
-整个流程已经被探明：探 1 点横幅、探 2 进入战斗、探 3 航海确认、
-探 4 战斗开始、探 5 战斗胜利、探 6 切回大陆。所有步骤都拆成
-event_utils.json 中的 pipeline 节点，本处理器只负责编排。
+切层方式（新版界面）：底部中间的页签显示当前区域（大陆时是「加尔提兰」），
+点它弹出区域面板，面板左侧就是「瑞格群岛」——所以要两步：
+    1. 点底部「加尔提兰」页签
+    2. 点面板里的「瑞格群岛」
+旧版是一步「前往群岛」按钮，仍然保留作为兼容信号。
 """
 
 import time
@@ -21,12 +23,12 @@ from utils import logger
 import action.fight.fight_utils as fight_utils
 
 
-# 群岛层就绪信号：底部出现「前往大陆」按钮。
-ARCHIPELAGO_READY_NODE = "ClickGoToContinent"
+# 群岛层就绪信号（任一命中即可）：旧版「前往大陆」按钮，或底部页签显示「瑞格群岛」
+ARCHIPELAGO_READY_NODES = ("ClickGoToContinent", "RegionTabArchipelago")
 BATTLE_READY_NODE = "Event_PirateRaid_BattlePage"
 ACTIVE_BATTLE_NODE = "FightEndRound"
-# 大陆层就绪信号：底部出现「前往群岛」按钮，或 EnterCity 主城可见。
-CONTINENT_READY_NODES = ("ClickGoToArchipelago", "EnterCity")
+# 大陆层就绪信号：旧版「前往群岛」按钮、底部页签「加尔提兰」，或 EnterCity 主城可见
+CONTINENT_READY_NODES = ("ClickGoToArchipelago", "ClickRegionTab", "EnterCity")
 LAYER_SWITCH_TIMEOUT = 10.0
 
 
@@ -35,6 +37,10 @@ def _screencap(context: Context):
     if not job.succeeded:
         return None
     return job.get()
+
+
+def _layer_hit(context: Context, img, nodes: tuple) -> bool:
+    return any(context.run_recognition(node, img).hit for node in nodes)
 
 
 def _dialog_visible(context: Context, img) -> bool:
@@ -165,7 +171,7 @@ class PirateRaidProcessor(CustomAction):
         already_archipelago = bool(
             initial_img is not None
             and not initial_dialog
-            and context.run_recognition(ARCHIPELAGO_READY_NODE, initial_img).hit
+            and _layer_hit(context, initial_img, ARCHIPELAGO_READY_NODES)
         )
 
         if initial_dialog:
@@ -174,7 +180,7 @@ class PirateRaidProcessor(CustomAction):
                 return CustomAction.RunResult(success=False)
             if not _wait_for_layer_ready(
                 context,
-                (ARCHIPELAGO_READY_NODE, BATTLE_READY_NODE, ACTIVE_BATTLE_NODE),
+                ARCHIPELAGO_READY_NODES + (BATTLE_READY_NODE, ACTIVE_BATTLE_NODE),
                 LAYER_SWITCH_TIMEOUT,
                 "群岛/战斗准备",
             ):
@@ -188,9 +194,9 @@ class PirateRaidProcessor(CustomAction):
             in_active_battle = context.run_recognition(
                 ACTIVE_BATTLE_NODE, resumed_img
             ).hit
-            already_archipelago = context.run_recognition(
-                ARCHIPELAGO_READY_NODE, resumed_img
-            ).hit
+            already_archipelago = _layer_hit(
+                context, resumed_img, ARCHIPELAGO_READY_NODES
+            )
 
         if at_victory:
             logger.info("海盗事件：当前已在战斗胜利页，从结算继续")
@@ -204,13 +210,13 @@ class PirateRaidProcessor(CustomAction):
             if not fight_utils.ensure_at_bigmap(context):
                 logger.error("海盗事件：无法回到大地图，放弃")
                 return CustomAction.RunResult(success=False)
-            if not _tap(context, "ClickGoToArchipelago", "切群岛"):
+            if not self._switch_to_archipelago(context):
                 return CustomAction.RunResult(success=False)
-            # 海盗袭击期间，单行航海确认后可能直接落到战斗准备页，
+            # 海盗袭击期间，切层后可能直接落到战斗准备页，
             # 也可能先落到群岛地图；二者都是合法的切层终态。
             if not _wait_for_layer_ready(
                 context,
-                (ARCHIPELAGO_READY_NODE, BATTLE_READY_NODE),
+                ARCHIPELAGO_READY_NODES + (BATTLE_READY_NODE,),
                 LAYER_SWITCH_TIMEOUT,
                 "群岛/战斗准备",
             ):
@@ -224,9 +230,9 @@ class PirateRaidProcessor(CustomAction):
             in_active_battle = context.run_recognition(
                 ACTIVE_BATTLE_NODE, switched_img
             ).hit
-            already_archipelago = context.run_recognition(
-                ARCHIPELAGO_READY_NODE, switched_img
-            ).hit
+            already_archipelago = _layer_hit(
+                context, switched_img, ARCHIPELAGO_READY_NODES
+            )
 
         # 2. 走「点横幅 → 准备页 → 进入战斗 → 航海 → 战斗画面 →
         #    战斗开始 → AutoFightProcessor」的 pipeline 链。
@@ -273,16 +279,58 @@ class PirateRaidProcessor(CustomAction):
         logger.info("=== 海盗袭击庄园事件完成 ===")
         return CustomAction.RunResult(success=True)
 
+    # ------------------------------------------------------------ 切层
+
+    def _switch_to_archipelago(self, context: Context) -> bool:
+        """切到群岛：底部「加尔提兰」页签 → 区域面板里的「瑞格群岛」。
+
+        面板已经开着（能看到瑞格群岛）时直接点，省一步。
+        """
+        img = _screencap(context)
+        if img is None:
+            return False
+        if not _dialog_visible(context, img) and _layer_hit(
+            context, img, ARCHIPELAGO_READY_NODES
+        ):
+            logger.info("切群岛：已经在群岛层")
+            return True
+
+        if not context.run_recognition("ClickRegionArchipelago", img).hit:
+            if not _tap(context, "ClickRegionTabAny", "区域页签"):
+                return False
+            time.sleep(0.6)
+
+        if not _tap(context, "ClickRegionArchipelago", "瑞格群岛"):
+            return False
+
+        if not _wait_for_dialog_closed(context):
+            logger.warning("切群岛：点完瑞格群岛后旅行弹窗没有关闭，继续观察")
+        return True
+
     def _recover_to_continent(self, context: Context) -> bool:
         img = _screencap(context)
-        if img is not None and any(
-            context.run_recognition(node, img).hit
-            for node in CONTINENT_READY_NODES
-        ) and not _dialog_visible(context, img):
+        if (
+            img is not None
+            and not _dialog_visible(context, img)
+            and _layer_hit(context, img, CONTINENT_READY_NODES)
+        ):
             logger.info("恢复大陆：当前已经在大陆层")
             return True
-        if not _tap(context, "ClickGoToContinent", "切大陆"):
-            return False
-        return _wait_for_layer_ready(
-            context, CONTINENT_READY_NODES, LAYER_SWITCH_TIMEOUT, "大陆"
-        )
+
+        # 旧版一步「前往大陆」；新版没有这个按钮，先识别再点，失败不浪费时间
+        img = _screencap(context)
+        if img is not None and context.run_recognition("ClickGoToContinent", img).hit:
+            if _tap(context, "ClickGoToContinent", "切大陆") and _wait_for_layer_ready(
+                context, CONTINENT_READY_NODES, LAYER_SWITCH_TIMEOUT, "大陆"
+            ):
+                return True
+
+        # 新版：底部页签 → 区域面板里的「加尔提兰」
+        logger.info("恢复大陆：改用「区域页签 → 加尔提兰」两步切层")
+        if _tap(context, "ClickRegionTabAny", "区域页签") and _tap(
+            context, "ClickRegionContinent", "加尔提兰"
+        ):
+            return _wait_for_layer_ready(
+                context, CONTINENT_READY_NODES, LAYER_SWITCH_TIMEOUT, "大陆"
+            )
+        return False
