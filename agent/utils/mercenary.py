@@ -4,14 +4,16 @@
 真实界面有两种形态：
     1. 地图横幅：“鲍尔和上自的孩子成年了！可以加入佣兵团” —— 名字不在这里，要先点开它
     2. 弹窗：一行“××× 希望加入佣兵团”、一行佣兵名字（如“菲佛瑞”）、一行“年龄15”，
-       底部是“取消 / 招募”按钮
+       弹窗左侧还有「?」详情按钮，底部是“取消 / 招募”
 
 名字只出现在弹窗里，所以顺序固定为：
     确保弹窗已打开 → 只在弹窗正文里取名字（夹在“希望加入佣兵团”和“年龄”之间的那一行）
+    → 点「?」读角色详情面板（潜力 / 特性，和「孩子命名」同一套识别）
     → 按规则决定接受/拒绝 → 只点对应的按钮 → 用按钮是否消失来校验
 
-历史上先在未打开弹窗的地图截图上做名字 OCR，读到的是横幅里的“兵团”、节日提示
-“祈灵日到来”这类文字，记录里就会多出这些假名字。
+判定规则见 utils/mercenary_rules.py：名字（白/黑名单）、爵位下限、橙色特性数量、
+「好娃提醒」组合（特性 + 属性门槛）、必需特性、属性门槛，可全部满足 / 任一满足；
+没配置的条件不参与，读不到的条件自动跳过。
 """
 
 from __future__ import annotations
@@ -21,10 +23,14 @@ import time
 
 from utils import logger
 from utils.game_state import year_month
+from utils.mercenary_admit import grades_text
+from utils.mercenary_profile import close_panel, read_profile
 from utils.mercenary_records import append as append_record
-from utils.mercenary_rules import decide, load as load_rules
+from utils.mercenary_rules import DEFAULT_NAME_REGEX, evaluate, load as load_rules, parse_title
 
 PROBE_NODE = "Event_MercenaryDialogButton"
+# 任务选项「佣兵智能入队」的开关节点（interface.json 里 override）
+SMART_ADMIT_NODE = "Flag_MercenarySmartAdmit"
 
 # 地图横幅：整条横幅都可点，用“孩子成年/加入佣兵”文字的中心点去点
 BANNER_ROI = [20, 260, 680, 260]
@@ -41,7 +47,7 @@ NAME_BELOW_ANCHORS = ("年龄",)
 DEFAULT_NAME_ROI = [40, 290, 640, 500]
 
 BUTTON_REGEX = "招募|同意|确认加入|取消|拒绝|取消加入"
-LINE_REGEX = "[一-龥·0-9！]{1,20}"
+LINE_REGEX = "[一-龥A-Za-z·0-9！]{1,20}"
 
 CONFIRM_TEXTS = ("招募", "同意", "确认加入")
 CANCEL_TEXTS = ("取消", "拒绝", "取消加入")
@@ -262,11 +268,14 @@ def _recognize_name(context, screenshot, rules: dict) -> tuple[str, str]:
         _dump_screenshot(screenshot, "empty")
         return "", ""
 
-    name_pattern = re.compile(rules.get("name_regex") or "[一-龥·]{2,5}")
+    name_pattern = re.compile(rules.get("name_regex") or DEFAULT_NAME_REGEX)
     stopwords = set(rules.get("stopwords") or []) | set(DEFAULT_STOPWORDS)
 
     def plausible(text: str) -> bool:
         if not name_pattern.fullmatch(text):
+            return False
+        # 名字至少含一个汉字；纯数字/纯字母是资源数字或等级，不是名字
+        if not any("\u4e00" <= char <= "\u9fff" for char in text):
             return False
         if any(word in text for word in stopwords):
             return False
@@ -350,21 +359,103 @@ def _recognize_name(context, screenshot, rules: dict) -> tuple[str, str]:
     return "", " | ".join(text for text, _box in lines)
 
 
+def _smart_admit(context) -> bool:
+    """任务选项「佣兵智能入队」是否打开（打开就按特性/爵位判断）。"""
+    try:
+        node = context.get_node_data(SMART_ADMIT_NODE) or {}
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(node.get("enabled"))
+
+
+def _need_detail(rules: dict, smart_admit: bool = False) -> bool:
+    """要不要点「?」读角色详情（爵位 / 特性 / 潜力）。"""
+    mode = rules.get("read_detail") or "auto"
+    if mode == "never":
+        return False
+    if smart_admit or mode == "always":
+        return True
+    return (
+        rules.get("min_orange", 0) > 0
+        or rules.get("title_min", "无") != "无"
+        or bool(rules.get("combos"))
+        or bool(rules.get("features"))
+        or bool(rules.get("potential_min"))
+    )
+
+
+def _feature_swipe() -> int:
+    try:
+        from utils.child_perf import get_profile
+
+        return int(get_profile().get("feature_max_swipe") or 2)
+    except Exception:  # noqa: BLE001
+        return 2
+
+
+def _back_to_dialog(context) -> bool:
+    """从详情面板回到加入弹窗；回不去就补按返回键，返回最终是否还看得到弹窗。"""
+    for attempt in range(3):
+        img = _screencap(context)
+        if dialog_visible(context, img):
+            return True
+        if attempt < 2:
+            logger.warning("退出佣兵详情后没看到加入弹窗，补按返回键")
+            try:
+                context.tasker.controller.post_click_key(4).wait()
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(0.5)
+    return False
+
+
 def handle_join(context, screenshot) -> tuple[str, bool]:
     """处理一次佣兵加入事件，返回 (名字, 是否接受)。"""
     rules = load_rules()
+    smart_admit = _smart_admit(context)
 
     img, opened = _ensure_dialog(context, screenshot)
     name, raw = _recognize_name(context, img, rules)
-    accept = decide(name, rules) if name else False
 
-    closed = dismiss_join(context, accept, img)
+    profile = {
+        "name": name,
+        "title": parse_title(name) if name else None,
+        "orange": None,
+        "features": [],
+        "potential": {},
+        "grades": {},
+        "detail_ok": False,
+    }
+
+    if name and _need_detail(rules, smart_admit):
+        logger.info("佣兵智能入队：打开详情面板读取特性 / 爵位 / 潜力")
+        info = read_profile(context, name, max_swipe=_feature_swipe())
+        if info.get("panel_ok"):
+            profile["detail_ok"] = True
+            profile["orange"] = info.get("orange")
+            profile["features"] = info.get("features") or []
+            profile["potential"] = info.get("potential") or {}
+            profile["grades"] = info.get("grades") or {}
+            if info.get("title"):
+                profile["title"] = info["title"]
+        close_panel(context)
+        back_ok = _back_to_dialog(context)
+    else:
+        back_ok = True
+
+    verdict = evaluate(profile, rules)
+    accept = verdict["accept"]
+
+    closed = dismiss_join(context, accept) if back_ok else False
 
     notes = []
-    if raw:
-        notes.append(raw[:80])
+    if raw and raw != name:
+        notes.append(raw[:60])
+    notes.append(verdict["note"][:160])
     if not opened:
         notes.append("弹窗未打开")
+    if not back_ok:
+        notes.append("详情面板未返回")
     if not closed:
         notes.append("弹窗未关闭")
 
@@ -376,7 +467,11 @@ def handle_join(context, screenshot) -> tuple[str, bool]:
                 "游戏月": month or "",
                 "佣兵名字": name or "(未识别)",
                 "结果": "接受" if accept else "拒绝",
-                "匹配规则": rules.get("mode", ""),
+                "匹配规则": verdict["rule"],
+                "爵位": profile.get("title") or "",
+                "橙色特性": "" if profile.get("orange") is None else profile["orange"],
+                "属性": grades_text(profile["potential"]) if profile.get("potential") else "",
+                "特性": "、".join(profile.get("features") or [])[:80],
                 "备注": "；".join(notes),
             }
         )
@@ -384,7 +479,9 @@ def handle_join(context, screenshot) -> tuple[str, bool]:
         logger.warning(f"写入佣兵记录失败：{exc}")
 
     logger.info(
-        f"佣兵加入：名字={name or '未识别'}，规则={rules.get('mode')}，"
+        f"佣兵加入：名字={name or '未识别'}，规则={verdict['rule']}，"
+        f"爵位={profile.get('title') or '未识别'}，"
+        f"橙色特性={profile['orange'] if profile['orange'] is not None else '未识别'}，"
         f"{'接受' if accept else '拒绝'}，弹窗{'已关闭' if closed else '未关闭'}"
     )
     return name, accept

@@ -26,7 +26,7 @@
     <button data-tab="alerts">好娃提醒</button>
     <button data-tab="records">孩子记录</button>
     <button data-tab="mercs">佣兵记录</button>
-    <button data-tab="tprec">刷取任务</button>
+    <button data-tab="tprec">任务接取</button>
     <button data-tab="notify">通知</button>
   </nav>
 </header>
@@ -223,9 +223,12 @@
       <div class="row" style="margin-top:10px">
         <span class="hint">保留 = 这张值得修；待判定 = 还没看；删除 = 进回收站。Harness 读 debug/errors/REPORT.md 按保留项改代码。</span>
         <span style="flex:1"></span>
+        <span class="hint hidden" id="selfhealRepairHint">AI 修复：已关闭</span>
+        <button class="btn hidden" id="btnSelfhealEscalation">待判断报告</button>
         <button class="btn" id="btnSelfhealReport">导出报告</button>
         <button class="btn" id="btnSelfhealCleanup">清理过期</button>
         <button class="btn danger" id="btnSelfhealPurgeDeleted">彻底删除回收站</button>
+        <button class="btn danger" id="btnSelfhealClearAll">一键清除全部</button>
       </div>
       <div id="selfhealSettings" class="sh-settings" hidden>
         <label class="field">最多条数
@@ -243,6 +246,15 @@
         <label class="field">同类去重（秒）
           <input type="number" id="shDedupeSeconds" min="0" max="600" title="同一类报错在这个时间内只存一张">
         </label>
+        <div id="selfhealRepairSettings" class="row hidden" style="gap:10px;align-items:flex-end;flex:0 0 auto">
+          <label class="row" style="gap:6px;flex:0 0 auto"><input type="checkbox" id="selfhealRepairAuto"> AI 自动修复新报错</label>
+          <label class="field">AI 最多尝试
+            <input type="number" id="shRepairAttempts" min="1" max="5" title="同类报错累计尝试到这个次数就停下来等用户判断">
+          </label>
+          <label class="field">单次超时（秒）
+            <input type="number" id="shRepairTimeout" min="60" max="3600" step="30" title="超过这个时间就打断 AI 会话">
+          </label>
+        </div>
         <button class="btn primary" id="btnSelfhealSaveConfig">保存设置</button>
       </div>
     </div>
@@ -269,6 +281,17 @@
         </div>
         <div class="sh-meta" id="shMeta"></div>
         <pre id="shError" style="display:none;max-height:180px;margin-top:10px"></pre>
+        <div class="sh-repair hidden" id="selfhealRepairPanel" style="margin-top:12px">
+          <div class="row">
+            <span class="sh-badge" id="shRepairState">未处理</span>
+            <span class="hint" id="shRepairInfo">发现新报错后 AI 会自动读取截图和日志</span>
+            <span style="flex:1"></span>
+            <button class="btn primary" id="btnShRepair">交给 AI 修复</button>
+            <button class="btn" id="btnShRepairStop">停止</button>
+            <button class="btn" id="btnShRepairReset">重置</button>
+          </div>
+          <pre id="shRepairSummary" style="display:none;margin-top:8px;max-height:160px"></pre>
+        </div>
         <div class="sh-image-wrap" id="shImageWrap" style="display:none">
           <a id="shImageLink" target="_blank" rel="noreferrer"><img id="shImage" alt="报错截图"></a>
         </div>
@@ -358,20 +381,56 @@
   <section id="tab-mercs" class="hidden">
     <div class="card" style="margin-bottom:14px">
       <div class="row">
-        <span>智能接受规则</span>
-        <select id="mercMode">
-          <option value="whitelist">白名单（名字命中才接受）</option>
-          <option value="blacklist">黑名单（名字命中则拒绝）</option>
-        </select>
+        <label class="field">名字规则
+          <select id="mercMode">
+            <option value="whitelist">白名单（名字命中才接受）</option>
+            <option value="blacklist">黑名单（名字命中则拒绝）</option>
+          </select>
+        </label>
+        <label class="field">爵位下限
+          <select id="mercTitle">
+            <option value="无">不看爵位</option>
+            <option value="骑士">骑士及以上</option>
+            <option value="男爵">男爵及以上</option>
+            <option value="伯爵">伯爵及以上</option>
+            <option value="公爵">仅公爵</option>
+          </select>
+        </label>
+        <label class="field">橙色特性 ≥
+          <input type="number" id="mercOrange" min="0" max="10" step="1" value="0" style="width:72px"
+                 title="0 = 不看特性；大于 0 时会点弹窗左侧「?」读角色详情，数橙色血统特性">
+        </label>
+        <label class="field">条件组合
+          <select id="mercMatch">
+            <option value="all">全部满足</option>
+            <option value="any">任一满足</option>
+          </select>
+        </label>
         <button class="btn primary" id="btnMercSave">保存</button>
         <span class="hint" id="mercHint"></span>
       </div>
       <div style="margin-top:8px">
         <textarea id="mercNames" placeholder="每行一个名字关键字，例如：&#10;卡尔&#10;塞尔"></textarea>
       </div>
+      <div style="margin-top:12px"><strong>入队条件（读角色详情 · 和「孩子命名」同一套识别）</strong></div>
+      <div class="hint" style="margin-top:4px">
+        勾选「好娃提醒」里的组合：命中任意一个组合（特性 + 属性门槛）就收；下面的必需特性和属性门槛可以单独再卡。
+      </div>
+      <div id="mercCombos" style="margin-top:8px;max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:6px"></div>
+      <div class="row" style="margin-top:10px">
+        <label class="field grow">必需特性（全部命中，留空 = 不看）
+          <input type="text" id="mercFeatures" placeholder="例：科内塔之怒、太阳之子">
+        </label>
+      </div>
+      <div class="row" style="margin-top:8px;align-items:flex-end">
+        <span class="hint">属性门槛</span>
+        <div id="mercAttrs" class="row" style="gap:8px"></div>
+      </div>
       <div class="hint" style="margin-top:6px">
-        任务里「开启自动接受佣兵」选“智能”后生效；名字取自弹窗「希望加入佣兵团」与「年龄」之间那一行，
-        <code>table/mercenary_rules.json</code> 的 name_roi 只在两行锚点都没识别到时兜底。
+        任务里「开启自动接受佣兵」选“智能”且「佣兵智能入队」= Yes 时，会点弹窗左侧「?」读潜力 / 特性 / 爵位再判定；
+        名字取自弹窗「希望加入佣兵团」与「年龄」之间那一行，橙色特性按
+        <code>table/各国家特性表.json</code> 里等级含“橙”的血统特性计数。
+        条件读不到时该条件自动跳过，不会把人全拒掉。
       </div>
     </div>
     <div class="card">
@@ -381,28 +440,66 @@
       </div>
       <table style="margin-top:10px">
         <thead>
-          <tr><th>时间</th><th>游戏年</th><th>游戏月</th><th>佣兵名字</th><th>结果</th><th>规则</th><th>备注</th></tr>
+          <tr><th>时间</th><th>游戏年</th><th>游戏月</th><th>佣兵名字</th><th>结果</th><th>规则</th><th>爵位</th><th>橙特性</th><th>属性</th><th>特性</th><th>备注</th></tr>
         </thead>
         <tbody id="mercBody"></tbody>
       </table>
     </div>
   </section>
 
-  <!-- 刷取任务记录 -->
+  <!-- 任务接取：城市规则 / 黑名单 / 任务板 / 记录 -->
   <section id="tab-tprec" class="hidden">
     <div class="card" style="margin-bottom:14px">
       <div class="row">
+        <label class="field">城市
+          <select id="tprecCity"><option value="">全部城市</option></select>
+        </label>
         <button class="btn" id="btnTprecReload">刷新</button>
-        <span class="hint">按城市分组；数据来自 table/task_records.json（明细 table/task_records.jsonl）</span>
+        <span class="hint" id="tprecUpdated"></span>
+      </div>
+      <div class="row" style="margin-top:12px"><strong>接取规则</strong><span class="hint" id="tprecRuleHint"></span></div>
+      <div class="row" style="margin-top:8px;align-items:flex-end">
+        <label class="field">最低等级
+          <input type="number" id="tprecMin" min="0" max="200" style="width:96px">
+        </label>
+        <label class="field">最高等级
+          <input type="number" id="tprecMax" min="0" max="200" style="width:96px">
+        </label>
+        <button class="btn primary" id="btnTprecSaveRule" style="margin-left:10px">保存</button>
       </div>
       <div class="hint" style="margin-top:6px">
-        每次接取任务都会记录 任务名 + 花费回合数；点「拉黑」写入 <code>table/task_blacklist.json</code>，之后任务板不再接取同名任务（不用重启）。
+        规则按城市生效：等级区间 + 城市黑名单；全局黑名单对所有城市生效。保存后下一次接取任务立即使用（Agent 会按文件 mtime 自动重载）。
       </div>
     </div>
-    <div id="tprecBody"></div>
-    <div class="card" style="margin-top:14px">
-      <div class="row"><strong>任务黑名单</strong><span class="hint" id="tprecBlackHint"></span></div>
-      <div id="tprecBlacklist" style="margin-top:8px"></div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="row"><strong>最近任务板</strong><span class="hint" id="tprecPoolHint"></span></div>
+      <table style="margin-top:8px">
+        <thead><tr><th>任务</th><th>类型</th><th>等级</th><th>描述</th><th>判定</th><th></th></tr></thead>
+        <tbody id="tprecPool"></tbody>
+      </table>
+      <div class="hint" style="margin-top:8px">每次扫描任务板都会刷新，数据来自 table/task_pool.json；「判定」用当前城市规则实时计算。</div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="row"><strong>黑名单</strong><span class="hint" id="tprecBlackHint"></span></div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="tprecBlackInput" placeholder="输入要屏蔽的任务名，回车添加" style="flex:1">
+        <button class="btn" id="btnTprecBlackAdd">添加</button>
+      </div>
+      <div style="margin-top:10px">
+        <strong>全局（所有城市）</strong>
+        <div id="tprecGlobalBlack" style="margin-top:6px"></div>
+      </div>
+      <div style="margin-top:10px" id="tprecCityBlackWrap">
+        <strong>当前城市黑名单</strong>
+        <div id="tprecCityBlack" style="margin-top:6px"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="row"><strong>任务记录（按城市）</strong><span class="hint">数据来自 table/task_records.json，明细 table/task_records.jsonl</span></div>
+      <div id="tprecBody"></div>
     </div>
   </section>
 

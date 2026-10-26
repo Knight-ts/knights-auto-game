@@ -30,8 +30,9 @@ from pathlib import Path
 
 COMBOS_REL = Path("table") / "task_combos.json"
 ALERT_REL = Path("temp") / "child_alert.json"
+PIRATE_REL = Path("temp") / "pirate_alert.json"
 
-RULE_WHEN = ("fail", "child_alert", "offline", "loop_end")
+RULE_WHEN = ("fail", "child_alert", "pirate", "offline", "loop_end")
 RULE_ACTION = ("retry", "skip", "stop", "continue", "notify", "reconnect", "wait")
 
 
@@ -193,9 +194,9 @@ class ComboRunner:
         except Exception:  # noqa: BLE001
             return True
 
-    def _alert_since(self, started: float) -> bool:
+    def _alert_since(self, started: float, rel: Path = ALERT_REL) -> bool:
         try:
-            return (self.root / ALERT_REL).stat().st_mtime > started
+            return (self.root / rel).stat().st_mtime > started
         except OSError:
             return False
 
@@ -271,9 +272,48 @@ class ComboRunner:
 
     # ------------------------------------------------------------ 执行
 
+    def _scene_guard(self, step: dict) -> str:
+        """任务失败后再次确认场景：处理孩子命名/提示等打断事件。
+
+        把该步骤的选项 override 一起带进 SceneGuard，命名/佣兵开关沿用
+        用户为这一步选的值，不会因为换了任务上下文而用默认值。
+        """
+        override = {}
+        try:
+            task = next(
+                (
+                    item
+                    for item in self.runtime.interfaces.get("task", [])
+                    if item.get("entry") == step.get("entry")
+                ),
+                None,
+            )
+            if task is not None:
+                override = self.runtime.build_override(
+                    task, step.get("selection") or {}
+                )
+        except Exception:  # noqa: BLE001
+            override = {}
+        try:
+            handled = self.runtime.run_internal_task("SceneGuard", override)
+        except Exception as exc:  # noqa: BLE001
+            with self.lock:
+                self.message = f"场景确认失败：{exc}"
+            return ""
+        if not handled:
+            return ""
+        marker = self.root / "temp" / "scene_guard.json"
+        try:
+            data = json.loads(marker.read_text(encoding="utf-8"))
+            events = data.get("events") or []
+            return "、".join(str(item) for item in events) or "已处理"
+        except (OSError, ValueError):
+            return "已处理"
+
     def _run_step(self, step: dict, name: str, index: int, total: int, loop: int) -> str:
         """执行一个步骤；返回 done / skip / stopped / stop。"""
         attempts = 0
+        scene_retries = 0
         while True:
             if self.stop_event.is_set():
                 return "stopped"
@@ -339,8 +379,38 @@ class ComboRunner:
                     self.message = "好娃提醒触发，组合停止（请在游戏里处理后再运行）"
                 return "stop"
 
+            if self._alert_since(started, PIRATE_REL):
+                rule = self._rule("pirate") or {"action": "stop", "value": 0}
+                action = rule["action"] if rule["action"] in ("continue", "notify", "stop") else "stop"
+                if action == "continue":
+                    with self.lock:
+                        self.message = "海盗事件：按规则继续"
+                    return "done"
+                if action == "notify":
+                    self._notify("海盗事件", f"{self.combo.get('name')}：海盗事件，请调整阵容")
+                    with self.lock:
+                        self.message = "海盗事件：已发通知，继续"
+                    return "done"
+                with self.lock:
+                    self.state = "stopped"
+                    self.message = "海盗事件：打不过就先调整阵容，处理完再运行组合（已停止）"
+                return "stop"
+
             if state == "done":
                 return "done"
+
+            # 任务失败先不要急着按失败规则停：再次确认当前场景。
+            # 很多失败只是战斗/命名/佣兵弹窗导致「期望的按钮不在」，
+            # 处理掉打断事件后重试同一步，通常就能继续。
+            if scene_retries < 2:
+                with self.lock:
+                    self.message = f"{name} 失败，正在再次确认当前场景…"
+                event = self._scene_guard(step)
+                if event:
+                    scene_retries += 1
+                    with self.lock:
+                        self.message = f"{name} 场景已修正（{event}），重试 {scene_retries}/2"
+                    continue
 
             # 任务失败
             rule = self._rule("fail")

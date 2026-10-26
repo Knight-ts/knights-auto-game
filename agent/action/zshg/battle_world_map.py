@@ -358,7 +358,11 @@ class BattleSessionState:
     no_progress_cycles: int = 0
     exploration_passes: int = 0
     last_move_direction: Optional[Direction] = None
+    # 跨回合敌人方向记忆（(col_dir, row_dir)），恢复调用时沿用
+    last_enemy_direction: Optional[Direction] = None
     recent_move_points: List[GridPoint] = field(default_factory=list)
+    # 本场战斗识别到的棋子：key -> PieceInfo.to_record()
+    pieces: Dict[str, dict] = field(default_factory=dict)
     world: BattleWorldMap = field(default_factory=BattleWorldMap)
     explorer: ClockwiseExplorer = field(default_factory=ClockwiseExplorer)
 

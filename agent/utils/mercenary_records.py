@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """佣兵招募记录：table/mercenary_records.jsonl + .csv。
 
-每条记录：时间、游戏年、游戏月、佣兵名字、结果（接受/拒绝）、匹配规则、备注。
+每条记录：时间、游戏年、游戏月、佣兵名字、结果（接受/拒绝）、匹配规则、
+爵位、橙色特性数量、属性等级、特性、备注。
 用 CSV 是为了不依赖 openpyxl；Excel/WPS 可直接打开。
 """
 
@@ -17,7 +18,19 @@ TABLE_DIR = ROOT / "table"
 JSONL_PATH = TABLE_DIR / "mercenary_records.jsonl"
 CSV_PATH = TABLE_DIR / "mercenary_records.csv"
 
-HEADERS = ["时间", "游戏年", "游戏月", "佣兵名字", "结果", "匹配规则", "备注"]
+HEADERS = [
+    "时间",
+    "游戏年",
+    "游戏月",
+    "佣兵名字",
+    "结果",
+    "匹配规则",
+    "爵位",
+    "橙色特性",
+    "属性",
+    "特性",
+    "备注",
+]
 
 
 def _read_rows() -> list[dict]:

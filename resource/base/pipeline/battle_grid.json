@@ -401,6 +401,15 @@
 		"pre_delay": 0,
 		"post_delay": 0
 	},
+	"Battle_RoleCardText": {
+		"recognition": "OCR",
+		"roi": [0, 120, 460, 430],
+		"action": "DoNothing",
+		"timeout": 1500,
+		"rate_limit": 0,
+		"pre_delay": 0,
+		"post_delay": 0
+	},
 	"Battle_CollapseRoleCard": {
 		"recognition": "OCR",
 		"expected": ["攻击"],

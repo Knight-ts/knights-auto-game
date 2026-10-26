@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,6 +24,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from webapp.combos import ComboRunner, load as load_combos, normalize as normalize_combo
 from webapp.combos import save as save_combos, validate as validate_combos
+from webapp.repair import DEFAULTS as REPAIR_DEFAULTS, RepairManager
 from webapp.runtime import ROOT, Runtime
 from webapp.selfheal import ErrorStore
 
@@ -50,7 +52,9 @@ notifier = _load_module("notifier", ROOT / "agent" / "utils" / "notifier.py")
 child_perf = _load_module("child_perf", ROOT / "agent" / "utils" / "child_perf.py")
 mercenary_records = _load_module("mercenary_records", ROOT / "agent" / "utils" / "mercenary_records.py")
 mercenary_rules = _load_module("mercenary_rules", ROOT / "agent" / "utils" / "mercenary_rules.py")
+mercenary_admit = _load_module("mercenary_admit", ROOT / "agent" / "utils" / "mercenary_admit.py")
 task_records = _load_module("task_records", ROOT / "agent" / "utils" / "task_records.py")
+task_rules = _load_module("task_rules", ROOT / "agent" / "utils" / "task_rules.py")
 game_state = _load_module("game_state", ROOT / "agent" / "utils" / "game_state.py")
 taskpack = _load_module("taskpack", ROOT / "tools" / "taskpack.py")
 
@@ -75,15 +79,60 @@ def save_config(data: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+# 月度循环是基础配置；这三项最早只存在于「战斗任务主动」。
+# 升级后第一次启动时把专门任务里已经设置过的值搬进月度循环，
+# 再把专门任务恢复成「跟随月度循环」，避免它继续当显式覆盖。
+BASE_BATTLE_OPTIONS = ("战斗模式", "待机回合数", "棋子识别")
+
+
+def migrate_battle_base_config() -> bool:
+    config = load_config()
+    selections = config.get("selections")
+    if not isinstance(selections, dict):
+        return False
+    yearly = selections.get("Auto_YearlyTask")
+    if not isinstance(yearly, dict):
+        yearly = {}
+        selections["Auto_YearlyTask"] = yearly
+    if "待机回合数" in yearly:
+        return False
+
+    donor_entry = ""
+    donor = None
+    for entry, selection in selections.items():
+        if entry == "Auto_YearlyTask" or not isinstance(selection, dict):
+            continue
+        if any(option in selection for option in BASE_BATTLE_OPTIONS):
+            donor_entry, donor = entry, selection
+            break
+    if donor is None:
+        return False
+
+    for option in BASE_BATTLE_OPTIONS:
+        if option in donor:
+            yearly[option] = donor.pop(option)
+    config["selections"] = selections
+    save_config(config)
+    print(
+        f"[config] 已把 {donor_entry} 的战斗设置迁移为月度循环基础配置，"
+        f"{donor_entry} 改为跟随月度循环",
+        flush=True,
+    )
+    return True
+
+
 # 问题自纠：报错现场（截图 + 日志尾巴）存到 debug/errors/，网页上可保留/删除
 selfheal = ErrorStore(ROOT, config_provider=load_config)
 runtime.error_sink = selfheal.capture_event
 
+# AI 修复调度器：新报错 -> DSH Bridge -> DSH 会话；有次数/超时/指纹上限
+repair = RepairManager(ROOT, selfheal, load_config)
+
 
 def _capture_api_error(path: str, exc: Exception) -> None:
     """接口 500 也留一张现场；放后台线程，别拖慢错误响应。"""
-    if path.startswith("/api/selfheal"):
-        return  # 自纠接口自己的错不再递归截图
+    if path.startswith(("/api/selfheal", "/api/repair")):
+        return  # 自纠/修复接口自己的错不再递归截图
     message = str(exc)
     # 设备没连 / 任务在跑这类“正常状态提示”不是 bug，别刷屏
     expected = (
@@ -315,6 +364,7 @@ class Handler(BaseHTTPRequestHandler):
                     limit=limit,
                 )
                 payload["ok"] = True
+                payload["repair"] = repair.status()
                 self._json(200, payload)
             elif path == "/api/selfheal/detail":
                 sid = (parse_qs(parsed.query).get("id") or [""])[0]
@@ -336,6 +386,14 @@ class Handler(BaseHTTPRequestHandler):
                     selfheal.report().encode("utf-8"),
                     "text/markdown; charset=utf-8",
                 )
+            elif path == "/api/repair/status":
+                self._json(200, {"ok": True, "repair": repair.status()})
+            elif path == "/api/repair/escalation":
+                try:
+                    text = repair.escalation_path.read_text(encoding="utf-8")
+                except OSError:
+                    text = "# 暂无需要判断的报错\n"
+                self._send(200, text.encode("utf-8"), "text/markdown; charset=utf-8")
             elif path == "/api/logs":
                 limit = int(parse_qs(parsed.query).get("limit", ["200"])[0])
                 self._json(200, {"logs": runtime.tail_logs(limit)})
@@ -345,6 +403,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"records": child_records.recent(100)})
             elif path == "/api/mercenary-records":
                 self._json(200, {"records": mercenary_records.recent(200)})
+            elif path == "/api/mercenary-combos":
+                self._json(
+                    200,
+                    {
+                        "combos": mercenary_admit.condition_choices(),
+                        "attributes": list(mercenary_rules.ATTRIBUTE_ORDER),
+                        "grades": ["SS", "S", "A", "B", "C", "D", "E"],
+                    },
+                )
             elif path == "/api/task-records":
                 summary = task_records.load_summary()
                 self._json(
@@ -353,6 +420,24 @@ class Handler(BaseHTTPRequestHandler):
                         "cities": summary.get("cities") or {},
                         "updated": summary.get("updated", ""),
                         "blacklist": task_records.load_blacklist(),
+                    },
+                )
+            elif path == "/api/task-rules":
+                rules = task_rules.load_rules()
+                pool = task_rules.load_pool()
+                cities = set((rules.get("cities") or {}).keys())
+                pool_city = str(pool.get("city") or "").strip()
+                if pool_city:
+                    cities.add(pool_city)
+                summary = task_records.load_summary()
+                cities.update((summary.get("cities") or {}).keys())
+                self._json(
+                    200,
+                    {
+                        "rules": rules,
+                        "global_blacklist": task_rules.global_blacklist(),
+                        "pool": pool,
+                        "cities": sorted(cities),
                     },
                 )
             elif path == "/api/mercenary-rules":
@@ -494,8 +579,82 @@ class Handler(BaseHTTPRequestHandler):
                     rules["mode"] = payload["mode"]
                 if isinstance(payload.get("names"), list):
                     rules["names"] = payload["names"]
+                if payload.get("match") in ("all", "any"):
+                    rules["match"] = payload["match"]
+                if "title_min" in payload:
+                    rules["title_min"] = str(payload.get("title_min") or "无")
+                if "min_orange" in payload:
+                    rules["min_orange"] = payload.get("min_orange")
+                if payload.get("read_detail") in ("auto", "always", "never"):
+                    rules["read_detail"] = payload["read_detail"]
+                if isinstance(payload.get("combos"), list):
+                    rules["combos"] = payload["combos"]
+                if isinstance(payload.get("features"), list):
+                    rules["features"] = payload["features"]
+                elif isinstance(payload.get("features"), str):
+                    rules["features"] = payload["features"]
+                if isinstance(payload.get("potential_min"), dict):
+                    rules["potential_min"] = payload["potential_min"]
                 saved = mercenary_rules.save(rules)
                 self._json(200, {"ok": True, "rules": saved})
+            elif path == "/api/task-rules/save":
+                city = str(payload.get("city") or "").strip()
+                rules = task_rules.set_city_levels(
+                    city,
+                    payload.get("min_level"),
+                    payload.get("max_level"),
+                )
+                self._json(200, {"ok": True, "rules": rules})
+            elif path == "/api/task-rules/blacklist":
+                city = str(payload.get("city") or "").strip()
+                name = str(payload.get("task") or "").strip()
+                if not name:
+                    self._json(400, {"ok": False, "error": "缺少任务名"})
+                elif city:
+                    rules = task_rules.add_city_blacklist(city, name)
+                    self._json(
+                        200,
+                        {
+                            "ok": True,
+                            "rules": rules,
+                            "global_blacklist": task_rules.global_blacklist(),
+                        },
+                    )
+                else:
+                    global_list = task_rules.add_global_blacklist(name)
+                    self._json(
+                        200,
+                        {
+                            "ok": True,
+                            "rules": task_rules.load_rules(),
+                            "global_blacklist": global_list,
+                        },
+                    )
+            elif path == "/api/task-rules/unblacklist":
+                city = str(payload.get("city") or "").strip()
+                name = str(payload.get("task") or "").strip()
+                if not name:
+                    self._json(400, {"ok": False, "error": "缺少任务名"})
+                elif city:
+                    rules = task_rules.remove_city_blacklist(city, name)
+                    self._json(
+                        200,
+                        {
+                            "ok": True,
+                            "rules": rules,
+                            "global_blacklist": task_rules.global_blacklist(),
+                        },
+                    )
+                else:
+                    global_list = task_rules.remove_global_blacklist(name)
+                    self._json(
+                        200,
+                        {
+                            "ok": True,
+                            "rules": task_rules.load_rules(),
+                            "global_blacklist": global_list,
+                        },
+                    )
             elif path == "/api/task-records/blacklist":
                 name = str(payload.get("task") or "").strip()
                 if not name:
@@ -662,6 +821,49 @@ class Handler(BaseHTTPRequestHandler):
                 config["selfheal"] = section
                 save_config(config)
                 self._json(200, {"ok": True, "config": selfheal.config()})
+            elif path == "/api/selfheal/clear":
+                if not payload.get("confirm"):
+                    self._json(400, {"ok": False, "error": "一键清除需要 confirm=true"})
+                    return
+                repair.stop_current()
+                repair.clear_state()
+                result = selfheal.clear_all()
+                self._json(200, {"ok": True, **result, "repair": repair.status()})
+            elif path == "/api/repair/start":
+                sid = str(payload.get("id") or "")
+                try:
+                    result = repair.queue(sid, manual=True)
+                except ValueError as exc:
+                    self._json(400, {"ok": False, "error": str(exc)})
+                else:
+                    self._json(200, result)
+            elif path == "/api/repair/stop":
+                self._json(200, {"ok": True, **repair.stop_current()})
+            elif path == "/api/repair/reset":
+                sid = str(payload.get("id") or "")
+                try:
+                    result = repair.reset(sid)
+                except ValueError as exc:
+                    self._json(400, {"ok": False, "error": str(exc)})
+                else:
+                    self._json(200, result)
+            elif path == "/api/repair/config":
+                config = load_config()
+                section = config.get("repair")
+                if not isinstance(section, dict):
+                    section = {}
+                old_auto = bool(section.get("auto", REPAIR_DEFAULTS["auto"]))
+                for key in REPAIR_DEFAULTS:
+                    if key in payload:
+                        section[key] = payload[key]
+                if bool(section.get("auto", REPAIR_DEFAULTS["auto"])) and not old_auto:
+                    section["autoSince"] = time.time()
+                config["repair"] = section
+                save_config(config)
+                self._json(
+                    200,
+                    {"ok": True, "config": repair.config(), "repair": repair.status()},
+                )
             elif path == "/api/combos/save":
                 incoming = payload.get("combos")
                 if not isinstance(incoming, list):
@@ -724,6 +926,12 @@ def main() -> int:
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
 
+    # 一次性迁移：把旧版「战斗任务主动」里的战斗设置升级为月度循环基础配置
+    try:
+        migrate_battle_base_config()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[config] 战斗基础配置迁移失败：{exc}", flush=True)
+
     last_error = None
     httpd = None
     for port in range(args.port, args.port + 10):
@@ -764,12 +972,15 @@ def main() -> int:
             runtime.log(f"自动连接失败：{exc}（可在页面上手动连接）")
 
     threading.Thread(target=bootstrap, name="bootstrap", daemon=True).start()
+    if repair.config()["enabled"]:
+        repair.start()
 
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("已退出")
     finally:
+        repair.stop()
         runtime.stop_agent()
         httpd.server_close()
     return 0

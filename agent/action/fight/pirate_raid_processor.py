@@ -11,6 +11,8 @@ from maa.agent.agent_server import AgentServer
 from maa.context import Context
 from maa.custom_action import CustomAction
 
+import time
+
 from utils import logger
 
 import action.fight.fight_utils as fight_utils
@@ -152,16 +154,34 @@ class PirateRaidProcessor(CustomAction):
 
         # 3. AutoFightProcessor 跑全场战斗，胜负检测由其内部完成。
         if not at_victory:
-            result = context.run_task("AutoFight_Start")
+            result = context.run_task(
+                "AutoFight_Start",
+                pipeline_override=fight_utils.battle_option_override(context),
+            )
             if not fight_utils._task_succeeded(result):
                 logger.error("海盗事件：群岛层战斗未成功结束")
                 map_layer.switch_to_continent(context)
                 return CustomAction.RunResult(success=False)
 
+        # 3.5 战斗结束后再次确认场景：孩子出生/命名页可能抢在战利品页前面出现。
+        for _ in range(3):
+            if not fight_utils.handle_interrupt_scene(context):
+                break
+            time.sleep(0.5)
+
         # 4. 战斗胜利 → 战利品页「确定」+ 经验页「确定」。
         #    Event_PirateRaid_VictoryConfirm 节点里 next 循环指向自身，
         #    直到命中 Event_PirateRaid_ArchipelagoBack（即回到群岛层）。
-        if not _tap(context, "Event_PirateRaid_VictoryConfirm", "结算"):
+        settled = _tap(context, "Event_PirateRaid_VictoryConfirm", "结算")
+        if not settled:
+            for _ in range(2):
+                if not fight_utils.handle_interrupt_scene(context):
+                    break
+                time.sleep(0.4)
+                if _tap(context, "Event_PirateRaid_VictoryConfirm", "结算"):
+                    settled = True
+                    break
+        if not settled:
             logger.warning("海盗事件：战利品/经验结算未完成，但继续切回大陆")
         if not map_layer.wait_for_layer_ready(
             context, ("Event_PirateRaid_ArchipelagoBack",), 10.0, "群岛(战结)"

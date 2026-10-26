@@ -19,6 +19,7 @@ from .battle_grid import (
     CELL_HEIGHT,
     CELL_WIDTH,
 )
+from .battle_pieces import PieceInfo, PieceRecognizer
 from .battle_world_map import (
     ENEMY as WORLD_ENEMY,
     ENVIRONMENT as WORLD_ENVIRONMENT,
@@ -29,14 +30,31 @@ from .battle_world_map import (
     session_key,
 )
 
+# 战斗模式：待机模式只结束回合等反击；追击模式主动建图、搜索、接近并攻击。
+MODE_AUTO = "auto"
+MODE_STANDBY = "standby"
+MODE_PURSUIT = "pursuit"
+MODE_LABELS = {
+    MODE_AUTO: "自动（先待机后追击）",
+    MODE_STANDBY: "待机模式",
+    MODE_PURSUIT: "追击模式",
+}
+
 
 @AgentServer.custom_action("AutoFightProcessor")
 class AutoFightProcessor(CustomAction):
-    """先被动等待反击，超过指定回合后执行主动战斗。
+    """混合战斗处理器：待机模式等待反击，追击模式主动建图与追击。
 
-    策略：前 20 轮全部依赖「结束回合 + 自动反击」，让敌人自己走过来；
-    仅当 20 轮后仍未通关时，才进入主动搜索与追击模式。这样可以减少决策
-    次数，避免每局都触发 16 视野螺旋搜索的低性价比操作。
+    战斗分两种模式：
+
+    * **待机模式**：只点「结束回合」，靠游戏自动反击让敌人自己走过来，
+      不搜索、不移动，代价最低；
+    * **追击模式**：完整建图 → 顺时针/螺旋搜索 → 八方向 A* 接近攻击环
+      → 点对点攻击，并在缺我方/缺目标时先确定敌我大致方向再推进。
+
+    模式由界面选项「战斗模式」决定：自动（先待机 N 回合后转追击）/
+    只待机 / 只追击；N 由「待机回合数」输入框设置（默认 20，0 = 立即追击）。
+    待机回合数按整场战斗累计，恢复调用不会重新计数。
     """
 
     # A battle can legitimately last well beyond the old per-invocation limit
@@ -44,9 +62,13 @@ class AutoFightProcessor(CustomAction):
     # final safety fuse, while the normal stop condition is a verified result.
     MAX_ACTION_CYCLES = 300
     MAX_NO_PROGRESS_CYCLES = 12
-    PASSIVE_ROUNDS = 20
-    ACTIVE_FROM_ROUND = PASSIVE_ROUNDS + 1
+    DEFAULT_STANDBY_ROUNDS = 20
     TEST_ACTIVE_FROM_ROUND_ENV = "MAAGC_TEST_ACTIVE_FROM_ROUND"
+    # 界面选项通过 pipeline 中这三个节点传给 CustomAction：
+    # FightModeSelect / FightStandbyRounds / FightPieceRecognition
+    OPTION_MODE_NODE = "FightModeSelect"
+    OPTION_STANDBY_NODE = "FightStandbyRounds"
+    OPTION_PIECE_NODE = "FightPieceRecognition"
     MAX_SEARCH_SWIPES = 16
     MAX_STRAIGHT_SEARCH_SWIPES = 3
     # 右下角“回合：N”中的数字是常驻 HUD，不依赖一闪而过的回合提示。
@@ -94,16 +116,64 @@ class AutoFightProcessor(CustomAction):
     def __init__(self) -> None:
         super().__init__()
         self.scanner = GridScanner()
+        self.pieces = PieceRecognizer()
         self._hidden_enemy_cell: Optional[Tuple[int, int]] = None
         self._coarse_threat_direction: Optional[Tuple[int, int]] = None
         self._last_confirmed_move_direction: Optional[Tuple[int, int]] = None
         self._threat_overlay_safe = True
         self._session: Optional[BattleSessionState] = None
         self._session_key = ""
+        # 界面选项（战斗模式 / 待机回合数 / 棋子识别）
+        self._mode_option = MODE_AUTO
+        self._standby_rounds = self.DEFAULT_STANDBY_ROUNDS
+        self._piece_recognition = True
+        self._announced_mode: Optional[str] = None
+        # 当前选中棋子的识别结果（每次选人后刷新）
+        self._active_piece: Optional[PieceInfo] = None
+        # 跨回合敌人方向记忆（(col_dir, row_dir)）
+        self._last_known_enemy_direction: Optional[Tuple[int, int]] = None
+        self._last_known_enemy_age = 0
 
     # 大地图关卡下敌我可能长期不在同一视野。超过该回合数仍未观察到
     # 敌人方向记忆时，主动丢弃记忆并切回纯螺旋搜索，避免绕远路。
     ENEMY_DIRECTION_MEMORY_ROUNDS = 6
+
+    def _ensure_battle_scene(self, context: Context) -> str:
+        """确认已经进入战斗；准备页点「战斗开始」，命名/佣兵弹窗先处理。
+
+        返回 battle / victory / fail / unknown。只对识别命中的节点做动作，
+        未知画面不盲点。
+        """
+        from action.fight import fight_utils
+
+        deadline = time.monotonic() + 15.0
+        start_clicks = 0
+        while time.monotonic() < deadline:
+            img = context.tasker.controller.post_screencap().wait().get()
+            if context.run_recognition("FightEndRound", img).hit:
+                return "battle"
+            if context.run_recognition("FightRoundNumber", img).hit:
+                return "battle"
+            if context.run_recognition("FightVictory", img).hit:
+                return "victory"
+            if context.run_recognition("FightFail", img).hit:
+                return "fail"
+            if context.run_recognition("FightStart", img).hit:
+                if start_clicks >= 2:
+                    time.sleep(0.5)
+                    continue
+                start_clicks += 1
+                logger.info("场景确认：当前在战斗准备页，点击「战斗开始」")
+                result = context.run_task("FightStart")
+                if not self._task_result_has_hit(result, {"FightStart"}):
+                    logger.warning("战斗开始点击未确认，重新截图后再判断")
+                time.sleep(1.5)
+                continue
+            if fight_utils.handle_interrupt_scene(context, img):
+                time.sleep(0.5)
+                continue
+            time.sleep(0.5)
+        return "unknown"
 
     def run(
         self, context: Context, _argv: CustomAction.RunArg
@@ -122,9 +192,9 @@ class AutoFightProcessor(CustomAction):
         self._threat_overlay_safe = True
         # 跨回合敌人方向记忆：上次成功搜索到的敌人相对原点的螺旋方向。
         # 我方按此方向推进若干回合，敌人可能也在接近，自然碰面。
-        last_known_enemy_direction: Optional[Tuple[int, int]] = None
-        # 自上次成功记录方向以来经过的回合数；超过阈值后丢弃记忆。
-        last_known_enemy_age: int = 0
+        # 恢复调用时沿用会话里已经记住的方向，不因重新进入而丢掉线索。
+        self._last_known_enemy_direction = self._session.last_enemy_direction
+        self._last_known_enemy_age = 0
 
         # 上一次任务可能在全图搜索中途被外部停止，导致红色危险覆盖层
         # 残留。该覆盖层会污染敌方红色状态条识别；进入任何正式决策前
@@ -132,12 +202,14 @@ class AutoFightProcessor(CustomAction):
         if not self._set_threat_overlay(context, False):
             logger.warning("战斗入口未能确认危险覆盖层关闭，继续谨慎识别")
 
-        passive_rounds = self.PASSIVE_ROUNDS
+        # 界面选项：战斗模式 / 待机回合数 / 棋子识别。
+        self._load_battle_options(context)
+        standby_rounds = self._standby_rounds
         test_override = os.environ.get(self.TEST_ACTIVE_FROM_ROUND_ENV)
         if test_override:
             try:
                 active_from_round = max(1, int(test_override))
-                passive_rounds = active_from_round - 1
+                standby_rounds = active_from_round - 1
                 logger.warning(
                     f"测试模式：第 {active_from_round} 回合直接主动出击"
                 )
@@ -145,6 +217,13 @@ class AutoFightProcessor(CustomAction):
                 logger.warning(
                     f"忽略非法测试主动回合覆盖: {test_override!r}"
                 )
+        # 环境变量覆盖也要写回实例字段，_resolve_mode 才会使用它
+        self._standby_rounds = standby_rounds
+        logger.info(
+            f"战斗模式配置: {MODE_LABELS.get(self._mode_option, self._mode_option)}, "
+            f"待机回合数={standby_rounds}, "
+            f"棋子识别={'开启' if self._piece_recognition else '关闭'}"
+        )
 
         logger.debug(
             "恢复整场战斗会话: "
@@ -152,6 +231,20 @@ class AutoFightProcessor(CustomAction):
             f"world_origin={self._session.world.camera_origin}, "
             f"explored={len(self._session.world.observed)}"
         )
+
+        # 再次确认当前场景：任务入口可能停在「战斗准备」页，或战斗结算后
+        # 弹出孩子出生/命名页。确认后才能进入回合决策，避免把准备页当成
+        # 战斗页而反复找「结束回合」按钮，最终把任务打断。
+        scene = self._ensure_battle_scene(context)
+        if scene == "unknown":
+            logger.error("场景确认失败：当前既不是战斗页，也不是战斗准备页")
+            return CustomAction.RunResult(success=False)
+        if scene == "fail":
+            logger.error("场景确认：当前是战斗失败结算页")
+            return CustomAction.RunResult(success=False)
+        if scene == "victory":
+            logger.info("场景确认：当前已经是战斗胜利结算页，跳过战斗")
+            return CustomAction.RunResult(success=True)
 
         while self._session.action_cycles < self.MAX_ACTION_CYCLES:
             if context.tasker.stopping:
@@ -161,15 +254,17 @@ class AutoFightProcessor(CustomAction):
 
             # 跨回合敌人方向记忆：每个回合开头累加年龄，超期丢弃，
             # 避免方向记忆过期后让角色朝着错误方向走好几回合。
-            if last_known_enemy_direction is not None:
-                last_known_enemy_age += 1
-                if last_known_enemy_age > self.ENEMY_DIRECTION_MEMORY_ROUNDS:
+            if self._last_known_enemy_direction is not None:
+                self._last_known_enemy_age += 1
+                if (
+                    self._last_known_enemy_age
+                    > self.ENEMY_DIRECTION_MEMORY_ROUNDS
+                ):
                     logger.warning(
                         f"敌人方向记忆超过 {self.ENEMY_DIRECTION_MEMORY_ROUNDS} "
                         "回合未刷新，丢弃记忆并切回纯螺旋搜索"
                     )
-                    last_known_enemy_direction = None
-                    last_known_enemy_age = 0
+                    self._set_enemy_direction(None)
 
             # 结算页的红蓝装饰可能被范围节点命中。胜负检测必须先于
             # “残留选择清理”，否则任务完成页会被误当成仍有攻击范围，
@@ -226,22 +321,32 @@ class AutoFightProcessor(CustomAction):
             if battle_result is not None:
                 return CustomAction.RunResult(success=battle_result)
 
-            # 所有任务统一先完整结束 20 个回合。判断依据存放在整场会话中，
-            # AutoFightProcessor 被恢复逻辑再次调用时不会重新等待 20 回合。
-            use_active_strategy = self._session.confirmed_rounds >= passive_rounds
-            if not use_active_strategy:
+            # 模式判定：待机模式只结束回合；追击模式才建图、搜索、移动和攻击。
+            # 「自动」按整场会话累计回合数在待机/追击之间切换，恢复调用不会
+            # 重新等待。
+            battle_mode = self._resolve_mode()
+            if battle_mode != self._announced_mode:
+                self._announced_mode = battle_mode
+                logger.info(
+                    f"当前战斗模式切换为「{MODE_LABELS[battle_mode]}」"
+                    f"（第 {game_round} 回合，已确认 "
+                    f"{self._session.confirmed_rounds}/{standby_rounds} 回合待机阈值）"
+                )
+            if battle_mode == MODE_STANDBY:
                 logger.debug(
-                    f"第 {game_round} 回合：统一坚守反击 "
-                    f"({self._session.confirmed_rounds}/{passive_rounds})，结束回合"
+                    f"第 {game_round} 回合：待机模式，结束回合等待反击"
                 )
                 passive_result = self._end_round(
-                    context, round_reference, "被动阶段"
+                    context, round_reference, "待机模式"
                 )
                 if passive_result is not None:
                     return CustomAction.RunResult(success=passive_result)
                 self._wait_for_scene_settle(context, timeout=6.0)
                 continue
 
+            logger.debug(
+                f"第 {game_round} 回合：追击模式，建立当前战场快照"
+            )
             round_grid = BattleGrid()
             self.scanner.scan_grid(round_grid, context, round_reference)
             self._merge_world_view(
@@ -250,10 +355,13 @@ class AutoFightProcessor(CustomAction):
                 replace_visible=True,
             )
 
-            if self._session.confirmed_rounds == passive_rounds:
+            if (
+                self._mode_option == MODE_AUTO
+                and self._session.confirmed_rounds == standby_rounds
+            ):
                 logger.info(
-                    f"战斗到达第 {game_round} 回合仍未结束，"
-                    "切换为主动搜索与追击模式"
+                    f"已确认待机 {standby_rounds} 回合且战斗未结束，"
+                    "开始追击模式"
                 )
 
             world = self._session.world
@@ -284,22 +392,18 @@ class AutoFightProcessor(CustomAction):
                 not self._world_has_fresh_targets()
                 and self._coarse_threat_direction is None
             ):
-                no_progress = self._session.record_no_progress()
+                # 需求：图里既缺我方又缺目标时，不能只结束回合等待；
+                # 先确定敌我大致方向（威胁覆盖区 / 方向记忆 / 未探索边界），
+                # 找回我方棋子后让它朝那个方向走。
                 logger.warning(
-                    "主动阶段完整建图后仍无法同时定位我方和敌人，"
-                    f"本回合等待敌人移动后重试 ({no_progress}/"
-                    f"{self.MAX_NO_PROGRESS_CYCLES})"
+                    "完整建图后仍无法同时定位我方和敌人，"
+                    "改为粗方向推进"
                 )
-                if no_progress >= self.MAX_NO_PROGRESS_CYCLES:
-                    logger.error("连续多轮全局建图没有新增有效战斗目标")
-                    return CustomAction.RunResult(success=False)
-                latest = self._screencap(context)
-                if latest is None:
-                    return CustomAction.RunResult(success=False)
-                wait_result = self._end_round(context, latest, "全局建图等待")
-                if wait_result is not None:
-                    return CustomAction.RunResult(success=wait_result)
-                self._wait_for_scene_settle(context, timeout=6.0)
+                coarse_result = self._coarse_advance_round(
+                    context, round_reference
+                )
+                if coarse_result is not None:
+                    return CustomAction.RunResult(success=coarse_result)
                 continue
 
             round_grid, round_reference = focused
@@ -384,28 +488,21 @@ class AutoFightProcessor(CustomAction):
                     not self._world_has_fresh_targets()
                     and self._coarse_threat_direction is None
                 ):
-                    no_progress = self._session.record_no_progress()
                     logger.warning(
-                        "局部威胁刷新后敌人位置失效，等待下一回合再探索 "
-                        f"({no_progress}/{self.MAX_NO_PROGRESS_CYCLES})"
+                        "局部威胁刷新后敌人位置失效，改为粗方向推进"
                     )
-                    latest = self._screencap(context)
-                    if latest is None:
-                        return CustomAction.RunResult(success=False)
-                    wait_result = self._end_round(
-                        context, latest, "敌人位置失效"
+                    coarse_result = self._coarse_advance_round(
+                        context, round_reference
                     )
-                    if wait_result is not None:
-                        return CustomAction.RunResult(success=wait_result)
-                    self._wait_for_scene_settle(context, timeout=6.0)
+                    if coarse_result is not None:
+                        return CustomAction.RunResult(success=coarse_result)
                     continue
                 round_grid, round_reference = focused
 
             pursuit_direction, hidden_enemy_cell, environment_mode = (
                 self._world_pursuit(round_grid)
             )
-            last_known_enemy_direction = pursuit_direction
-            last_known_enemy_age = 0
+            self._set_enemy_direction(pursuit_direction)
             logger.debug(
                 "全局地图规划目标: "
                 f"direction={pursuit_direction}, "
@@ -437,28 +534,30 @@ class AutoFightProcessor(CustomAction):
 
             if not allies:
                 # 大地图下我方位置可能临时不可见（如相机被推到远端）。
-                # 有方向记忆或环境目标模式时跳过本回合，等下一回合重新建图；
-                # 否则才判负，避免因为一次扫描失败抹掉整场战斗。
-                if (
-                    pursuit_direction is None
-                    and not environment_mode
-                    and last_known_enemy_direction is None
-                ):
-                    logger.warning("当前稳定画面未发现我方单位，停止主动战斗")
-                    return CustomAction.RunResult(success=False)
-                logger.warning(
-                    "当前画面无我方但已有追击方向 "
-                    f"{pursuit_direction or last_known_enemy_direction}，"
-                    "本回合跳过行动"
+                # 先尝试粗方向推进（重新找回我方棋子并朝敌人大致方向走），
+                # 而不是直接结束回合或判负。
+                logger.warning("当前稳定画面未发现我方单位，转为粗方向推进")
+                coarse_result = self._coarse_advance_round(
+                    context, round_reference
                 )
+                if coarse_result is not None:
+                    return CustomAction.RunResult(success=coarse_result)
+                continue
             if (
                 not round_grid.enemy_units
                 and pursuit_direction is None
                 and not environment_mode
-                and last_known_enemy_direction is None
+                and self._last_known_enemy_direction is None
             ):
-                logger.error("当前视野无敌人且全地图搜索没有给出追击方向")
-                return CustomAction.RunResult(success=False)
+                # 缺目标且没有方向记忆：用威胁层/未探索边界确定大致方向后
+                # 仍然让棋子朝那边走，而不是原地失败。
+                logger.warning("当前视野无敌人且没有追击方向，转为粗方向推进")
+                coarse_result = self._coarse_advance_round(
+                    context, round_reference
+                )
+                if coarse_result is not None:
+                    return CustomAction.RunResult(success=coarse_result)
+                continue
 
             used_cells: Set[Tuple[int, int]] = set()
             round_advanced = False
@@ -513,9 +612,9 @@ class AutoFightProcessor(CustomAction):
                 if (
                     not current_targets
                     and action_pursuit is None
-                    and last_known_enemy_direction is not None
+                    and self._last_known_enemy_direction is not None
                 ):
-                    action_pursuit = last_known_enemy_direction
+                    action_pursuit = self._last_known_enemy_direction
                     logger.debug(
                         "当前动作帧仍无可见敌人，沿用本回合隐匿/远端方向 "
                         f"{action_pursuit}"
@@ -579,6 +678,12 @@ class AutoFightProcessor(CustomAction):
                 selected_img, selected_grid, selected_range_count = selected_state
                 selected_ally = current_ally
 
+                # 棋子识别：用选中帧的卡面 OCR + 实测攻击/移动范围确认
+                # 「这是谁、有什么技能、能打多远」，结果供攻击决策与战报使用。
+                self._identify_piece(
+                    context, selected_img, selected_grid, selected_ally
+                )
+
                 self._log_matrix(selected_grid, selected_ally)
                 if selected_range_count == 0:
                     logger.warning(
@@ -637,11 +742,11 @@ class AutoFightProcessor(CustomAction):
             if not round_had_action:
                 no_progress = self._session.record_no_progress()
                 logger.warning(
-                    "主动回合没有确认任何攻击或移动: "
+                    "追击回合没有确认任何攻击或移动: "
                     f"{no_progress}/{self.MAX_NO_PROGRESS_CYCLES}"
                 )
                 if no_progress >= self.MAX_NO_PROGRESS_CYCLES:
-                    logger.error("连续主动回合没有可验证动作，停止进入外层恢复")
+                    logger.error("连续追击回合没有可验证动作，停止进入外层恢复")
                     return CustomAction.RunResult(success=False)
 
             # 最后一名角色行动后，游戏可能自行结束我方回合。留一个短暂
@@ -653,7 +758,7 @@ class AutoFightProcessor(CustomAction):
                 continue
 
             end_result = self._end_round(
-                context, round_reference, "主动阶段"
+                context, round_reference, "追击模式"
             )
             if end_result is not None:
                 return CustomAction.RunResult(success=end_result)
@@ -663,6 +768,395 @@ class AutoFightProcessor(CustomAction):
             f"战斗达到安全动作循环上限 {self.MAX_ACTION_CYCLES}，停止任务"
         )
         return CustomAction.RunResult(success=False)
+
+    # ------------------------------------------------------------------
+    # 选项与战斗模式
+    # ------------------------------------------------------------------
+
+    def _load_battle_options(self, context: Context) -> None:
+        """从 pipeline 选项节点读取：战斗模式 / 待机回合数 / 棋子识别。"""
+        mode_raw = self._node_expected(
+            context, self.OPTION_MODE_NODE, MODE_AUTO
+        )
+        self._mode_option = self._normalize_mode(mode_raw)
+
+        rounds_raw = self._node_expected(
+            context, self.OPTION_STANDBY_NODE, self.DEFAULT_STANDBY_ROUNDS
+        )
+        try:
+            rounds = int(str(rounds_raw).strip())
+        except (TypeError, ValueError):
+            logger.warning(
+                f"待机回合数选项非法: {rounds_raw!r}，使用默认 "
+                f"{self.DEFAULT_STANDBY_ROUNDS}"
+            )
+            rounds = self.DEFAULT_STANDBY_ROUNDS
+        self._standby_rounds = max(0, rounds)
+
+        piece_raw = self._node_expected(
+            context, self.OPTION_PIECE_NODE, "on"
+        )
+        self._piece_recognition = str(piece_raw).strip().lower() not in {
+            "off",
+            "0",
+            "false",
+            "no",
+            "关闭",
+        }
+
+    @staticmethod
+    def _normalize_mode(value: Any) -> str:
+        text = str(value or "").strip().lower()
+        mapping = {
+            "auto": MODE_AUTO,
+            "自动": MODE_AUTO,
+            "自动（先待机后追击）": MODE_AUTO,
+            "自动(先待机后追击)": MODE_AUTO,
+            "standby": MODE_STANDBY,
+            "待机": MODE_STANDBY,
+            "待机模式": MODE_STANDBY,
+            "pursuit": MODE_PURSUIT,
+            "追击": MODE_PURSUIT,
+            "追击模式": MODE_PURSUIT,
+        }
+        return mapping.get(text, MODE_AUTO)
+
+    @staticmethod
+    def _node_expected(context: Context, node: str, default: Any) -> Any:
+        """读取选项节点的 expected 值（兼容 MaaFramework 的两种结构）。"""
+        try:
+            data = context.get_node_data(node)
+        except Exception as exc:  # noqa: BLE001 - 旧版本可能没有该接口
+            logger.debug(f"读取选项节点 {node} 失败: {exc}")
+            return default
+        if not data:
+            return default
+
+        expected: Any = None
+        recognition = data.get("recognition")
+        if isinstance(recognition, dict):
+            param = recognition.get("param")
+            if isinstance(param, dict):
+                expected = param.get("expected")
+        if expected is None:
+            expected = data.get("expected")
+        if isinstance(expected, (list, tuple)):
+            expected = expected[0] if expected else default
+        return default if expected is None else expected
+
+    def _resolve_mode(self) -> str:
+        """本回合实际执行的模式：待机模式 或 追击模式。"""
+        if self._mode_option == MODE_STANDBY:
+            return MODE_STANDBY
+        if self._mode_option == MODE_PURSUIT:
+            return MODE_PURSUIT
+        if self._session is None:
+            return MODE_STANDBY
+        if self._session.confirmed_rounds < self._standby_rounds:
+            return MODE_STANDBY
+        return MODE_PURSUIT
+
+    def _set_enemy_direction(
+        self, direction: Optional[Tuple[int, int]]
+    ) -> None:
+        """记录/清除跨回合敌人方向记忆（(col_dir, row_dir)）。"""
+        self._last_known_enemy_direction = direction
+        self._last_known_enemy_age = 0
+        if self._session is not None:
+            self._session.last_enemy_direction = direction
+
+    # ------------------------------------------------------------------
+    # 粗方向推进：缺我方 / 缺目标时的兜底策略
+    # ------------------------------------------------------------------
+
+    def _frontier_direction(self) -> Optional[Tuple[int, int]]:
+        """返回未探索区域最多的方向（(col_dir, row_dir)）。"""
+        if self._session is None:
+            return None
+        world = self._session.world
+        origin_row, origin_col = world.camera_origin
+        center_row = origin_row + ROWS // 2
+        center_col = origin_col + COLS // 2
+        best: Optional[Tuple[Tuple[int, int], Tuple[int, int], int]] = None
+        for row_dir in (-1, 0, 1):
+            for col_dir in (-1, 0, 1):
+                if row_dir == 0 and col_dir == 0:
+                    continue
+                anchor_row = center_row + row_dir * (ROWS // 2)
+                anchor_col = center_col + col_dir * (COLS // 2)
+                unknown = 0
+                for row in range(anchor_row - 2, anchor_row + 3):
+                    for col in range(anchor_col - 2, anchor_col + 3):
+                        if (row, col) not in world.observed:
+                            unknown += 1
+                # 已确认撞过边界的方向降权，避免反复朝墙走
+                boundary_penalty = (
+                    1 if (row_dir, col_dir) in world.boundaries else 0
+                )
+                score = (
+                    unknown * 10 - boundary_penalty * 45,
+                    -abs(row_dir) - abs(col_dir),
+                )
+                if best is None or score > best[0]:
+                    best = (score, (col_dir, row_dir), unknown)
+        if best is None or best[2] <= 0:
+            return None
+        logger.debug(
+            f"未探索边界方向: {best[1]}, 采样未探索格={best[2]}"
+        )
+        return best[1]
+
+    def _default_advance_direction(self) -> Optional[Tuple[int, int]]:
+        """没有任何线索时：沿上次移动方向继续推进。"""
+        if (
+            self._session is not None
+            and self._session.last_move_direction is not None
+        ):
+            row_dir, col_dir = self._session.last_move_direction
+            if row_dir or col_dir:
+                return (col_dir, row_dir)
+        return self._last_known_enemy_direction
+
+    def _coarse_advance_round(
+        self, context: Context, round_reference: Any
+    ) -> Optional[bool]:
+        """缺我方或缺目标时：先确定敌我大致方向，再让棋子朝那边走。
+
+        返回 ``None`` 表示本回合已正常推进（已结束回合或已自动换回合），
+        ``True`` / ``False`` 表示已进入胜利 / 失败结算页。
+        """
+        if self._session is None:
+            return False
+        round_seen = self._session.confirmed_rounds
+        # 丢弃上一回合的隐匿敌人格，避免把过期坐标当成当前可攻击目标
+        self._hidden_enemy_cell = None
+        logger.info("粗方向推进：先定位我方，再确定敌我大致方向")
+
+        focused = self._focus_known_ally(context, round_seen)
+        if focused is not None:
+            grid, img = focused
+        else:
+            grid = self._find_allies(context, max_swipes=6)
+            img = self._screencap(context)
+            if grid is None or not grid.self_units or img is None:
+                logger.warning(
+                    "粗方向推进：没有找回我方棋子，本回合结束等待"
+                )
+                return self._end_round(
+                    context, round_reference, "粗方向推进-无我方"
+                )
+            self._merge_world_view(grid, round_seen, replace_visible=True)
+
+        grid, recentered, recentered_img = self._recenter_edge_allies(
+            context, grid, round_seen
+        )
+        if recentered and recentered_img is not None:
+            round_reference = recentered_img
+
+        # 方向优先级：威胁覆盖区（当前帧）> 跨回合方向记忆 > 未探索边界
+        direction: Optional[Tuple[int, int]] = None
+        if not self._world_has_fresh_targets():
+            direction = self._hidden_enemy_direction(context, grid)
+            if direction is not None:
+                logger.info(f"粗方向：威胁覆盖区给出敌人方向 {direction}")
+        if direction is None:
+            direction = self._last_known_enemy_direction
+            if direction is not None:
+                logger.info(f"粗方向：沿用上一回合敌人方向 {direction}")
+        if direction is None:
+            direction = self._frontier_direction()
+            if direction is not None:
+                logger.info(f"粗方向：地图未探索边界方向 {direction}")
+        if direction is None:
+            direction = self._default_advance_direction()
+        if direction is None:
+            logger.warning("粗方向推进：无法确定任何方向，本回合结束等待")
+            return self._end_round(
+                context, round_reference, "粗方向推进-无方向"
+            )
+        self._set_enemy_direction(direction)
+        hidden_cell = self._hidden_enemy_cell
+        logger.info(
+            f"粗方向推进：向 {direction} 推进，"
+            f"隐匿敌人格={hidden_cell}"
+        )
+
+        actionable = [
+            (cell.row, cell.col)
+            for cell in grid.self_units
+            if self._ally_is_actionable(cell)
+        ]
+        if not actionable:
+            logger.warning("粗方向推进：我方棋子都贴边不可点，本回合等待")
+            return self._end_round(
+                context, round_reference, "粗方向推进-贴边"
+            )
+
+        used_cells: Set[Tuple[int, int]] = set()
+        acted = False
+        for index, (planned_row, planned_col) in enumerate(actionable):
+            if context.tasker.stopping:
+                logger.info("任务执行被停止")
+                return False
+
+            current_img = self._screencap(context)
+            if current_img is None:
+                return False
+            battle_result = self._detect_battle_result(context, current_img)
+            if battle_result is not None:
+                return battle_result
+
+            current_grid = BattleGrid()
+            self.scanner.scan_grid(current_grid, context, current_img)
+            self._merge_world_view(
+                current_grid, round_seen, replace_visible=True
+            )
+            current_ally = self._nearest_available_ally(
+                current_grid, planned_row, planned_col, used_cells
+            )
+            if current_ally is None:
+                continue
+            used_cells.add((current_ally.row, current_ally.col))
+
+            select_x, select_y = current_ally.safe_click_point()
+            if not self._click_and_log(
+                context, select_x, select_y, f"粗方向推进-选择角色 {index}"
+            ):
+                return False
+            if not self._dismiss_role_card(context):
+                logger.warning("粗方向推进：无法收起人物卡片")
+                continue
+
+            selected_state = self._capture_selected_state(
+                context, list(current_grid.enemy_units)
+            )
+            if selected_state is None:
+                return False
+            selected_img, selected_grid, range_count = selected_state
+            self._identify_piece(
+                context, selected_img, selected_grid, current_ally
+            )
+            if range_count == 0:
+                self._cancel_selection(context)
+                continue
+
+            ok, moved_to, advanced = self._decide_and_act(
+                context,
+                selected_grid,
+                current_ally,
+                selected_img,
+                round_reference,
+                direction,
+                hidden_cell,
+            )
+            if advanced:
+                self._wait_for_scene_settle(context, timeout=6.0)
+                return None
+            if not ok:
+                self._cancel_selection(context)
+                continue
+            acted = True
+            if moved_to is not None:
+                logger.info(
+                    "粗方向推进：移动已确认，停止调度其余角色并结束本回合"
+                )
+                break
+
+        if not acted:
+            no_progress = self._session.record_no_progress()
+            logger.warning(
+                "粗方向推进回合没有确认任何移动或攻击: "
+                f"{no_progress}/{self.MAX_NO_PROGRESS_CYCLES}"
+            )
+            if no_progress >= self.MAX_NO_PROGRESS_CYCLES:
+                logger.error("连续多回合无法朝目标推进，停止进入外层恢复")
+                return False
+
+        if self._wait_for_round_change(
+            context, round_reference, timeout=1.5
+        ):
+            self._record_round_advance("粗方向推进后自动换回合")
+            self._wait_for_scene_settle(context, timeout=6.0)
+            return None
+        return self._end_round(context, round_reference, "粗方向推进")
+
+    # ------------------------------------------------------------------
+    # 棋子识别
+    # ------------------------------------------------------------------
+
+    def _identify_piece(
+        self,
+        context: Context,
+        img: Any,
+        grid: BattleGrid,
+        ally: Cell,
+    ) -> Optional[PieceInfo]:
+        """识别当前选中的棋子，并写入会话/观测表。失败不阻断战斗。"""
+        self._active_piece = None
+        if not self._piece_recognition or self._session is None:
+            return None
+        try:
+            info = self.pieces.identify(
+                context, img, grid, ally, self._session.confirmed_rounds
+            )
+        except Exception as exc:  # noqa: BLE001 - 识别只是增益，不能中断战斗
+            logger.warning(f"棋子识别失败（继续战斗）: {exc}")
+            return None
+
+        self._active_piece = info
+        logger.info(f"棋子识别: {info.summary()}")
+        self._session.pieces[info.key] = info.to_record()
+        try:
+            self.pieces.remember(info)
+            self.pieces.flush_observations()
+            PieceRecognizer.dump_debug(info)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"棋子识别结果落盘失败: {exc}")
+        return info
+
+    def _piece_attack_targets(
+        self, grid: BattleGrid, ally: Cell
+    ) -> List[Cell]:
+        """按棋子识别得到的实测攻击范围，补齐攻击角标被遮挡的目标。
+
+        与 ``_promote_occluded_adjacent_targets`` 的区别：后者只接受八方向
+        相邻（近战）；本方法使用选中帧实测到的完整攻击范围，因此长柄、
+        弓弩等 2 格以上棋子也能在角标被人物立绘遮住时直接出手。
+        """
+        piece = self._active_piece
+        if piece is None or piece.confidence < 0.5 or not piece.attack_offsets:
+            return []
+        offsets = {
+            (row, col)
+            for row, col in piece.attack_offsets
+            if (row, col) != (0, 0)
+        }
+        if not offsets:
+            return []
+        promoted: List[Cell] = []
+        for enemy in grid.enemy_units:
+            if enemy.is_attackable or enemy.is_moveable:
+                continue
+            if (enemy.row - ally.row, enemy.col - ally.col) not in offsets:
+                continue
+            center_x, bar_y = (
+                enemy.target_center
+                if enemy.target_center != (0, 0)
+                else enemy.safe_click_point()
+            )
+            enemy.is_attackable = True
+            enemy.attack_center = (
+                center_x,
+                max(1, bar_y - self.scanner.ATTACK_MARKER_Y_OFFSET),
+            )
+            promoted.append(enemy)
+        if promoted:
+            logger.info(
+                f"棋子「{piece.name or '未识别'}」攻击范围"
+                f"（{piece.range_class}）确认可达，补齐无角标目标: "
+                + str([(cell.row, cell.col) for cell in promoted])
+            )
+        return promoted
 
     def _decide_and_act(
         self,
@@ -682,6 +1176,10 @@ class AutoFightProcessor(CustomAction):
         ]
         if not attack_targets:
             attack_targets = self._promote_occluded_adjacent_targets(grid, ally)
+        if not attack_targets:
+            # 棋子识别实测到的攻击范围可以覆盖更远的格子，用于补齐
+            # 黄色角标被人物模型遮挡的目标（长柄/弓弩等）。
+            attack_targets = self._piece_attack_targets(grid, ally)
         conflicted_targets = [
             cell
             for cell in grid.enemy_units

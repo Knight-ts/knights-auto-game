@@ -8,6 +8,7 @@
     python tools/selfheal.py keep <id> --note "第 3 步识别不到按钮"
     python tools/selfheal.py delete <id>                # 进回收站
     python tools/selfheal.py purge                      # 清空回收站
+    python tools/selfheal.py clear --yes --all          # 一键清除全部截图 + 修复状态
     python tools/selfheal.py report                     # 打印 REPORT.md
 
 状态约定：pending=待判定，kept=用户确认值得修，deleted=用户认为没价值。
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -112,6 +114,21 @@ def cmd_purge(store: ErrorStore, args) -> int:
     return 0
 
 
+def cmd_clear(store: ErrorStore, args) -> int:
+    if not args.yes:
+        print("一键清除需要 --yes（会删除全部报错截图/记录，不能恢复）", file=sys.stderr)
+        return 2
+    result = store.clear_all()
+    print(f"已清除 {result['removed']} 条报错截图/记录")
+    if args.all:
+        repair_dir = ROOT / "debug" / "repair"
+        if repair_dir.exists():
+            shutil.rmtree(repair_dir, ignore_errors=True)
+            print("已清除 debug/repair（AI 修复队列/结果/升级报告）")
+    print(json.dumps(result["stats"], ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_clean(store: ErrorStore, args) -> int:
     result = store.cleanup()
     print(
@@ -164,6 +181,10 @@ def main(argv=None) -> int:
     p_purge = sub.add_parser("purge", help="彻底删除（默认清空回收站）")
     p_purge.add_argument("id", nargs="?")
 
+    p_clear = sub.add_parser("clear", help="一键清除全部报错截图/记录")
+    p_clear.add_argument("--yes", action="store_true", help="确认删除，不能恢复")
+    p_clear.add_argument("--all", action="store_true", help="同时清除 debug/repair 修复状态")
+
     sub.add_parser("clean", help="按设置清理过期 / 超限记录")
 
     p_report = sub.add_parser("report", help="打印 REPORT.md")
@@ -194,6 +215,8 @@ def main(argv=None) -> int:
         return cmd_mark(store, args)
     if args.cmd == "purge":
         return cmd_purge(store, args)
+    if args.cmd == "clear":
+        return cmd_clear(store, args)
     if args.cmd == "clean":
         return cmd_clean(store, args)
     if args.cmd == "report":

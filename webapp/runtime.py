@@ -38,12 +38,23 @@ from maa.toolkit import Toolkit
 ROOT = Path(__file__).resolve().parent.parent
 CREATE_NO_WINDOW = 0x08000000
 
+# 月度循环是基础配置：专门任务里的同名选项默认跟随它，显式选择则覆盖。
+BASE_ENTRY = "Auto_YearlyTask"
+INHERIT_LABELS = {
+    "跟随月度循环",
+    "继承月度循环",
+    "跟随月度循环（默认）",
+    "跟随基础配置",
+}
+
 
 def _now() -> str:
     return time.strftime("%H:%M:%S")
 
 
 class Runtime:
+    STUCK_SECONDS = 240
+
     def __init__(self) -> None:
         self.lock = threading.RLock()
         self.logs: deque[str] = deque(maxlen=3000)
@@ -63,6 +74,8 @@ class Runtime:
         self.task_name = ""
         self.task_thread: threading.Thread | None = None
         self.last_error = ""
+        self.last_log_at = time.time()
+        self.stuck_reason = ""
         self.history: deque[dict] = deque(maxlen=50)
         self.history_sink = None
         self.error_sink = None
@@ -73,7 +86,27 @@ class Runtime:
         line = f"[{_now()}] {message}"
         with self.lock:
             self.logs.append(line)
+            self.last_log_at = time.time()
         print(line, flush=True)
+
+    def _agent_healthy(self, check_rpc: bool = False) -> bool:
+        """Agent 连接健康检查。
+
+        仅看 ``connected`` 不够：AgentServer 卡死时 socket 仍可能是连接状态，
+        任务会等到 8 秒超时后失败。``check_rpc`` 会额外做一次轻量自定义动作
+        列表查询，确认 Agent 线程真的能响应。
+        """
+        agent = self.agent
+        if agent is None:
+            return False
+        try:
+            if not agent.connected or not agent.alive:
+                return False
+            if check_rpc:
+                agent.custom_action_list
+        except Exception:  # noqa: BLE001
+            return False
+        return True
 
     def tail_logs(self, limit: int = 200) -> list[str]:
         with self.lock:
@@ -92,6 +125,7 @@ class Runtime:
         options = self.interfaces.get("option", {})
         labels = labels or {}
         hidden = set(hidden or [])
+        base_options = self._base_option_names()
         result = []
         for task in self.interfaces.get("task", []):
             entry = task.get("entry", "")
@@ -123,14 +157,40 @@ class Runtime:
                         ],
                         "default_case": option.get("default_case", ""),
                         "inputs": option.get("inputs", []),
+                        # 月度循环是基础配置；专门任务里的同名选项默认跟随它
+                        "inheritBase": entry != BASE_ENTRY
+                        and option_name in base_options,
                     }
                 )
             result.append(item)
         return result
 
-    def build_override(self, task: dict, selection: dict | None) -> dict:
-        """把界面上的选择组合成 pipeline_override。"""
+    def _base_option_names(self) -> set:
+        for task in self.interfaces.get("task", []) or []:
+            if task.get("entry") == BASE_ENTRY:
+                return set(task.get("option", []) or [])
+        return set()
+
+    def _load_saved_selections(self) -> dict:
+        """读取网页版保存的选择，用于专用任务继承月度循环的基础配置。"""
+        try:
+            data = json.loads((ROOT / "config" / "webapp.json").read_text(encoding="utf-8"))
+            selections = data.get("selections")
+            return selections if isinstance(selections, dict) else {}
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def build_override(self, task: dict, selection: dict | None, base_selection: dict | None = None) -> dict:
+        """把界面上的选择组合成 pipeline_override。
+
+        ``base_selection`` 是月度循环保存的选择。专门任务里与月度循环同名的
+        选项，如果没有单独选择（或选了「跟随月度循环」/ 输入留空），就用
+        基础配置的值；显式选择则覆盖基础配置。
+        """
         selection = selection or {}
+        base_selection = base_selection or {}
+        entry = task.get("entry", "")
+        base_options = self._base_option_names()
         options = self.interfaces.get("option", {})
         override: dict = {}
 
@@ -146,15 +206,40 @@ class Runtime:
             if not option:
                 continue
             otype = option.get("type", "switch")
+            inheritable = entry != BASE_ENTRY and option_name in base_options
 
             if otype == "input":
                 values = selection.get(option_name) or {}
-                inputs = {
-                    item.get("name", ""): (
-                        values.get(item.get("name", "")) or item.get("default", "")
-                    )
-                    for item in option.get("inputs", []) or []
-                }
+                if inheritable:
+                    # 留空 = 跟随月度循环；只有基础配置也为空才回退到默认值
+                    inputs = {
+                        item.get("name", ""): str(
+                            values.get(item.get("name", "")) or ""
+                        )
+                        for item in option.get("inputs", []) or []
+                    }
+                    if not any(str(v).strip() for v in inputs.values()):
+                        base_values = base_selection.get(option_name)
+                        if isinstance(base_values, dict):
+                            inputs = {
+                                item.get("name", ""): str(
+                                    base_values.get(item.get("name", "")) or ""
+                                )
+                                for item in option.get("inputs", []) or []
+                            }
+                    if not any(str(v).strip() for v in inputs.values()):
+                        inputs = {
+                            item.get("name", ""): str(item.get("default", ""))
+                            for item in option.get("inputs", []) or []
+                        }
+                else:
+                    inputs = {
+                        item.get("name", ""): (
+                            values.get(item.get("name", ""))
+                            or item.get("default", "")
+                        )
+                        for item in option.get("inputs", []) or []
+                    }
                 if not any(str(v).strip() for v in inputs.values()):
                     continue
                 template = json.dumps(option.get("pipeline_override", {}), ensure_ascii=False)
@@ -163,9 +248,26 @@ class Runtime:
                 merge(override, json.loads(template))
                 continue
 
+            selected = selection.get(option_name)
+            if inheritable:
+                inherit_requested = selected is None or (
+                    isinstance(selected, str) and selected in INHERIT_LABELS
+                ) or (isinstance(selected, list) and not selected)
+                if inherit_requested:
+                    base_value = base_selection.get(option_name)
+                    if isinstance(base_value, list):
+                        base_value = base_value[0] if base_value else None
+                    if (
+                        base_value is not None
+                        and str(base_value).strip()
+                        and str(base_value) not in INHERIT_LABELS
+                    ):
+                        selected = base_value
+                    else:
+                        selected = None
+
             default = option.get("default_case", "")
             default_list = default if isinstance(default, list) else ([default] if default else [])
-            selected = selection.get(option_name)
             if selected is None:
                 selected = default_list
             if isinstance(selected, str):
@@ -198,6 +300,11 @@ class Runtime:
 
     def connect(self, adb_path: str, address: str) -> dict:
         with self.lock:
+            had_agent = self.agent is not None
+            if self.agent is not None:
+                # 重新连接设备会换 controller/resource，旧 Agent 必须一起重启，
+                # 否则它可能还绑在旧资源上，表现为“Agent 在线但任务 10 秒超时”。
+                self.stop_agent()
             if self.controller is not None:
                 try:
                     self.controller.post_connection().wait()
@@ -240,6 +347,8 @@ class Runtime:
 
             self._ensure_resource()
             self._ensure_tasker()
+            if had_agent:
+                self.start_agent()
             return self.status()
 
     def _ensure_resource(self) -> None:
@@ -323,8 +432,11 @@ class Runtime:
 
     def start_agent(self) -> dict:
         with self.lock:
-            if self.agent and self.agent.connected:
+            if self._agent_healthy():
                 return self.status()
+            if self.agent is not None:
+                self.log("Agent 连接已僵死，重启 Agent")
+                self.stop_agent()
             if self.resource is None:
                 raise RuntimeError("资源未加载，无法启动 Agent")
 
@@ -441,6 +553,15 @@ class Runtime:
                 if self.agent is None or self.agent_proc is not proc:
                     return  # 用户主动停止 / 重启，不算报错
                 self.log(f"Agent 进程退出，code={code}")
+                with self.lock:
+                    if self.task_state == "running":
+                        self.task_state = "failed"
+                        self.last_error = f"Agent 进程退出（code={code}）"
+                try:
+                    if self.tasker is not None:
+                        self.tasker.post_stop()
+                except Exception:  # noqa: BLE001
+                    pass
                 self.capture_error(
                     "agent",
                     f"Agent 进程退出（code={code}）",
@@ -474,12 +595,38 @@ class Runtime:
 
     # ------------------------------------------------------------ 任务
 
+    def run_internal_task(
+        self, entry: str, override: dict | None = None, timeout: float = 90.0
+    ) -> bool:
+        """直接按 pipeline 节点跑内部任务：不查 interface，也不写任务历史。
+
+        目前用于组合步骤失败后的「场景确认」（SceneGuard）。
+        """
+        with self.lock:
+            if self.task_state == "running":
+                return False
+            if self.tasker is None:
+                raise RuntimeError("Tasker 未就绪，请先连接设备")
+            tasker = self.tasker
+        self.log(f"场景确认：运行内部任务 {entry}")
+        job = tasker.post_task(entry, override or {})
+        job.wait()
+        ok = bool(job.succeeded)
+        self.log(f"场景确认：{entry} → {'已处理' if ok else '没有命中事件'}")
+        return ok
+
     def run_task(self, entry: str, name: str, selection: dict | None) -> dict:
         with self.lock:
             if self.task_state == "running":
                 raise RuntimeError("已有任务在运行")
             if self.tasker is None:
                 raise RuntimeError("Tasker 未就绪，请先连接设备")
+            if not self._agent_healthy(check_rpc=True):
+                # AgentServer 可能卡死/断连但 connected 仍是 True，
+                # 直接发任务会等 8 秒超时后失败；先重启再跑。
+                self.log("Agent 未响应，自动重启")
+                self.stop_agent()
+                self.start_agent()
             if self.agent is None:
                 raise RuntimeError("Agent 未连接")
 
@@ -487,7 +634,16 @@ class Runtime:
             if task is None:
                 raise RuntimeError(f"找不到任务：{entry}")
 
-            override = self.build_override(task, selection)
+            saved_selections = self._load_saved_selections()
+            base_selection = saved_selections.get(BASE_ENTRY) or {}
+            override = self.build_override(task, selection, base_selection)
+            if entry != BASE_ENTRY:
+                shared = self._base_option_names() & set(task.get("option", []) or [])
+                if shared:
+                    self.log(
+                        f"基础配置：{len(shared)} 个同名选项可跟随月度循环"
+                        "（未单独选择时自动继承）"
+                    )
             self.task_state = "running"
             self.task_name = name or entry
             self.last_error = ""
@@ -497,13 +653,37 @@ class Runtime:
             started = time.time()
             state = "failed"
             error = ""
+            monitor_stop = threading.Event()
+
+            def stuck_watch() -> None:
+                """任务长时间没有任何日志时，判定卡住并强制停止。"""
+                while not monitor_stop.wait(5):
+                    if self.task_state != "running":
+                        return
+                    idle = time.time() - self.last_log_at
+                    if idle >= self.STUCK_SECONDS:
+                        self.stuck_reason = (
+                            f"任务连续 {int(idle)} 秒没有任何日志，判定卡住并强制停止"
+                        )
+                        self.log(self.stuck_reason)
+                        try:
+                            if self.tasker is not None:
+                                self.tasker.post_stop()
+                        except Exception as exc:  # noqa: BLE001
+                            self.log(f"强制停止卡住任务失败：{exc}")
+                        return
+
+            threading.Thread(target=stuck_watch, name="task-stuck-watch", daemon=True).start()
             try:
                 job = self.tasker.post_task(entry, override)
                 job.wait()
                 ok = job.succeeded
                 state = "done" if ok else "failed"
                 if not ok:
-                    error = "MaaFramework 返回失败：任务节点没有走完（多为识别超时或界面卡住）"
+                    error = self.stuck_reason or (
+                        "MaaFramework 返回失败：任务节点没有走完（多为识别超时或界面卡住）"
+                    )
+                self.stuck_reason = ""
                 with self.lock:
                     self.task_state = state
                 if not ok:
@@ -536,6 +716,7 @@ class Runtime:
                 )
                 self.log(f"任务异常：{exc}")
             finally:
+                monitor_stop.set()
                 with self.lock:
                     self.history.appendleft(
                         {
@@ -580,7 +761,8 @@ class Runtime:
             return {
                 "device": self.device_info,
                 "resource": self.resource_loaded,
-                "agent": bool(self.agent and self.agent.connected),
+                "agent": self._agent_healthy(),
+                "agent_connected": bool(self.agent and self.agent.connected),
                 "task": {"state": self.task_state, "name": self.task_name},
                 "error": self.last_error,
                 "history": list(self.history)[:20],

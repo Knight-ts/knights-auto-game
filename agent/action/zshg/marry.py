@@ -10,6 +10,7 @@ import re
 import time
 import json
 import os
+import threading
 import cv2
 from pathlib import Path
 
@@ -102,7 +103,11 @@ class MarryProcessor(CustomAction):
         self._target_title = "公爵"
         self._age_min = 0  # 年龄下限，0 = 不限
         self._age_max = 0  # 年龄上限，0 = 不限
-        self._target_race_option = "不限"  # 「相亲种族」选项，不限 = 不按种族过滤
+        self._age_order_mode = "auto"  # 年龄排序：auto / desc（大→小）/ asc（小→大）
+        self._name_attempts = 0  # 本次姓名匹配实际尝试次数
+        self._target_race_option = "不限"  # 我方种族（过滤自己家族的候选），不限 = 不按种族过滤
+        self._target_race_wanted = "same"  # 对方种族，same = 跟随我方
+        self._full_blood_only = False  # 是否只相亲纯血（血统 100%）
         self._feature_mode = "orange"
         self._reject_gold_mode = "giveup"  # 被拒处理：giveup 放弃 / keep 花金币挽留
 
@@ -183,7 +188,10 @@ class MarryProcessor(CustomAction):
         self._mode = self._get_selected_mode(context)
         self._target_title = self._get_selected_title(context)
         self._age_min, self._age_max = self._get_selected_age_range(context)
+        self._age_order_mode = self._get_selected_age_order(context)
         self._target_race_option = self._get_selected_race(context)
+        self._target_race_wanted = self._get_selected_target_race(context)
+        self._full_blood_only = self._get_full_blood_only(context)
         self._feature_mode = self._get_selected_feature_mode(context)
         self._reject_gold_mode = self._get_selected_reject_mode(context)
 
@@ -199,6 +207,37 @@ class MarryProcessor(CustomAction):
         self._post_process()
         return CustomAction.RunResult(success=True)
 
+    def _run_task_bounded(
+        self,
+        context: Context,
+        entry: str,
+        pipeline_override: dict | None = None,
+        timeout: float = 25.0,
+    ):
+        """同步运行子任务，但超过 timeout 就 post_stop，避免 Agent 永久卡住。
+
+        ``context.run_task`` 是同步调用；如果 Maa/Agent 在子任务里卡死，外层
+        CustomAction 会一直不返回，网页版任务状态就会永远停在 running。
+        """
+        timed_out = {"value": False}
+
+        def abort() -> None:
+            timed_out["value"] = True
+            logger.error(f"子任务 {entry} 超过 {timeout:.0f} 秒未返回，强制停止")
+            try:
+                context.tasker.post_stop()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"停止卡住的子任务失败：{exc}")
+
+        timer = threading.Timer(timeout, abort)
+        timer.daemon = True
+        timer.start()
+        try:
+            result = context.run_task(entry, pipeline_override=pipeline_override)
+        finally:
+            timer.cancel()
+        return None if timed_out["value"] else result
+
     def _single_plan(self, context: Context) -> CustomAction.RunResult:
         """
         执行单个人的相亲流程
@@ -210,7 +249,10 @@ class MarryProcessor(CustomAction):
         self._mode = self._get_selected_mode(context)
         self._target_title = self._get_selected_title(context)
         self._age_min, self._age_max = self._get_selected_age_range(context)
+        self._age_order_mode = self._get_selected_age_order(context)
         self._target_race_option = self._get_selected_race(context)
+        self._target_race_wanted = self._get_selected_target_race(context)
+        self._full_blood_only = self._get_full_blood_only(context)
         self._feature_mode = self._get_selected_feature_mode(context)
         self._reject_gold_mode = self._get_selected_reject_mode(context)
 
@@ -236,12 +278,20 @@ class MarryProcessor(CustomAction):
         # 点「联姻」进候选人窗口之前，先清掉可能残留的被拒弹窗
         self._handle_marry_reject(context)
 
-        context.run_task(
+        select_result = self._run_task_bounded(
+            context,
             "CastleMarrySelectStart",
             pipeline_override={
                 "CastleMarrySelectCountry": {"expected": [self._target_country]}
             },
+            timeout=25.0,
         )
+        if select_result is None:
+            logger.error("选择联姻国家超时（子任务卡住），停止本次相亲")
+            return CustomAction.RunResult(success=False)
+        if not self._task_ok(select_result):
+            logger.warning("选择联姻国家未成功，停止本次相亲")
+            return CustomAction.RunResult(success=False)
 
         # 执行基于血统的匹配或特征匹配
         if self._mode == "trait":
@@ -295,6 +345,40 @@ class MarryProcessor(CustomAction):
         logger.info(f"选择的联姻种族: {selected_race}")
         return selected_race
 
+    def _get_selected_target_race(self, context: Context) -> str:
+        """对方种族：same（跟随我方）/ 具体种族名。
+
+        具体种族决定：点「联姻」后选哪个国家、用哪张姓名表要求对方姓名。
+        """
+        data = context.get_node_data("MarryTargetRaceSelect")
+        race = "same"
+        if data:
+            expected = data.get("recognition", {}).get("param", {}).get(
+                "expected", ["same"]
+            )
+            if isinstance(expected, list) and expected:
+                race = str(expected[0])
+            elif isinstance(expected, str) and expected:
+                race = expected
+        logger.info(f"对方种族: {'跟随我方' if race == 'same' else race}")
+        return race
+
+    def _get_full_blood_only(self, context: Context) -> bool:
+        """是否只相亲纯血（血统 100%）。"""
+        data = context.get_node_data("MarryFullBloodSelect")
+        value = "no"
+        if data:
+            expected = data.get("recognition", {}).get("param", {}).get(
+                "expected", ["no"]
+            )
+            if isinstance(expected, list) and expected:
+                value = str(expected[0])
+            elif isinstance(expected, str) and expected:
+                value = expected
+        enabled = value.strip().lower() in ("yes", "true", "1", "是")
+        logger.info(f"只相亲纯血(100%): {'是' if enabled else '否'}")
+        return enabled
+
     def _get_selected_title(self, context: Context) -> str:
         """获取优先爵位（公爵/侯爵/伯爵/不限）。"""
         data = context.get_node_data("MarryTitleSelect")
@@ -345,6 +429,36 @@ class MarryProcessor(CustomAction):
         if self._age_max and age > self._age_max:
             return False
         return True
+
+    def _get_selected_age_order(self, context: Context) -> str:
+        """年龄排序：auto（跟随区间）/ desc（从大到小）/ asc（从小到大）。"""
+        data = context.get_node_data("MarryAgeOrderSelect")
+        mode = "auto"
+        if data:
+            expected = data.get("recognition", {}).get("param", {}).get(
+                "expected", ["auto"]
+            )
+            if isinstance(expected, list) and expected:
+                mode = str(expected[0])
+            elif isinstance(expected, str) and expected:
+                mode = expected
+        logger.info(f"年龄排序: {mode}")
+        return mode
+
+    def _age_sort_pref(self) -> str:
+        """给 ensure_filter_and_sort 的排序方向：older（大→小）/ younger（小→大）。
+
+        auto 时按区间推断：只设了上限（例如 0~35 岁）就从**小到大**，
+        否则按默认从大到小。
+        """
+        mode = getattr(self, "_age_order_mode", "auto") or "auto"
+        if mode == "asc":
+            return "younger"
+        if mode == "desc":
+            return "older"
+        if not self._age_min and self._age_max:
+            return "younger"
+        return "older"
 
     def _race_matches(self, target_race: str) -> bool:
         """候选人种族是否命中「相亲种族」选项（不限 = 全收）。"""
@@ -512,7 +626,7 @@ class MarryProcessor(CustomAction):
             ensure_filter_and_sort(
                 context,
                 getattr(self, "_target_title", "公爵"),
-                "older",
+                self._age_sort_pref(),
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"联姻筛选/排序失败：{exc}")
@@ -698,14 +812,20 @@ class MarryProcessor(CustomAction):
         if not self._check_and_filter_by_age(context):
             return
 
-        # 3.3 提取血统信息并确定联姻目标
-        target_race, target_country = self._evaluate_bloodline_and_get_target(context)
-        self._current_race = target_race  # 记录当前种族，供后续面部特征识别使用
+        # 3.3 提取血统信息并确定联姻目标（我方种族 / 对方种族 / 对方国家）
+        own_race, target_race, target_country = (
+            self._evaluate_bloodline_and_get_target(context)
+        )
+        if not own_race:
+            # 纯血过滤没通过（日志已在里面打了）
+            return
 
-        # 3.3.1 按「相亲种族」选项过滤：选了具体种族就只跟这个种族相亲
-        if not self._race_matches(target_race):
+        self._current_race = target_race  # 对方种族，供面部特征识别使用
+
+        # 3.3.1 按「我方种族」过滤：自己家族的公爵血统对不上就跳过
+        if not self._race_matches(own_race):
             logger.info(
-                f"候选人种族 {target_race} 与「相亲种族」"
+                f"我方候选血统 {own_race} 与「我方种族」"
                 f"{self._target_race_option} 不符，跳过"
             )
             return
@@ -793,15 +913,44 @@ class MarryProcessor(CustomAction):
         return True
 
     def _evaluate_bloodline_and_get_target(self, context: Context) -> tuple:
-        """进入血统面板，评估血统并确定联姻国家和种族"""
+        """进入血统面板，评估血统，返回 (我方种族, 对方种族, 对方国家)。
+
+        我方种族 = 当前公爵候选的最高血统种族（用于过滤 + 默认的对方种族）；
+        对方种族 = 「对方种族」选项，same 表示和我方一样；
+        对方国家 = 点「联姻」后要选的国家，决定去哪个国家找对象。
+        """
         context.run_task("RolePanel_BloodPage")
         _, bloodline, _ = extract_all_role_info(context)
 
         highest_bloodline = self._get_highest_bloodline(bloodline)
-        target_race, target_country = self._get_marriage_info(highest_bloodline)
-        logger.info(f"联姻国家：{target_country}，联姻种族：{target_race}")
+        percent = 0.0
+        try:
+            percent = float(bloodline.bloodlines.get(highest_bloodline, 0))
+        except (TypeError, ValueError):
+            percent = 0.0
+        logger.info(f"我方最高血统：{highest_bloodline} {percent:g}%")
 
-        return target_race, target_country
+        if getattr(self, "_full_blood_only", False) and percent < 99.5:
+            logger.info(f"要求纯血（100%），当前 {percent:g}%，跳过该候选")
+            return "", "", ""
+
+        own_race, own_country = self._get_marriage_info(highest_bloodline)
+
+        wanted = getattr(self, "_target_race_wanted", "same") or "same"
+        if wanted != "same":
+            target_race = wanted
+            target_country = self.race_country_mapping.get(wanted, "")
+            if not target_country:
+                logger.warning(f"对方种族「{wanted}」没有对应国家，回退到我方国家")
+                target_country = own_country
+            logger.info(
+                f"联姻：我方={own_race}，对方={target_race}，国家={target_country}"
+            )
+        else:
+            target_race, target_country = own_race, own_country
+            logger.info(f"联姻：双方同族={target_race}，国家={target_country}")
+
+        return own_race, target_race, target_country
 
     def _execute_marriage_matching(
         self,
@@ -920,7 +1069,7 @@ class MarryProcessor(CustomAction):
 
         if not match_found:
             logger.warning(
-                f"经过 {self._current_max_attempts} 次尝试，仍未找到匹配的姓名"
+                f"实际尝试 {getattr(self, '_name_attempts', 0)} 次，仍未找到匹配的姓名"
             )
             self._handle_marry_reject(context)
             context.run_task("PopUpWindowCancel")
@@ -1102,26 +1251,34 @@ class MarryProcessor(CustomAction):
     def _match_name_in_loop(
         self, context: Context, target_names: list, target_race: str
     ) -> bool:
-        """循环匹配姓名，直到找到匹配的或达到最大次数"""
-        max_attempts = self._current_max_attempts
+        """循环匹配姓名：点「就这个」→ 读「确认向XXX发送」→ 配对 / 换下一位。
+
+        读不到姓名时不再直接退出（之前第一次读不到就 return，等于只看了一个候选
+        却报“尝试了 N 次”），改成换下一位继续，直到用完本次候选人的尝试次数。
+        """
+        max_attempts = max(1, int(self._current_max_attempts or 1))
+        self._name_attempts = 0
 
         for attempt in range(max_attempts):
+            if context.tasker.stopping:
+                return False
+            self._name_attempts = attempt + 1
             logger.info(f"第 {attempt + 1}/{max_attempts} 次尝试匹配姓名")
 
-            context.run_task("CastleMarryJustThisButton")
+            if not self._open_send_dialog(context):
+                logger.warning("没打开「确认向XXX发送」弹窗，换下一位")
+                context.run_task("PopUpWindowCancel")
+                if not self._next_candidate(context):
+                    break
+                continue
 
-            reco_result = context.run_recognition(
-                "CastleMarryJustThisReadName",
-                context.tasker.controller.post_screencap().wait().get(),
-            )
-
-            if not reco_result.hit:
-                logger.warning(f"识别姓名失败, 请检查是否显示了姓名")
-                return False
-
-            detected_name = self._extract_name_from_ocr(reco_result.best_result.text)
+            detected_name = self._read_send_dialog_name(context)
             if not detected_name:
-                return False
+                logger.warning("弹窗里没读到姓名，换下一位")
+                context.run_task("PopUpWindowCancel")
+                if not self._next_candidate(context):
+                    break
+                continue
 
             if detected_name in target_names:
                 logger.info(
@@ -1131,13 +1288,46 @@ class MarryProcessor(CustomAction):
                 self._email_current += 1  # 约会人数 +1
                 self._handle_marry_reject(context)
                 return True
-            else:
-                logger.info(f"姓名不匹配：{detected_name} 不在高血名单中，尝试下一个")
-                context.run_task("PopUpWindowCancel")
-                if attempt < max_attempts - 1:
-                    context.run_task("CastleMarryNextOneButton")
+
+            logger.info(f"姓名不匹配：{detected_name} 不在高血名单中，换下一位")
+            context.run_task("PopUpWindowCancel")
+            if not self._next_candidate(context):
+                break
 
         return False
+
+    def _open_send_dialog(self, context: Context) -> bool:
+        """点「就这个」并等「确认向XXX发送」弹窗出现（最多约 4 秒）。"""
+        clicked = False
+        for _ in range(3):
+            if self._task_ok(context.run_task("CastleMarryJustThisButton")):
+                clicked = True
+                break
+            time.sleep(0.5)
+        if not clicked:
+            logger.warning("没找到「就这个」按钮，候选人列表可能还没准备好")
+            return False
+
+        for _ in range(10):
+            time.sleep(0.4)
+            img = context.tasker.controller.post_screencap().wait().get()
+            if context.run_recognition("CastleMarryJustThisReadName", img).hit:
+                return True
+        return False
+
+    def _read_send_dialog_name(self, context: Context) -> str:
+        """从「确认向XXX发送」弹窗里读姓名。"""
+        reco = context.run_recognition(
+            "CastleMarryJustThisReadName",
+            context.tasker.controller.post_screencap().wait().get(),
+        )
+        if not reco.hit or reco.best_result is None:
+            return ""
+        return self._extract_name_from_ocr(reco.best_result.text)
+
+    def _next_candidate(self, context: Context) -> bool:
+        """点「下一位」；按钮不在（列表到底）返回 False。"""
+        return self._task_ok(context.run_task("CastleMarryNextOneButton"))
 
     def _extract_name_from_ocr(self, ocr_text: str) -> str:
         """从OCR文本中提取姓名"""

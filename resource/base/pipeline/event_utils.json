@@ -36,7 +36,7 @@
     "Event_MercenaryName": {
         "recognition": "OCR",
         "expected": [
-            "[一-龥·]{2,5}"
+            "[一-龥A-Za-z·0-9]{1,8}"
         ],
         "roi": [
             40,
@@ -867,5 +867,188 @@
             180
         ],
         "timeout": 2000
+    },
+    "Event_CastleAttacked": {
+        "recognition": "OCR",
+        "expected": [
+            "城堡被攻打",
+            "座城堡被攻打"
+        ],
+        "roi": [
+            80,
+            220,
+            560,
+            120
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_CastleAttack_Handle"
+        ]
+    },
+    "Event_CastleAttackBannerClick": {
+        "recognition": "OCR",
+        "expected": [
+            "城堡被攻打",
+            "座城堡被攻打"
+        ],
+        "roi": [
+            80,
+            220,
+            560,
+            120
+        ],
+        "action": "Click",
+        "post_delay": 800,
+        "timeout": 1500
+    },
+    "Event_CastleListWindow": {
+        "recognition": "OCR",
+        "expected": [
+            "下列城堡正在被攻打",
+            "正在被攻打中"
+        ],
+        "roi": [
+            80,
+            500,
+            560,
+            140
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_CastleAttack_Handle"
+        ]
+    },
+    "Event_CastleListGo": {
+        "recognition": "OCR",
+        "expected": [
+            "前去"
+        ],
+        "roi": [
+            420,
+            560,
+            300,
+            140
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 1500
+    },
+    "Event_CastleDefendWindow": {
+        "recognition": "OCR",
+        "expected": [
+            "防守要塞",
+            "敌方攻击中"
+        ],
+        "roi": [
+            20,
+            240,
+            680,
+            900
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_CastleAttack_Handle"
+        ]
+    },
+    "Event_CastleDefendButton": {
+        "recognition": "OCR",
+        "expected": [
+            "防守要塞"
+        ],
+        "roi": [
+            180,
+            960,
+            360,
+            210
+        ],
+        "action": "Click",
+        "post_delay": 1000,
+        "timeout": 1500
+    },
+    "Event_CastleTravelDialog": {
+        "recognition": "OCR",
+        "expected": [
+            "步行",
+            "前往"
+        ],
+        "roi": [
+            60,
+            420,
+            600,
+            480
+        ],
+        "timeout": 2000,
+        "next": [
+            "Event_CastleAttack_Handle"
+        ]
+    },
+    "Event_CastleTravelConfirm": {
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            460,
+            560,
+            200,
+            140
+        ],
+        "action": "Click",
+        "post_delay": 1500,
+        "timeout": 1500
+    },
+    "Event_CastleInterruptCancel": {
+        "recognition": "OCR",
+        "expected": [
+            "取消"
+        ],
+        "roi": [
+            100,
+            820,
+            520,
+            180
+        ],
+        "action": "Click",
+        "post_delay": 600,
+        "timeout": 1200
+    },
+    "Event_CastleAttackText": {
+        "recognition": "OCR",
+        "roi": [
+            30,
+            120,
+            660,
+            1000
+        ],
+        "timeout": 2000
+    },
+    "Event_CastleAttack_Handle": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "CastleDefenseProcessor",
+        "timeout": 3000
+    },
+    "Event_CastleDefense": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "CastleDefenseProcessor",
+        "timeout": 3000
+    },
+    "CastleDefenseSelect": {
+        "attach": {
+            "description": "城堡被攻打处理方式：defend=前往防守 / ignore=忽略"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "defend"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
     }
 }

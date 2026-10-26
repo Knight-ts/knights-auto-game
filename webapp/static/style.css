@@ -151,3 +151,10 @@ select.grade { width: 74px; } input.min { width: 92px; }
   .selfheal-layout { grid-template-columns: 1fr; }
   .selfheal-list { max-height: 320px; }
 }
+.sh-repair { background: var(--panel2); border: 1px dashed var(--line);
+             border-radius: 10px; padding: 10px; }
+.sh-badge.queued, .sh-badge.running { color: var(--accent); border-color: #2f4f7a; }
+.sh-badge.fixed { color: var(--ok); border-color: #2f6b4f; }
+.sh-badge.escalated { color: var(--warn); border-color: #5a4a1f; }
+.sh-badge.stopped { color: var(--muted); }
+.sh-badge.unavailable { color: var(--err); border-color: #7a3434; }

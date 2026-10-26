@@ -114,5 +114,62 @@
 		"custom_action": "AutoFightProcessor",
 		"post_delay": 500,
 		"timeout": 2000
+	},
+	"FightModeSelect": {
+		"attach": {
+			"description": "战斗模式：auto=先待机N回合后追击 / standby=只待机 / pursuit=只追击"
+		},
+		"recognition": "OCR",
+		"expected": [
+			"auto"
+		],
+		"roi": [
+			0,
+			0,
+			1,
+			1
+		],
+		"timeout": 1000,
+		"enabled": true
+	},
+	"FightStandbyRounds": {
+		"attach": {
+			"description": "自动模式下的待机回合数（0 = 立刻进入追击）"
+		},
+		"recognition": "OCR",
+		"expected": [
+			"20"
+		],
+		"roi": [
+			0,
+			0,
+			1,
+			1
+		],
+		"timeout": 1000,
+		"enabled": true
+	},
+	"FightPieceRecognition": {
+		"attach": {
+			"description": "战斗棋子识别开关：on / off"
+		},
+		"recognition": "OCR",
+		"expected": [
+			"on"
+		],
+		"roi": [
+			0,
+			0,
+			1,
+			1
+		],
+		"timeout": 1000,
+		"enabled": true
+	},
+	"BattlePieceProbe": {
+		"recognition": "DirectHit",
+		"action": "Custom",
+		"custom_action": "BattlePieceProbe",
+		"timeout": 2000
 	}
 }

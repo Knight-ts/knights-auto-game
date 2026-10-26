@@ -57,6 +57,7 @@
                 "开启好娃提醒",
                 "开启生娃自动起名",
                 "开启自动接受佣兵",
+                "佣兵智能入队",
                 "选择刷取任务国家",
                 "选择成长试炼难度",
                 "相亲模式",
@@ -64,13 +65,23 @@
                 "相亲种族",
                 "相亲爵位",
                 "相亲年龄区间",
+                "年龄排序",
+                "对方种族",
+                "是否满血",
+                "城堡相亲月份",
                 "目标特性",
                 "婚礼宴会档位",
                 "相亲被拒处理",
                 "告白失败处理",
                 "任务失败处理",
+                "任务失败继续轮数",
                 "选择年度任务月份数",
-                "自定义任务黑名单"
+                "自定义任务黑名单",
+                "战斗模式",
+                "待机回合数",
+                "棋子识别",
+                "城堡被攻打处理",
+                "海盗事件处理"
             ],
             "description": "自动执行年度任务流程并推进游戏时间，聊天相亲目前只能识别 科内塔之怒和太阳之子其他都无法识别, 可以使用聊天模式 并 相亲指定目标种族相亲来获取特性脸的图片等并上传到群文件等待群主训练神经网络模型",
             "doc": [
@@ -81,33 +92,40 @@
                 "**功能说明：**",
                 "- 自动推进游戏月份",
                 "- 自动处理每月事件（节日、相亲等）",
-                "- 自动执行战斗/任务系统",
+                "- 自动执行战斗/任务系统：接任务前先看大地图左下角 HUD，HUD 有任务就直接继续，不再打开任务板重新接取；HUD 没有才去任务板接新任务",
                 "- 支持好娃检测与弹窗提醒",
                 "",
                 "**选项说明：**",
-                "- 4月城堡相亲：4月城堡主厅相亲（自动 / 跳过 / 手动），自动时使用下面的相亲参数",
+                "- 城堡相亲月份：在几月执行城堡主厅相亲（默认 4 月），到该月自动跑",
+                "- 4月城堡相亲：城堡主厅相亲（自动 / 跳过 / 手动），自动时使用下面的相亲参数",
                 "- 相亲爵位：公爵 / 伯爵 / 男爵 / 骑士 / 不限，默认公爵",
                 "- 相亲年龄区间：最小/最大年龄，0 或留空 = 该侧不限（例：小于60 → 0/60；60~120 → 60/120；大于120 → 120/0）",
-                "- 相亲种族：选具体种族就只和该种族相亲（多角色模式会跳过种族不符的候选人），「不限」= 不过滤",
+                "- 相亲种族（我方种族）：选具体种族就只处理该血统的自己家族公爵，「不限」= 不过滤",
+                "- 对方种族：跟随我方（默认，要求同族）/ 指定种族；决定去哪个国家、按哪张姓名表匹配对方姓名",
+                "- 是否满血：是 = 只相亲最高血统 100% 的纯血候选",
                 "- 目标特性：橙色特征（只接受带特征）/ 不限",
                 "- 婚礼宴会档位：告白成功后的婚礼用哪个宴会档位（自动按爵位 / 乡村宴会 / 祝福婚宴）",
                 "- 相亲被拒处理：回信被对方拒绝时 放弃（换下一位）/ 金币挽留（会花金币）",
                 "- 告白失败处理：告白失败事件 放弃 / 金币挽留（会花金币，找不到按钮自动回退放弃）",
-                "- 任务失败处理：刷取任务失败时 换任务（默认，放弃并继续循环）/ 继续任务（交给重试再打一次）/ 拉黑并换任务",
+                "- 任务失败处理：刷取任务失败时 换任务（默认，放弃并重试本月）/ 继续任务（立即重试同一任务 2 次，仍失败则保留任务并重试本月）/ 拉黑并换任务",
+                "- 任务失败继续轮数：同一月份最多重跑几轮（默认 3，范围 1-10）；每轮内部仍按「任务失败处理」执行，达到轮数后才停止年度任务",
                 "- 特征识别范围：目前只有 佩尔弗因王族（科内塔之怒）、塞宁王族（太阳之子）、高阶精灵（专注之瞳 / 上古灵性）能识别；其他种族请把目标特性选“不限”",
                 "- 5月春林节相亲：暂未实现自动流程，只能选择 跳过 / 手动",
                 "- 开启3月启航节购买：3月启航节是否自动进入节日页面并购买物品",
                 "- 开启好娃提醒：检测到优质子女时弹窗提醒并暂停任务",
                 "- 开启生娃自动起名：佣兵生娃事件后是否自动识别属性并起名（关闭则保留游戏默认名字，不做属性识别）",
-                "- 开启自动接受佣兵：佣兵申请加入时全部接受 / 智能接受（按名字规则）/ 直接拒绝",
+                "- 开启自动接受佣兵：佣兵申请加入时全部接受 / 智能接受（按名字·爵位·橙色特性规则）/ 直接拒绝",
+                "- 佣兵智能入队：智能接受时是否先点「?」看角色详情，按「佣兵记录」页的组合（特性+属性门槛）/爵位/橙色特性判断；关掉只看名字白黑名单",
                 "- 选择刷取任务国家：设置年度任务执行的目标城市（选择'暮角城成长试炼'可启动特殊战斗任务流程）",
                 "- 选择成长试炼难度：成长试炼的难度等级（仅在'暮角城成长试炼'模式下生效）",
                 "- 相亲模式：姓名相亲（按血统匹配姓名）/ 聊天相亲（按特性匹配） 标记星星的不相亲",
                 "- 选择年度任务月份数：设置执行任务的月份数量",
                 "- 自定义任务黑名单：屏蔽不需要执行的任务名称",
+                "- 战斗模式 / 待机回合数 / 棋子识别：月度循环是这三项的基础配置，作用于循环内的主动战斗；专门任务的同名选项默认跟随，可单独覆盖。待机回合数 0 = 立刻追击；都不设置时沿用节点默认（先待机 20 回合）",
                 "",
                 "**月度循环覆盖哪些事件：**",
                 "- 地图随机事件（每步都会调用事件扫描）：佣兵加入、佣兵生娃、孩子夭折、丰收节事件、告白成功（→ 婚礼）、告白失败、提示弹窗、佣兵退休、海盗袭击",
+                "- 海盗事件处理：自动战斗 / 停下等手动；海盗打不过时选「停下等手动」，月度循环会暂停并留标记，组合按「海盗事件」规则处理（默认停止等你调整阵容）",
                 "- 月份节日：3月启航节、4月城堡相亲、5月春林节相亲（仅跳过/手动）；8月丰收节、10月勇士节目前是空实现（只打日志）",
                 "- 想单独跑 / 单独调某一个事件，用任务列表里的「事件：xxx」「节日：xxx」任务，处理函数是同一套",
                 "",
@@ -207,6 +225,9 @@
                 "相亲种族",
                 "相亲爵位",
                 "相亲年龄区间",
+                "年龄排序",
+                "对方种族",
+                "是否满血",
                 "目标特性",
                 "婚礼宴会档位",
                 "相亲被拒处理",
@@ -227,7 +248,9 @@
                 "- 自动确认相亲或切换下一个对象",
                 "",
                 "**配置说明：**",
-                "- 相亲种族：选具体种族就只和该种族相亲（多角色模式会跳过种族不符的候选人），「不限」= 不过滤",
+                "- 相亲种族（我方种族）：选具体种族就只处理该血统的自己家族公爵（多角色模式会跳过血统不符的候选），「不限」= 不过滤",
+                "- 对方种族：跟随我方（默认，要求同族）/ 指定某个种族；决定点「联姻」后选哪个国家、姓名相亲时要求对方姓名落在哪张姓名表",
+                "- 是否满血：是 = 只处理最高血统 100% 的纯血候选，不足 100% 直接跳过",
                 "- 相亲年龄区间：最小/最大年龄，0 或留空 = 该侧不限（例：小于60 → 0/60；60~120 → 60/120；大于120 → 120/0）",
                 "- 相亲爵位 / 目标特性：筛选与接受条件",
                 "- 婚礼宴会档位：告白成功后的婚礼用哪个宴会档位，默认按双方最高爵位自动选择（公爵→乡村宴会，伯爵及以下→祝福婚宴）；指定档位则固定使用该档，找不到时自动回退",
@@ -330,7 +353,8 @@
             "name": "事件：佣兵加入",
             "entry": "Auto_MercenaryJoinEvent",
             "option": [
-                "开启自动接受佣兵"
+                "开启自动接受佣兵",
+                "佣兵智能入队"
             ],
             "description": "事件任务：停在佣兵加入弹窗时运行 → 按「开启自动接受佣兵」接受 / 智能接受 / 拒绝",
             "doc": [
@@ -341,7 +365,8 @@
                 "**使用前：**停在佣兵加入弹窗上再启动（会先校验弹窗）。",
                 "",
                 "**选项：**",
-                "- 开启自动接受佣兵：No 直接取消 / Yes 全部招募 / 智能 按 `table/mercenary_rules.json` 的名字规则"
+                "- 开启自动接受佣兵：No 直接取消 / Yes 全部招募 / 智能 按 `table/mercenary_rules.json` 的名字·爵位·橙色特性规则",
+                "- 佣兵智能入队：智能接受时先点「?」读角色详情（潜力 / 特性 / 爵位），按「佣兵记录」页的组合（特性 + 属性门槛）、爵位、橙色特性判断；关掉只看名字"
             ]
         },
         {
@@ -485,10 +510,206 @@
         {
             "name": "战斗任务主动",
             "entry": "AutoFight_Start",
-            "description": "混合战斗入口：所有任务先完整坚守20回合，第21回合起切换为威胁建图、八方向追击和攻击"
+            "option": [
+                "战斗模式",
+                "待机回合数",
+                "棋子识别"
+            ],
+            "description": "战斗入口：待机模式只结束回合等反击；追击模式建图搜索、粗方向推进、八方向 A* 追击与攻击。可用「战斗模式」「待机回合数」调整，选中棋子时会识别名字、技能和实测攻击范围",
+            "doc": [
+                "### 战斗任务（待机 / 追击）",
+                "",
+                "同一套战斗处理器分两种模式：",
+                "",
+                "- **待机模式**：每回合只点「结束回合」，靠游戏自动反击让敌人自己走过来，代价最低。",
+                "- **追击模式**：完整建图 → 顺时针/螺旋搜索 → 八方向 A* 走到敌人攻击环 → 点对点攻击；缺我方或缺目标时，先确定敌我大致方向（威胁覆盖区 / 方向记忆 / 未探索边界），找回棋子后朝那个方向推进。",
+                "",
+                "**选项**",
+                "",
+                "- 战斗模式：自动（先待机 N 回合后转追击）/ 只待机 / 只追击。",
+                "- 待机回合数：自动模式的 N，默认 20，填 0 表示立刻追击。回合数按整场战斗累计，中途恢复不会重新计数。",
+                "- 棋子识别：选中棋子时读取人物卡文字并实测攻击/移动范围，日志输出「棋子识别: 名字=… 技能=… 攻击范围=…」，实测结果写入 table/piece_observations.json。",
+                "",
+                "**注意：**只待机模式不会主动接近敌人，若敌人始终不过来，会一直等到动作循环安全上限（300 次）后结束。"
+            ]
+        },
+        {
+            "name": "事件：城堡被攻打",
+            "entry": "Event_CastleDefense",
+            "option": [
+                "城堡被攻打处理"
+            ],
+            "description": "事件任务：停在城堡被攻打横幅 / 防守窗口时运行 → 前往防守并打完，或按设置忽略",
+            "doc": [
+                "### 事件：城堡被攻打",
+                "",
+                "入口 `Event_CastleDefense` → `CastleDefenseProcessor`：",
+                "",
+                "1. 识别大地图顶部横幅「1座城堡被攻打中。」或已弹出的「城堡」窗口；",
+                "2. 按选项「城堡被攻打处理」：",
+                "   - 前往防守：点横幅 → 在「下列城堡正在被攻打中」列表点「前去」→ 点「防守要塞」→ 行路提示选「步行」并确定；",
+                "   - 忽略：按返回键关闭窗口，放弃本次防守；",
+                "3. 检测到战斗界面后交给 `AutoFight_Start` 打完整场，处理结算并回大地图。",
+                "",
+                "**使用前：**停在城堡被攻打横幅或防守窗口上再启动。",
+                "",
+                "**说明：**不同城堡（单人要塞 / 多次要塞）窗口文案可能不同；处理器会把画面里识别到的文字写进日志，按钮找不到时按日志里的实际文案调整 `resource/base/pipeline/event_utils.json` 中 `Event_CastleDefendButton` 等节点的 `expected`。",
+                "",
+                "月度循环的事件扫描也会自动调用同一个处理器。"
+            ]
+        },
+        {
+            "name": "功能：棋子识别（战斗中）",
+            "entry": "BattlePieceProbe",
+            "description": "战斗内诊断：先在战斗中选中一名我方棋子，再运行本任务，输出名字/技能/实测攻击范围，并写入 table/piece_observations.json",
+            "doc": [
+                "### 功能：棋子识别（战斗中）",
+                "",
+                "用于校准棋子识别，不需要跑完整场战斗。",
+                "",
+                "**使用前：**在战斗中选中一名我方棋子（画面出现黄色攻击范围/蓝色移动范围），再运行本任务。",
+                "",
+                "**输出：**",
+                "- 日志 `棋子识别: 名字=… 职业=… 技能=… 攻击范围=… 移动范围=…`；",
+                "- 人物卡 OCR 原文 `人物卡文字=[…]`；",
+                "- 实测攻击范围偏移（相对棋子所在格）；",
+                "- 追加到 `debug/pieces/<日期>.jsonl`，合并进 `table/piece_observations.json`。",
+                "",
+                "**校准：**姓名识别不出来时，对照截图调整 `table/piece_profiles.json` 的 `card_roi`；技能识别不出来时，把技能名填进 `skill_vocabulary` 或按棋子登记 `skills`。"
+            ]
         }
     ],
     "option": {
+        "城堡被攻打处理": {
+            "type": "select",
+            "description": "检测到「一座城堡被攻打」时怎么处理：前往防守会进入防守战并打完；忽略只关闭事件",
+            "default_case": "前往防守",
+            "cases": [
+                {
+                    "name": "前往防守",
+                    "description": "点横幅 → 防守 → 出战，交给主动战斗打完并回大地图",
+                    "pipeline_override": {
+                        "CastleDefenseSelect": {
+                            "expected": "defend"
+                        }
+                    }
+                },
+                {
+                    "name": "忽略",
+                    "description": "点忽略/关闭，放弃本次防守（找不到按钮会按返回退出）",
+                    "pipeline_override": {
+                        "CastleDefenseSelect": {
+                            "expected": "ignore"
+                        }
+                    }
+                }
+            ]
+        },
+        "海盗事件处理": {
+            "type": "select",
+            "description": "检测到「海盗正在袭扰庄园」时怎么处理：自动战斗会跨图去群岛打完；停下等手动会留下标记并暂停任务，玩家调整阵容后再手动处理",
+            "default_case": "自动战斗",
+            "cases": [
+                {
+                    "name": "自动战斗",
+                    "description": "跨图前往群岛，自动战斗并回到大陆",
+                    "pipeline_override": {
+                        "PirateSelect": {
+                            "expected": "auto"
+                        }
+                    }
+                },
+                {
+                    "name": "停下等手动",
+                    "description": "暂停任务并留下临时标记，玩家调整阵容后手动打（或重新运行组合）",
+                    "pipeline_override": {
+                        "PirateSelect": {
+                            "expected": "manual"
+                        }
+                    }
+                }
+            ]
+        },
+        "战斗模式": {
+            "type": "select",
+            "description": "待机模式只结束回合等敌人过来；追击模式主动建图、接近并攻击；自动 = 先待机 N 回合再转追击",
+            "default_case": "自动（先待机后追击）",
+            "cases": [
+                {
+                    "name": "自动（先待机后追击）",
+                    "description": "先待机「待机回合数」个回合，之后自动转入追击模式",
+                    "pipeline_override": {
+                        "FightModeSelect": {
+                            "expected": "auto"
+                        }
+                    }
+                },
+                {
+                    "name": "只待机",
+                    "description": "整场只点结束回合，靠游戏自动反击；敌人始终不过来时会一直等到安全上限",
+                    "pipeline_override": {
+                        "FightModeSelect": {
+                            "expected": "standby"
+                        }
+                    }
+                },
+                {
+                    "name": "只追击",
+                    "description": "第 1 回合就建图搜索、粗方向推进并主动攻击",
+                    "pipeline_override": {
+                        "FightModeSelect": {
+                            "expected": "pursuit"
+                        }
+                    }
+                }
+            ]
+        },
+        "待机回合数": {
+            "type": "input",
+            "description": "自动模式下先待机的回合数，0 = 立刻进入追击模式。回合数按整场战斗累计，恢复调用不会重新计数。",
+            "inputs": [
+                {
+                    "name": "回合数",
+                    "description": "待机回合数，0 表示不待机直接追击",
+                    "default": "20",
+                    "pipeline_type": "string",
+                    "verify": "^[0-9]*$",
+                    "pattern_msg": "只能填数字，留空按默认 20 处理"
+                }
+            ],
+            "pipeline_override": {
+                "FightStandbyRounds": {
+                    "expected": [
+                        "{回合数}"
+                    ]
+                }
+            }
+        },
+        "棋子识别": {
+            "type": "select",
+            "description": "战斗中识别选中棋子的名字、技能与实测攻击/移动范围，输出到日志和 table/piece_observations.json",
+            "default_case": "开启",
+            "cases": [
+                {
+                    "name": "开启",
+                    "description": "选中棋子时读取人物卡文字并实测攻击范围，可用于补齐被遮挡的攻击目标",
+                    "pipeline_override": {
+                        "FightPieceRecognition": {
+                            "expected": "on"
+                        }
+                    }
+                },
+                {
+                    "name": "关闭",
+                    "description": "关闭后不读人物卡、不写观测表，攻击仍只按黄色角标判断",
+                    "pipeline_override": {
+                        "FightPieceRecognition": {
+                            "expected": "off"
+                        }
+                    }
+                }
+            ]
+        },
         "DailyTaskSubTaskSwitch": {
             "type": "checkbox",
             "description": "是否自动处理每日任务",
@@ -565,6 +786,109 @@
                         },
                         "Flag_AprCastleManual": {
                             "enabled": true
+                        }
+                    }
+                }
+            ]
+        },
+        "城堡相亲月份": {
+            "type": "select",
+            "description": "在几月执行城堡相亲（默认 4 月）。年度流程到这个月就自动跑城堡主厅相亲；「4月城堡相亲」选项仍控制 自动/跳过/手动。",
+            "default_case": "4月",
+            "cases": [
+                {
+                    "name": "1月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "1"
+                        }
+                    }
+                },
+                {
+                    "name": "2月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "2"
+                        }
+                    }
+                },
+                {
+                    "name": "3月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "3"
+                        }
+                    }
+                },
+                {
+                    "name": "4月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "4"
+                        }
+                    }
+                },
+                {
+                    "name": "5月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "5"
+                        }
+                    }
+                },
+                {
+                    "name": "6月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "6"
+                        }
+                    }
+                },
+                {
+                    "name": "7月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "7"
+                        }
+                    }
+                },
+                {
+                    "name": "8月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "8"
+                        }
+                    }
+                },
+                {
+                    "name": "9月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "9"
+                        }
+                    }
+                },
+                {
+                    "name": "10月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "10"
+                        }
+                    }
+                },
+                {
+                    "name": "11月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "11"
+                        }
+                    }
+                },
+                {
+                    "name": "12月",
+                    "pipeline_override": {
+                        "MarryMonthSelect": {
+                            "expected": "12"
                         }
                     }
                 }
@@ -706,9 +1030,34 @@
             ],
             "default_case": "Yes"
         },
+        "佣兵智能入队": {
+            "type": "switch",
+            "description": "佣兵入队前先点「?」看角色详情，按「佣兵记录」页配置的组合/爵位/特性/属性判断（和「孩子命名」同一套识别）",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "description": "开启：读潜力 + 特性 + 爵位，按入队条件判断",
+                    "pipeline_override": {
+                        "Flag_MercenarySmartAdmit": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "description": "关闭：不点详情面板，只按名字白/黑名单判断",
+                    "pipeline_override": {
+                        "Flag_MercenarySmartAdmit": {
+                            "enabled": false
+                        }
+                    }
+                }
+            ],
+            "default_case": "No"
+        },
         "开启自动接受佣兵": {
             "type": "select",
-            "description": "自动接受加入的佣兵：全部接受 / 智能接受（按名字规则） / 不自动接受",
+            "description": "自动接受加入的佣兵：全部接受 / 智能接受（按名字·爵位·橙色特性规则） / 不自动接受",
             "cases": [
                 {
                     "name": "No",
@@ -740,7 +1089,7 @@
                 },
                 {
                     "name": "智能",
-                    "description": "智能接受：佣兵名字命中 table/mercenary_rules.json 才接受",
+                    "description": "智能接受：按 table/mercenary_rules.json 的名字（白/黑名单）、爵位下限、橙色特性数量判定",
                     "pipeline_override": {
                         "Flag_SmartMercenary": {
                             "enabled": true
@@ -965,7 +1314,7 @@
         "自定义任务黑名单": {
             "type": "input",
             "label": "自定义任务黑名单",
-            "description": "输入要屏蔽的任务名称，被屏蔽的任务在年度任务中会自动跳过。\n\n**注意：**\n- 输入的任务名称会保存到本地文件 `assets/table/task_blacklist.json`\n- 重启后仍然生效，无需重新输入\n- 如需删除，请手动编辑 `assets/table/task_blacklist.json` 文件，从 blacklist 数组中移除对应名称",
+            "description": "输入要屏蔽的任务名称，被屏蔽的任务在年度任务中会自动跳过（写入全局黑名单，所有城市生效）。\n\n**注意：**\n- 输入的任务名称会保存到本地文件 `table/task_blacklist.json`\n- 重启后仍然生效，无需重新输入\n- 需要按城市单独设置等级区间 / 黑名单时，请用网页版「任务接取」面板\n- 如需删除，请手动编辑 `table/task_blacklist.json`，或在网页「任务接取 → 黑名单」里点「解除」",
             "inputs": [
                 {
                     "name": "任务名称",
@@ -1034,7 +1383,7 @@
         },
         "相亲种族": {
             "type": "select",
-            "description": "只和这个种族的候选人相亲：多角色模式下会跳过种族不符的候选人；单角色模式用它决定去哪个国家相亲。「不限」= 不按种族过滤（默认）。",
+            "description": "我方种族：只处理这个种族的自己家族公爵（多角色模式按血统过滤，不符的跳过）；单角色模式用它决定去哪个国家。「不限」= 不按种族过滤（默认）。想指定对方种族用「对方种族」选项。",
             "default_case": "不限",
             "cases": [
                 {
@@ -1168,6 +1517,167 @@
                 }
             ]
         },
+        "对方种族": {
+            "type": "select",
+            "description": "对方（嫁/娶进来的那一方）要求哪个种族：决定点「联姻」后选哪个国家、以及姓名相亲时要求对方姓名落在哪张姓名表里。「跟随我方」= 和我方公爵同族（默认）。",
+            "default_case": "跟随我方",
+            "cases": [
+                {
+                    "name": "跟随我方",
+                    "description": "对方必须和我方公爵同族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "same"
+                        }
+                    }
+                },
+                {
+                    "name": "佩尔弗因王族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "佩尔弗因王族"
+                        }
+                    }
+                },
+                {
+                    "name": "塞宁王族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "塞宁王族"
+                        }
+                    }
+                },
+                {
+                    "name": "高阶精灵",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "高阶精灵"
+                        }
+                    }
+                },
+                {
+                    "name": "弗莱德里王族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "弗莱德里王族"
+                        }
+                    }
+                },
+                {
+                    "name": "希尔王族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "希尔王族"
+                        }
+                    }
+                },
+                {
+                    "name": "切瓦利王族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "切瓦利王族"
+                        }
+                    }
+                },
+                {
+                    "name": "祖扎尔达王族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "祖扎尔达王族"
+                        }
+                    }
+                },
+                {
+                    "name": "黑暗精灵",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "黑暗精灵"
+                        }
+                    }
+                },
+                {
+                    "name": "瓦诺遗族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "瓦诺遗族"
+                        }
+                    }
+                },
+                {
+                    "name": "萨尼德罕",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "萨尼德罕"
+                        }
+                    }
+                },
+                {
+                    "name": "宏朝贵胄",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "宏朝贵胄"
+                        }
+                    }
+                },
+                {
+                    "name": "法拉希尔血裔",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "法拉希尔血裔"
+                        }
+                    }
+                },
+                {
+                    "name": "古特雅尔",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "古特雅尔"
+                        }
+                    }
+                },
+                {
+                    "name": "玛夏贵族",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "玛夏贵族"
+                        }
+                    }
+                },
+                {
+                    "name": "瑞格王室",
+                    "pipeline_override": {
+                        "MarryTargetRaceSelect": {
+                            "expected": "瑞格王室"
+                        }
+                    }
+                }
+            ]
+        },
+        "是否满血": {
+            "type": "select",
+            "description": "只相亲纯血候选人：要求我方公爵的最高血统 = 100%（如「高阶精灵 100%」），不足 100% 直接跳过。",
+            "default_case": "否",
+            "cases": [
+                {
+                    "name": "否",
+                    "description": "不看血统百分比",
+                    "pipeline_override": {
+                        "MarryFullBloodSelect": {
+                            "expected": "no"
+                        }
+                    }
+                },
+                {
+                    "name": "是",
+                    "description": "只处理 100% 纯血候选",
+                    "pipeline_override": {
+                        "MarryFullBloodSelect": {
+                            "expected": "yes"
+                        }
+                    }
+                }
+            ]
+        },
         "相亲爵位": {
             "type": "select",
             "description": "4月城堡相亲筛选的爵位（默认公爵）",
@@ -1248,6 +1758,40 @@
                     ]
                 }
             }
+        },
+        "年龄排序": {
+            "type": "select",
+            "description": "联姻列表按年龄排序的方向。「自动」= 只设了年龄上限（例如 0~35 岁）时从小到大，其余情况从大到小。",
+            "default_case": "自动",
+            "cases": [
+                {
+                    "name": "自动",
+                    "description": "只设上限（小于 X 岁）时从小到大，否则从大到小",
+                    "pipeline_override": {
+                        "MarryAgeOrderSelect": {
+                            "expected": "auto"
+                        }
+                    }
+                },
+                {
+                    "name": "从大到小",
+                    "description": "年龄大的排前面",
+                    "pipeline_override": {
+                        "MarryAgeOrderSelect": {
+                            "expected": "desc"
+                        }
+                    }
+                },
+                {
+                    "name": "从小到大",
+                    "description": "年龄小的排前面",
+                    "pipeline_override": {
+                        "MarryAgeOrderSelect": {
+                            "expected": "asc"
+                        }
+                    }
+                }
+            ]
         },
         "联姻方式": {
             "type": "select",
@@ -1415,7 +1959,7 @@
                 },
                 {
                     "name": "继续任务",
-                    "description": "不放弃，交给月度重试再打一次（连续两次仍失败才停）",
+                    "description": "失败后立即重试同一任务（最多 2 次）；仍失败则保留任务，按「任务失败继续轮数」重试本月，不会直接停止年度任务",
                     "pipeline_override": {
                         "TaskFailSelect": {
                             "expected": "retry"
@@ -1424,7 +1968,7 @@
                 },
                 {
                     "name": "拉黑并换任务",
-                    "description": "把失败任务写进黑名单（以后不再接），再放弃并继续循环",
+                    "description": "把失败任务写进黑名单（以后不再接），再放弃并重试本月",
                     "pipeline_override": {
                         "TaskFailSelect": {
                             "expected": "blacklist"
@@ -1432,6 +1976,27 @@
                     }
                 }
             ]
+        },
+        "任务失败继续轮数": {
+            "type": "input",
+            "description": "同一月份任务失败或月份没推进时，最多重跑几轮。每轮内部仍按「任务失败处理」执行；达到轮数后才会停止年度任务。默认 3，范围 1-10。",
+            "inputs": [
+                {
+                    "name": "轮数",
+                    "description": "同一月份最多尝试轮数，1-10",
+                    "default": "3",
+                    "pipeline_type": "string",
+                    "verify": "^([1-9]|10)$",
+                    "pattern_msg": "请填 1-10 的整数"
+                }
+            ],
+            "pipeline_override": {
+                "YearlyMonthRetries": {
+                    "expected": [
+                        "{轮数}"
+                    ]
+                }
+            }
         },
         "地图切换目标": {
             "type": "select",

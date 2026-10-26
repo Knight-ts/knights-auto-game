@@ -103,6 +103,9 @@
     "Flag_SmartMercenary": {
         "enabled": false
     },
+    "Flag_MercenarySmartAdmit": {
+        "enabled": false
+    },
     "Flag_EnableAprCastleMarry": {
         "enabled": false
     },
@@ -122,6 +125,57 @@
         "recognition": "OCR",
         "expected": [
             "switch"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "YearlyMonthRetries": {
+        "attach": {
+            "description": "同一月份失败后最多重跑轮数（1-10）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "3"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "PirateSelect": {
+        "attach": {
+            "description": "海盗事件处理：auto=自动战斗 / manual=停下等手动"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "auto"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "MarryMonthSelect": {
+        "attach": {
+            "description": "城堡相亲月份（默认 4 月，到该月自动跑城堡相亲）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "4"
         ],
         "roi": [
             0,
@@ -205,5 +259,12 @@
         "post_delay": 500,
         "timeout": 3000,
         "enabled": true
+    },
+    "SceneGuard": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "SceneGuardTask",
+        "post_delay": 500,
+        "timeout": 120000
     }
 }

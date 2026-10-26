@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from maa.define import Rect
 from maa.context import Context
 import os
 import json
 import re
 
-from utils import logger
+from utils import logger, task_rules
 
 
 @dataclass
@@ -109,10 +109,12 @@ class TaskBlacklist:
         except Exception as e:
             logger.error(f"保存黑名单到文件失败: {e}")
 
-    def is_in_blacklist(self, task_name: str) -> bool:
-        """检查任务是否在黑名单中（文件被网页改过会自动重载）"""
+    def is_in_blacklist(self, task_name: str, city: str = "") -> bool:
+        """检查任务是否在黑名单中（全局 + 城市名单，文件改动自动生效）。"""
         self._reload_if_changed()
-        return task_name in self._blacklist_cache
+        if task_name in self._blacklist_cache:
+            return True
+        return task_name in task_rules.city_rule(city)["blacklist"]
 
 
 class TaskHudRecognizer:
@@ -162,15 +164,18 @@ class TaskHudRecognizer:
     def __init__(self):
         self.blacklist = TaskBlacklist()
 
-    def _calc_dynamic_roi(self, icon_box, offset_config: Dict[str, int]) -> List[int]:
+    def _calc_dynamic_roi(
+        self, icon_box, offset_config: Dict[str, int], image_shape=None
+    ) -> Optional[List[int]]:
         """根据图标box和offset配置计算动态ROI
 
         Args:
             icon_box: 图标的位置 [x, y, w, h] 或 Rect对象
             offset_config: offset配置，包含x_offset, y_offset, width, height
+            image_shape: 截图尺寸（numpy 的 shape），用于把 ROI 裁进画面
 
         Returns:
-            [x, y, width, height] 格式的ROI
+            [x, y, width, height] 格式的ROI；区域完全在画面外时返回 None。
         """
         # 支持列表 [x, y, w, h] 或 Rect对象
         if isinstance(icon_box, (list, tuple)):
@@ -178,12 +183,51 @@ class TaskHudRecognizer:
         else:
             bx, by_ = icon_box.x, icon_box.y
 
-        return [
+        roi = [
             bx + offset_config["x_offset"],
             by_ + offset_config["y_offset"],
             offset_config["width"],
             offset_config["height"],
         ]
+        return self._clamp_roi(roi, image_shape)
+
+    @staticmethod
+    def _clamp_roi(roi: List[int], image_shape) -> Optional[List[int]]:
+        """把 ROI 裁剪到截图范围内；完全越界时返回 None。
+
+        任务图标滚到屏幕底部时，「接受按钮」等相对偏移区域会落到画面外，
+        MAA 的识别节点会因为 ROI 非法而启动失败、返回 None。这里提前裁掉，
+        只识别画面上真实存在的那部分。
+        """
+        x, y, w, h = (int(value) for value in roi[:4])
+        if image_shape is not None and len(image_shape) >= 2:
+            height, width = int(image_shape[0]), int(image_shape[1])
+            x2, y2 = min(width, x + w), min(height, y + h)
+            x, y = max(0, x), max(0, y)
+            w, h = x2 - x, y2 - y
+        if w <= 0 or h <= 0:
+            return None
+        return [x, y, w, h]
+
+    def _recognize(self, context: Context, entry: str, screenshot, roi, override=None):
+        """执行一次识别，ROI 不可用或识别没启动起来时返回 None。
+
+        ``run_recognition`` 只在识别流程未能启动时返回 None（节点 disabled、
+        图片为空、ROI 非法等），调用方必须容忍这种情况，否则整轮月度循环会被
+        一次越界识别打断。
+        """
+        if screenshot is None or roi is None:
+            return None
+        payload = {"roi": list(roi)}
+        if override:
+            payload.update(override)
+        try:
+            return context.run_recognition(
+                entry, screenshot, pipeline_override={entry: payload}
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"{entry} 识别异常：{exc}")
+            return None
 
     def scan_task_icon(
         self, context: Context, screenshot, template_path: str
@@ -198,17 +242,23 @@ class TaskHudRecognizer:
         Returns:
             找到则返回图标box，否则返回None
         """
-        reco_detail = context.run_recognition(
-            "Hud_TaskIconMatch",
-            screenshot,
-            pipeline_override={
-                "Hud_TaskIconMatch": {
-                    "template": template_path,
-                }
-            },
-        )
+        if screenshot is None:
+            return None
+        try:
+            reco_detail = context.run_recognition(
+                "Hud_TaskIconMatch",
+                screenshot,
+                pipeline_override={
+                    "Hud_TaskIconMatch": {
+                        "template": template_path,
+                    }
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"任务图标匹配异常（{template_path}）：{exc}")
+            return None
 
-        if reco_detail.hit and reco_detail.best_result:
+        if reco_detail and reco_detail.hit and reco_detail.best_result:
             return reco_detail.best_result.box
         return None
 
@@ -264,138 +314,173 @@ class TaskHudRecognizer:
             HudTaskInfo对象
         """
         task_info = HudTaskInfo(task_type=task_type, icon_box=icon_box)
+        image_shape = getattr(screenshot, "shape", None)
 
         # 识别任务名称
-        roi = self._calc_dynamic_roi(icon_box, self.TASK_VALUE_OFFSETS["task_name"])
-        reco = context.run_recognition(
-            "Hud_TaskNameOcr",
-            screenshot,
-            pipeline_override={"Hud_TaskNameOcr": {"roi": roi}},
+        roi = self._calc_dynamic_roi(
+            icon_box, self.TASK_VALUE_OFFSETS["task_name"], image_shape
         )
-        if reco.hit and reco.best_result:
+        reco = self._recognize(context, "Hud_TaskNameOcr", screenshot, roi)
+        if reco and reco.hit and reco.best_result:
             task_info.task_name = reco.best_result.text.strip()
 
         # 识别敌人等级
-        roi = self._calc_dynamic_roi(icon_box, self.TASK_VALUE_OFFSETS["task_level"])
-        reco = context.run_recognition(
-            "Hud_TaskLevelOcr",
-            screenshot,
-            pipeline_override={
-                "Hud_TaskLevelOcr": {
-                    "roi": roi,
-                }
-            },
+        roi = self._calc_dynamic_roi(
+            icon_box, self.TASK_VALUE_OFFSETS["task_level"], image_shape
         )
-        if reco.hit and reco.best_result:
+        reco = self._recognize(context, "Hud_TaskLevelOcr", screenshot, roi)
+        if reco and reco.hit and reco.best_result:
             task_info.task_level = reco.best_result.text.strip()
 
         # 识别任务描述
         roi = self._calc_dynamic_roi(
-            icon_box, self.TASK_VALUE_OFFSETS["task_description"]
+            icon_box, self.TASK_VALUE_OFFSETS["task_description"], image_shape
         )
-        reco = context.run_recognition(
-            "Hud_TaskDescOcr",
-            screenshot,
-            pipeline_override={"Hud_TaskDescOcr": {"roi": roi}},
-        )
-        if reco.hit and reco.all_results:
+        reco = self._recognize(context, "Hud_TaskDescOcr", screenshot, roi)
+        if reco and reco.hit and reco.all_results:
             # 合并多行描述
             texts = [r.text.strip() for r in reco.all_results]
             task_info.task_description = "".join(texts)
 
-        # 识别接受按钮位置
-        roi = self._calc_dynamic_roi(icon_box, self.TASK_VALUE_OFFSETS["accept_button"])
-        reco = context.run_recognition(
-            "Hud_AcceptButtonOcr",
-            screenshot,
-            pipeline_override={
-                "Hud_AcceptButtonOcr": {
-                    "roi": roi,
-                }
-            },
+        # 识别接受按钮位置（图标靠近屏幕底部时该区域可能完全在画面外）
+        roi = self._calc_dynamic_roi(
+            icon_box, self.TASK_VALUE_OFFSETS["accept_button"], image_shape
         )
-        if reco.hit and reco.best_result:
+        reco = self._recognize(context, "Hud_AcceptButtonOcr", screenshot, roi)
+        if reco and reco.hit and reco.best_result:
             task_info.accept_button_box = reco.best_result.box
             task_info.action_text = reco.best_result.text.strip()
 
         return task_info
 
-    def recognize_and_get_best_task(
-        self, context: Context, screenshot, max_level: int = None
-    ) -> Optional[HudTaskInfo]:
-        """识别所有任务，返回符合筛选条件的最佳任务
+    def evaluate_task(
+        self,
+        task: HudTaskInfo,
+        *,
+        min_level: int = 0,
+        max_level: int = 120,
+        blacklist: Optional[set] = None,
+        city: str = "",
+    ) -> Tuple[bool, str]:
+        """判断单条任务是否可接，返回 (可接?, 原因)。
 
-        Args:
-            context: MAA上下文
-            screenshot: 截图
-            max_level: 最大敌人等级阈值（低于此值才考虑）
-
-        Returns:
-            符合条件且评分最高的任务，或None
+        网页任务列表、接取逻辑共用同一套规则：类型/非战斗/黑名单/等级区间。
         """
-        # 1. 扫描所有任务图标
-        task_list = self.recognize_tasks(context, screenshot)
-        if not task_list:
+        if not task.task_name:
+            return False, "未识别到任务名"
+        if task.task_type in self.TASK_TYPE_BLACKLIST:
+            return False, f"类型排除（{task.task_type}）"
+        matched_keyword = self.non_combat_keyword(task)
+        if matched_keyword is not None:
+            return False, f"非战斗任务（{matched_keyword}）"
+        names = (
+            set(blacklist)
+            if blacklist is not None
+            else set(task_rules.effective_blacklist(city))
+        )
+        if task.task_name in names:
+            return False, "黑名单"
+        level = self._parse_level(task.task_level)
+        if level < int(min_level or 0):
+            return False, f"低于最低等级 {int(min_level)}"
+        if max_level and level > int(max_level):
+            return False, f"高于最高等级 {int(max_level)}"
+        return True, "可接取"
+
+    def scan_pool(
+        self,
+        context: Context,
+        screenshot,
+        *,
+        min_level: int = 0,
+        max_level: int = 120,
+        city: str = "",
+        blacklist: Optional[set] = None,
+    ) -> Tuple[List[dict], List[HudTaskInfo]]:
+        """扫描当前任务板，返回 (任务列表快照, 可接任务列表)。
+
+        快照给网页「任务接取」面板展示，带每条任务的可接状态和原因。
+        """
+        tasks = self.recognize_tasks(context, screenshot)
+        names = (
+            set(blacklist)
+            if blacklist is not None
+            else set(task_rules.effective_blacklist(city))
+        )
+        items: List[dict] = []
+        eligible: List[HudTaskInfo] = []
+        for task in tasks:
+            ok, reason = self.evaluate_task(
+                task,
+                min_level=min_level,
+                max_level=max_level,
+                blacklist=names,
+                city=city,
+            )
+            items.append(
+                {
+                    "name": task.task_name,
+                    "type": task.task_type,
+                    "level": task.task_level,
+                    "description": task.task_description,
+                    "eligible": ok,
+                    "reason": reason,
+                }
+            )
+            if ok:
+                eligible.append(task)
+        logger.debug(
+            f"任务板扫描：{len(tasks)} 条，可接 {len(eligible)} 条"
+            f"（城市={city or '未知'}，等级 {min_level}-{max_level}，"
+            f"黑名单 {len(names)} 个）"
+        )
+        return items, eligible
+
+    def pick_best(self, tasks: List[HudTaskInfo]) -> Optional[HudTaskInfo]:
+        """从可接任务里挑等级最高的一条（同等级取识别顺序靠前的）。"""
+        if not tasks:
+            return None
+        return max(tasks, key=lambda item: self._parse_level(item.task_level))
+
+    def recognize_and_get_best_task(
+        self,
+        context: Context,
+        screenshot,
+        max_level: int = None,
+        min_level: int = 0,
+        city: str = "",
+        blacklist: Optional[set] = None,
+    ) -> Optional[HudTaskInfo]:
+        """识别任务板，返回等级最高的可接任务。
+
+        ``max_level`` / ``min_level`` / ``city`` / ``blacklist`` 由调用方按
+        城市规则传入；不传时使用 task_accept_rules.json 里该城市的规则。
+        """
+        items, eligible = self.scan_pool(
+            context,
+            screenshot,
+            min_level=min_level,
+            max_level=(120 if max_level is None else max_level),
+            city=city,
+            blacklist=blacklist,
+        )
+        if not items:
             logger.info("未找到任何任务图标")
             return None
-
-        # 3. 记录所有任务信息（调试用）
-        for task in task_list:
-            level = self._parse_level(task.task_level)
-            logger.debug(
-                f"任务: {task.task_name} | {task.task_type} | {level}级 | {task.task_description}"
+        if not eligible:
+            logger.info(
+                f"任务板 {len(items)} 条均不符合条件（城市="
+                f"{city or '未知'}，等级 {min_level}-{max_level}）"
             )
-
-        # 4. 筛选任务（只按等级筛选）
-        filtered = self._filter_tasks(task_list, max_level)
-        if not filtered:
             return None
 
-        # 5. 返回等级最高的符合条件的任务
-        best = max(filtered, key=lambda t: self._parse_level(t.task_level))
+        best = self.pick_best(eligible)
         level = self._parse_level(best.task_level)
-        logger.info(f"选择任务: {best.task_name} | {best.task_type} | {level}级 | {best.task_description}")
+        logger.info(
+            f"选择任务: {best.task_name} | {best.task_type} | {level}级 | "
+            f"{best.task_description}"
+        )
         return best
-
-    def _filter_tasks(
-        self, task_list: List[HudTaskInfo], max_level: int
-    ) -> List[HudTaskInfo]:
-        """根据等级阈值和黑名单筛选任务"""
-        filtered = []
-        for task in task_list:
-            # 检查任务名称是否为空
-            if not task.task_name:
-                logger.debug(f"任务名称为空，跳过")
-                continue
-
-            # 检查任务类型黑名单（硬编码规则）
-            if task.task_type in self.TASK_TYPE_BLACKLIST:
-                logger.debug(f"任务类型 {task.task_type} 在黑名单中，跳过")
-                continue
-
-            matched_keyword = self.non_combat_keyword(task)
-            if matched_keyword is not None:
-                logger.debug(
-                    f"任务 {task.task_name} 描述含非战斗关键词 "
-                    f"{matched_keyword}，跳过"
-                )
-                continue
-
-            # 检查任务名称黑名单（从文件加载）
-            if self.blacklist.is_in_blacklist(task.task_name):
-                logger.debug(f"任务 {task.task_name} 在黑名单中，跳过")
-                continue
-
-            # 解析等级
-            level = self._parse_level(task.task_level)
-            if max_level and level > max_level:
-                logger.info(
-                    f"任务 {task.task_name} 等级 {level} 超过阈值 {max_level}，跳过"
-                )
-                continue
-
-            filtered.append(task)
-        return filtered
 
     def _parse_level(self, level_str: str) -> int:
         """从等级字符串中提取数字"""

@@ -12,7 +12,7 @@ const state = {
   devices: [], selectedTask: 0, activeTab: "home", prefs: {}, prefsLoaded: false,
   combos: [], comboModules: [], comboSelections: {}, comboIndex: -1, comboRunning: null,
   comboOpenSteps: new Set(),
-  selfheal: { items: [], detail: null, selected: "", stats: {} },
+  selfheal: { items: [], detail: null, selected: "", stats: {}, repair: {} },
 };
 const timers = {};
 let selectionTimer = null;
@@ -93,6 +93,7 @@ function switchTab(name) {
   clearInterval(timers.logs);
   clearInterval(timers.combos);
   clearInterval(timers.selfheal);
+  clearInterval(timers.tprec);
   if (name === "shot") { refreshShot(); timers.shot = setInterval(() => { if ($("shotAuto").checked) refreshShot(); }, 2000); }
   if (name === "logs") { loadLogs(); timers.logs = setInterval(() => { if ($("logAuto").checked) loadLogs(); }, 1500); }
   if (name === "tasks") { loadTasks(); loadTaskpack(); }
@@ -110,7 +111,10 @@ function switchTab(name) {
   }
   if (name === "records") loadRecords();
   if (name === "mercs") { loadMercRules(); loadMercRecords(); }
-  if (name === "tprec") loadTaskRecords();
+  if (name === "tprec") {
+    loadTaskRecords();
+    timers.tprec = setInterval(() => { if (state.activeTab === "tprec") loadTaskRecords(true); }, 5000);
+  }
   if (name === "notify") loadNotify();
 }
 
@@ -289,6 +293,16 @@ function renderTaskList() {
     : '<div class="empty">没有任务</div>';
 }
 
+function baseSelectionValue(name) {
+  const base = (state.prefs.selections || {})["Auto_YearlyTask"] || {};
+  const value = base[name];
+  if (Array.isArray(value)) return value[0] || "";
+  if (value && typeof value === "object") {
+    return Object.values(value).filter((item) => String(item || "").trim()).join(" / ");
+  }
+  return value || "";
+}
+
 function selectTask(index) {
   clearTimeout(selectionTimer);
   state.selectedTask = index;
@@ -298,6 +312,7 @@ function selectTask(index) {
   $("taskTitle").textContent = task.name;
   $("taskDoc").textContent = (task.doc || []).join("\n") || task.description || "";
   $("taskOptions").innerHTML = "";
+  const savedSelection = (state.prefs.selections || {})[task.entry] || {};
   task.options.forEach((option) => {
     const field = document.createElement("fieldset");
     const legend = document.createElement("legend");
@@ -307,7 +322,8 @@ function selectTask(index) {
     if (option.description) {
       const hint = document.createElement("div");
       hint.className = "hint";
-      hint.textContent = option.description;
+      hint.textContent = option.description +
+        (option.inheritBase ? "（未单独选择时跟随月度循环的基础配置）" : "");
       field.appendChild(hint);
     }
 
@@ -319,6 +335,12 @@ function selectTask(index) {
       select.id = `opt-${index}-${option.name}`;
       select.dataset.option = option.name;
       select.dataset.kind = option.type;
+      if (option.inheritBase) {
+        const inherit = document.createElement("option");
+        inherit.value = "跟随月度循环";
+        inherit.textContent = `跟随月度循环（当前：${baseSelectionValue(option.name) || "默认"}）`;
+        select.appendChild(inherit);
+      }
       option.cases.forEach((c) => {
         const opt = document.createElement("option");
         opt.value = c.name;
@@ -326,7 +348,11 @@ function selectTask(index) {
         select.appendChild(opt);
       });
       const dflt = Array.isArray(option.default_case) ? option.default_case[0] : option.default_case;
-      if (dflt) select.value = dflt;
+      if (option.inheritBase && savedSelection[option.name] == null) {
+        select.value = "跟随月度循环";
+      } else if (dflt) {
+        select.value = dflt;
+      }
       wrap.appendChild(select);
     } else if (option.type === "checkbox") {
       const defaults = Array.isArray(option.default_case) ? option.default_case : [option.default_case].filter(Boolean);
@@ -354,7 +380,12 @@ function selectTask(index) {
         title.textContent = item.name + (item.description ? `（${item.description}）` : "");
         const input = document.createElement("input");
         input.type = "text";
-        input.value = item.default || "";
+        if (option.inheritBase) {
+          input.value = "";
+          input.placeholder = `跟随月度循环（当前：${baseSelectionValue(option.name) || "默认"}）`;
+        } else {
+          input.value = item.default || "";
+        }
         input.dataset.option = option.name;
         input.dataset.kind = "input";
         input.dataset.input = item.name;
@@ -628,24 +659,135 @@ async function saveChildSpeed() {
 
 /* ------------------------------------------------------------ 佣兵记录 */
 
+state.mercs = { combos: [], attributes: [], grades: [], loaded: false };
+
+async function loadMercCombos() {
+  if (state.mercs.loaded) return;
+  try {
+    const data = await api("/api/mercenary-combos");
+    state.mercs.combos = data.combos || [];
+    state.mercs.attributes = data.attributes || ["力量", "体质", "技巧", "感知", "敏捷", "意志"];
+    state.mercs.grades = data.grades || ["SS", "S", "A", "B", "C", "D", "E"];
+    renderMercCombos();
+    renderMercAttrs();
+    state.mercs.loaded = true;
+  } catch (error) {
+    $("mercCombos").textContent = "读取入队组合失败：" + error.message;
+  }
+}
+
+function renderMercCombos() {
+  const box = $("mercCombos");
+  if (!state.mercs.combos.length) {
+    box.innerHTML = '<span class="hint">「好娃提醒」里还没有组合，先到提醒页配一个</span>';
+    return;
+  }
+  box.innerHTML = state.mercs.combos
+    .map((combo) => {
+      const detail = combo.description || (combo.features || []).join(" + ");
+      return `<label class="row" style="gap:8px;align-items:flex-start">
+        <input type="checkbox" data-combo="${esc(combo.name)}">
+        <span><strong>${esc(combo.name)}</strong> <span class="hint">${esc(detail)}</span></span>
+      </label>`;
+    })
+    .join("");
+}
+
+function renderMercAttrs() {
+  $("mercAttrs").innerHTML = state.mercs.attributes
+    .map(
+      (attr) => `<label class="field">${esc(attr)}
+        <select data-attr="${esc(attr)}">
+          <option value="">不限</option>
+          ${state.mercs.grades.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
+        </select>
+      </label>`
+    )
+    .join("");
+}
+
+function applyMercRulesToForm(rules) {
+  const picked = new Set(rules.combos || []);
+  document.querySelectorAll("#mercCombos input[data-combo]").forEach((box) => {
+    box.checked = picked.has(box.dataset.combo);
+  });
+  $("mercFeatures").value = (rules.features || []).join("、");
+  const potential = rules.potential_min || {};
+  document.querySelectorAll("#mercAttrs select[data-attr]").forEach((sel) => {
+    sel.value = potential[sel.dataset.attr] || "";
+  });
+}
+
+function collectMercRules() {
+  const combos = Array.from(document.querySelectorAll("#mercCombos input[data-combo]:checked")).map(
+    (box) => box.dataset.combo
+  );
+  const features = $("mercFeatures")
+    .value.split(/[、,，;；\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const potential = {};
+  document.querySelectorAll("#mercAttrs select[data-attr]").forEach((sel) => {
+    if (sel.value) potential[sel.dataset.attr] = sel.value;
+  });
+  return { combos, features, potential_min: potential };
+}
+
 async function loadMercRules() {
   try {
+    await loadMercCombos();
     const rules = await api("/api/mercenary-rules");
     $("mercMode").value = rules.mode || "whitelist";
+    $("mercTitle").value = rules.title_min || "无";
+    $("mercOrange").value = rules.min_orange || 0;
+    $("mercMatch").value = rules.match || "all";
     $("mercNames").value = (rules.names || []).join("\n");
-    $("mercHint").textContent =
-      `当前：${rules.mode === "blacklist" ? "黑名单" : "白名单"}，${(rules.names || []).length} 个关键字` +
-      ((rules.names || []).length ? "" : "（名单为空，智能模式会全部拒绝）");
+    applyMercRulesToForm(rules);
+    $("mercHint").textContent = mercRuleSummary(rules);
   } catch (error) {
     $("mercHint").textContent = "读取失败：" + error.message;
   }
 }
 
+function mercRuleSummary(rules) {
+  const mode = rules.mode === "blacklist" ? "黑名单" : "白名单";
+  const names = (rules.names || []).length;
+  const parts = [`${mode} ${names} 个名字关键字`];
+  const orange = Number(rules.min_orange || 0);
+  if (orange > 0) parts.push(`橙色特性≥${orange}`);
+  const title = rules.title_min || "无";
+  if (title !== "无") parts.push(`爵位≥${title}`);
+  const combos = (rules.combos || []).length;
+  if (combos > 0) parts.push(`入队组合×${combos}`);
+  const features = (rules.features || []).length;
+  if (features > 0) parts.push(`必需特性×${features}`);
+  const attrs = Object.keys(rules.potential_min || {}).length;
+  if (attrs > 0) parts.push(`属性门槛×${attrs}`);
+  const join = (rules.match || "all") === "any" ? "任一满足" : "全部满足";
+  const empty =
+    mode === "白名单" && names === 0 && orange <= 0 && title === "无" &&
+    combos === 0 && features === 0 && attrs === 0
+      ? "（没有可用的接受条件，智能模式会全部拒绝）"
+      : "";
+  return `${empty}当前：${parts.join(" / ")}，${join}`;
+}
+
 async function saveMercRules() {
   try {
     const names = $("mercNames").value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    const data = await post("/api/mercenary-rules/save", { mode: $("mercMode").value, names });
-    $("mercHint").textContent = `已保存：${data.rules.names.length} 个关键字`;
+    const extra = collectMercRules();
+    const data = await post("/api/mercenary-rules/save", {
+      mode: $("mercMode").value,
+      names,
+      match: $("mercMatch").value,
+      title_min: $("mercTitle").value,
+      min_orange: Number($("mercOrange").value || 0),
+      combos: extra.combos,
+      features: extra.features,
+      potential_min: extra.potential_min,
+      read_detail: "auto",
+    });
+    $("mercHint").textContent = mercRuleSummary(data.rules);
     banner("ok", ["佣兵规则已保存"]);
   } catch (error) {
     banner("err", ["保存失败：" + error.message]);
@@ -664,75 +806,265 @@ async function loadMercRecords() {
           <td>${esc(r["佣兵名字"])}</td>
           <td class="${r["结果"] === "接受" ? "ok" : "bad"}">${esc(r["结果"])}</td>
           <td>${esc(r["匹配规则"])}</td>
+          <td>${esc(r["爵位"])}</td>
+          <td>${esc(r["橙色特性"])}</td>
+          <td>${esc(r["属性"])}</td>
+          <td title="${esc(r["特性"])}">${esc(r["特性"])}</td>
           <td>${esc(r["备注"])}</td>
         </tr>`).join("")
-      : '<tr><td colspan="7" class="empty">还没有佣兵记录</td></tr>';
+      : '<tr><td colspan="11" class="empty">还没有佣兵记录</td></tr>';
   } catch (error) {
     banner("err", ["读取佣兵记录失败：" + error.message]);
   }
 }
 
-/* ------------------------------------------------------------ 刷取任务记录 */
+/* ------------------------------------------------------------ 任务接取（城市规则 / 黑名单 / 任务板 / 记录） */
 
-async function loadTaskRecords() {
+state.tprec = {
+  city: "",
+  touched: false,
+  rules: { defaults: {}, cities: {} },
+  global: [],
+  pool: {},
+  records: {},
+  cities: [],
+  updated: "",
+};
+
+async function loadTaskRecords(silent) {
   try {
-    const data = await api("/api/task-records");
-    const cities = data.cities || {};
-    const names = Object.keys(cities).sort();
-    if (!names.length) {
-      $("tprecBody").innerHTML = '<div class="card"><div class="empty">还没有任务记录</div></div>';
-    } else {
-      $("tprecBody").innerHTML = names.map((city) => {
-        const tasks = cities[city] || {};
-        const rows = Object.keys(tasks).sort().map((name) => {
-          const t = tasks[name] || {};
-          const avg = typeof t.rounds_avg === "number" ? t.rounds_avg.toFixed(1) : "-";
-          return `<tr>
-            <td>${esc(name)}</td>
-            <td>${esc(t.type || "")}</td>
-            <td>${esc(t.level || "")}</td>
-            <td>${t.count || 0}</td>
-            <td>${avg}</td>
-            <td>${t.last_rounds === undefined ? "-" : t.last_rounds}</td>
-            <td class="mono">${esc(t.last || "")}</td>
-            <td><button class="btn danger" data-black="${esc(name)}">拉黑</button></td>
-          </tr>`;
-        }).join("");
-        return `<div class="card" style="margin-bottom:12px">
-          <div class="row"><strong>${esc(city)}</strong><span class="hint">${Object.keys(tasks).length} 个任务</span></div>
-          <table style="margin-top:8px">
-            <thead><tr><th>任务</th><th>类型</th><th>等级</th><th>次数</th><th>平均回合</th><th>最近回合</th><th>最近时间</th><th></th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-      }).join("");
+    const [rulesData, recordsData] = await Promise.all([
+      api("/api/task-rules"),
+      api("/api/task-records"),
+    ]);
+    state.tprec.rules = rulesData.rules || { defaults: {}, cities: {} };
+    state.tprec.global = rulesData.global_blacklist || [];
+    state.tprec.pool = rulesData.pool || {};
+    state.tprec.cities = rulesData.cities || [];
+    state.tprec.records = recordsData.cities || {};
+    state.tprec.updated = recordsData.updated || "";
+
+    const select = $("tprecCity");
+    const current = state.tprec.city;
+    const cities = Array.from(new Set([
+      ...state.tprec.cities,
+      ...Object.keys(state.tprec.records),
+      state.tprec.pool.city,
+    ].filter(Boolean))).sort();
+    select.innerHTML = '<option value="">全部城市</option>' +
+      cities.map((city) => `<option value="${esc(city)}">${esc(city)}</option>`).join("");
+    if (current && cities.includes(current)) {
+      select.value = current;
+    } else if (current) {
+      state.tprec.city = "";
+      select.value = "";
+    } else if (!state.tprec.touched && state.tprec.pool.city && cities.includes(state.tprec.pool.city)) {
+      // 首次打开默认选中最近任务板的城市，直接看到该城市的规则与判定
+      state.tprec.city = state.tprec.pool.city;
+      select.value = state.tprec.city;
     }
 
-    const blacklist = data.blacklist || [];
-    $("tprecBlackHint").textContent = blacklist.length ? `共 ${blacklist.length} 个任务不再接取` : "为空";
-    $("tprecBlacklist").innerHTML = blacklist.length
-      ? blacklist.map((name) => `<span style="display:inline-flex;align-items:center;gap:6px;margin:0 12px 8px 0">${esc(name)}<button class="btn" data-unblack="${esc(name)}">解除</button></span>`).join("")
-      : '<span class="hint">还没有拉黑任何任务</span>';
+    renderTprecRule();
+    renderTprecPool();
+    renderTprecBlacklist();
+    renderTprecRecords();
+    $("tprecUpdated").textContent = state.tprec.updated ? `记录更新：${state.tprec.updated}` : "";
   } catch (error) {
-    banner("err", ["读取任务记录失败：" + error.message]);
+    if (!silent) banner("err", ["读取任务规则失败：" + error.message]);
+  }
+}
+
+function tprecCity() {
+  return $("tprecCity").value || "";
+}
+
+function tprecCityRule(city) {
+  return (state.tprec.rules.cities || {})[city] || {};
+}
+
+function tprecRule(city) {
+  const target = city === undefined ? tprecCity() : city;
+  const defaults = state.tprec.rules.defaults || {};
+  const entry = tprecCityRule(target);
+  return {
+    min: entry.min_level !== undefined ? entry.min_level : (defaults.min_level ?? 0),
+    max: entry.max_level !== undefined ? entry.max_level : (defaults.max_level ?? 120),
+    explicit: Object.keys(entry).length > 0,
+  };
+}
+
+function tprecEffectiveBlacklist(city) {
+  const target = city === undefined ? tprecCity() : city;
+  const names = new Set(state.tprec.global || []);
+  (tprecCityRule(target).blacklist || []).forEach((name) => names.add(name));
+  return names;
+}
+
+function tprecEvaluate(item, city) {
+  const target = city === undefined ? tprecCity() : city;
+  const rule = tprecRule(target);
+  const names = tprecEffectiveBlacklist(target);
+  const level = parseInt((String(item.level || "").match(/\d+/) || ["0"])[0], 10) || 0;
+  if (!item.name) return { ok: false, reason: "未识别到任务名" };
+  if (names.has(item.name)) return { ok: false, reason: "黑名单" };
+  if (level < rule.min) return { ok: false, reason: `低于最低等级 ${rule.min}` };
+  if (rule.max && level > rule.max) return { ok: false, reason: `高于最高等级 ${rule.max}` };
+  if (item.reason && (item.reason.includes("类型排除") || item.reason.includes("非战斗"))) {
+    return { ok: false, reason: item.reason };
+  }
+  return { ok: true, reason: "可接取" };
+}
+
+function renderTprecRule() {
+  const city = tprecCity();
+  const rule = tprecRule();
+  $("tprecMin").value = rule.min;
+  $("tprecMax").value = rule.max;
+  $("tprecRuleHint").textContent = city
+    ? (rule.explicit ? `${city}：已单独配置` : `${city}：跟随默认，保存后单独生效`)
+    : "正在编辑默认规则（没有单独配置的城市都使用它）";
+  $("tprecCityBlackWrap").style.display = city ? "" : "none";
+}
+
+function renderTprecPool() {
+  const pool = state.tprec.pool || {};
+  const poolCity = pool.city || "";
+  const tasks = pool.tasks || [];
+  const wanted = tprecCity();
+  $("tprecPoolHint").textContent = tasks.length
+    ? `${poolCity || "未知城市"} · ${pool.time || ""} · ${tasks.length} 条` +
+      (wanted ? "" : `（选择「${poolCity}」可套用城市规则判定）`)
+    : "还没有扫描到任务板（跑一次任务接取后会出现）";
+
+  const rows = tasks
+    .filter((item) => !wanted || poolCity === wanted)
+    .map((item) => {
+      const verdict = wanted ? tprecEvaluate(item, wanted) : null;
+      const badge = verdict
+        ? (verdict.ok
+          ? '<span class="chip ok">可接</span>'
+          : `<span class="chip bad" title="${esc(verdict.reason)}">跳过</span>`)
+        : '<span class="hint">选择城市后判定</span>';
+      const blocked = wanted
+        ? tprecEffectiveBlacklist(wanted).has(item.name)
+        : (state.tprec.global || []).includes(item.name);
+      return `<tr>
+        <td>${esc(item.name)}</td>
+        <td>${esc(item.type)}</td>
+        <td>${esc(item.level)}</td>
+        <td class="hint">${esc(item.description || "")}</td>
+        <td>${badge}${verdict ? `<div class="hint">${esc(verdict.reason)}</div>` : ""}</td>
+        <td>${
+          item.name && !blocked
+            ? `<button class="btn danger" data-black="${esc(item.name)}">${wanted ? "拉黑" : "拉黑（全局）"}</button>`
+            : (item.name ? '<span class="hint">已在黑名单</span>' : "")
+        }</td>
+      </tr>`;
+    })
+    .join("");
+
+  $("tprecPool").innerHTML = rows ||
+    `<tr><td colspan="6" class="hint">${wanted ? `当前选择「${esc(wanted)}」，最近任务板来自「${esc(poolCity || "未知")}」` : "暂无任务板数据"}</td></tr>`;
+}
+
+function renderTprecBlacklist() {
+  const city = tprecCity();
+  const globalNames = state.tprec.global || [];
+  const cityNames = city ? (tprecCityRule(city).blacklist || []) : [];
+
+  $("tprecBlackHint").textContent = city
+    ? `全局 ${globalNames.length} 个 + ${city} ${cityNames.length} 个`
+    : `全局 ${globalNames.length} 个；选择城市后可单独配置该城市的黑名单`;
+
+  $("tprecGlobalBlack").innerHTML = globalNames.length
+    ? globalNames.map((name) => `<span class="chip" style="display:inline-flex;align-items:center;gap:6px;margin:0 10px 8px 0">${esc(name)}<button class="btn" data-unblack-global="${esc(name)}">解除</button></span>`).join("")
+    : '<span class="hint">暂无全局黑名单</span>';
+
+  $("tprecCityBlack").innerHTML = city
+    ? (cityNames.length
+      ? cityNames.map((name) => `<span class="chip" style="display:inline-flex;align-items:center;gap:6px;margin:0 10px 8px 0">${esc(name)}<button class="btn" data-unblack-city="${esc(name)}">解除</button></span>`).join("")
+      : '<span class="hint">该城市没有单独黑名单，取消勾选请直接编辑右侧列表</span>')
+    : "";
+}
+
+function renderTprecRecords() {
+  const all = state.tprec.records || {};
+  const wanted = tprecCity();
+  const names = Object.keys(all).filter((city) => !wanted || city === wanted).sort();
+  if (!names.length) {
+    $("tprecBody").innerHTML = '<div class="empty">还没有任务记录</div>';
+    return;
+  }
+  $("tprecBody").innerHTML = names.map((city) => {
+    const tasks = all[city] || {};
+    const rows = Object.keys(tasks).sort().map((name) => {
+      const t = tasks[name] || {};
+      const avg = typeof t.rounds_avg === "number" ? t.rounds_avg.toFixed(1) : "-";
+      return `<tr>
+        <td>${esc(name)}</td>
+        <td>${esc(t.type || "")}</td>
+        <td>${esc(t.level || "")}</td>
+        <td>${t.count || 0}</td>
+        <td>${avg}</td>
+        <td>${t.last_rounds === undefined ? "-" : t.last_rounds}</td>
+        <td class="mono">${esc(t.last || "")}</td>
+        <td><button class="btn danger" data-black="${esc(name)}">拉黑</button></td>
+      </tr>`;
+    }).join("");
+    return `<div style="margin-top:12px">
+      <div class="row"><strong>${esc(city)}</strong><span class="hint">${Object.keys(tasks).length} 个任务</span></div>
+      <table style="margin-top:8px">
+        <thead><tr><th>任务</th><th>类型</th><th>等级</th><th>次数</th><th>平均回合</th><th>最近回合</th><th>最近时间</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join("");
+}
+
+async function saveTprecRule() {
+  const city = tprecCity();
+  const min = Number($("tprecMin").value || 0);
+  const max = Number($("tprecMax").value || 120);
+  try {
+    await post("/api/task-rules/save", { city, min_level: min, max_level: max });
+    banner("ok", [city ? `已保存 ${city} 的接取等级 ${min}~${max}` : `已保存默认接取等级 ${min}~${max}`]);
+    await loadTaskRecords();
+  } catch (error) {
+    banner("err", ["保存规则失败：" + error.message]);
+  }
+}
+
+async function addTprecBlacklist() {
+  const name = ($("tprecBlackInput").value || "").trim();
+  if (!name) return;
+  const city = tprecCity();
+  try {
+    await post("/api/task-rules/blacklist", { city, task: name });
+    $("tprecBlackInput").value = "";
+    banner("ok", [city ? `已加入 ${city} 黑名单：${name}` : `已加入全局黑名单：${name}`]);
+    await loadTaskRecords();
+  } catch (error) {
+    banner("err", ["添加黑名单失败：" + error.message]);
   }
 }
 
 async function blacklistTask(name) {
+  const city = tprecCity();
   try {
-    await post("/api/task-records/blacklist", { task: name });
-    banner("ok", [`已拉黑：${name}`]);
-    loadTaskRecords();
+    await post("/api/task-rules/blacklist", { city, task: name });
+    banner("ok", [city ? `已加入 ${city} 黑名单：${name}` : `已加入全局黑名单：${name}`]);
+    await loadTaskRecords();
   } catch (error) {
     banner("err", ["拉黑失败：" + error.message]);
   }
 }
 
-async function unblacklistTask(name) {
+async function unblacklistTask(name, scope) {
+  const city = scope === "city" ? tprecCity() : "";
   try {
-    await post("/api/task-records/unblacklist", { task: name });
-    banner("ok", [`已解除：${name}`]);
-    loadTaskRecords();
+    await post("/api/task-rules/unblacklist", { city, task: name });
+    banner("ok", [city ? `已从 ${city} 黑名单移除：${name}` : `已从全局黑名单移除：${name}`]);
+    await loadTaskRecords();
   } catch (error) {
     banner("err", ["解除失败：" + error.message]);
   }
@@ -742,6 +1074,10 @@ async function unblacklistTask(name) {
 
 const SELFHEAL_SOURCE = { task: "任务", agent: "Agent", api: "接口", manual: "手动", combo: "组合", frontend: "页面" };
 const SELFHEAL_STATUS = { pending: "待判定", kept: "已保留", deleted: "已删除" };
+const REPAIR_LABELS = {
+  idle: "未处理", queued: "排队中", running: "AI 修复中", fixed: "已修复",
+  escalated: "需要你判断", stopped: "已停止", unavailable: "AI 不可用",
+};
 
 async function loadSelfheal(silent) {
   try {
@@ -749,8 +1085,12 @@ async function loadSelfheal(silent) {
     const data = await api("/api/selfheal?status=" + encodeURIComponent(filter));
     state.selfheal.items = data.items || [];
     state.selfheal.stats = data.stats || {};
+    state.selfheal.repair = data.repair || {};
     applySelfhealConfig(data.config || {});
+    applyRepairConfig(data.repair || {});
+    applyRepairVisibility(data.repair || {});
     renderSelfhealStats();
+    renderSelfhealRepairStatus();
     renderSelfhealList();
     const ids = state.selfheal.items.map((item) => item.id);
     if (!state.selfheal.selected && ids.length) {
@@ -759,17 +1099,58 @@ async function loadSelfheal(silent) {
       state.selfheal.selected = "";
       clearSelfhealDetail();
       if (ids.length) await selectSelfheal(ids[0]);
+    } else if (silent && state.selfheal.selected && state.selfheal.detail) {
+      const row = state.selfheal.items.find((item) => item.id === state.selfheal.selected);
+      if (row && row.repair_state !== state.selfheal.detail.repair_state) {
+        await selectSelfheal(row.id);
+      }
     }
   } catch (error) {
     if (!silent) banner("err", ["读取报错记录失败：" + error.message]);
   }
 }
 
+function applyRepairVisibility(repair) {
+  const enabled = repair && repair.enabled === true;
+  ["selfhealRepairHint", "btnSelfhealEscalation", "selfhealRepairSettings", "selfhealRepairPanel"].forEach((id) => {
+    const element = $(id);
+    if (element) element.classList.toggle("hidden", !enabled);
+  });
+}
+
+function renderSelfhealRepairStatus() {
+  const r = state.selfheal.repair || {};
+  if (r.enabled !== true) return;
+  const hint = $("selfhealRepairHint");
+  if (!hint) return;
+  if (r.running) {
+    const cur = r.current || {};
+    hint.textContent = `AI 修复中：${cur.title || cur.id || ""}（第 ${cur.attempt || 1} 次）`;
+    hint.className = "hint warn";
+  } else if (r.paused) {
+    hint.textContent = "AI 修复暂停：" + (r.pauseReason || "等一会儿");
+    hint.className = "hint warn";
+  } else if (r.bridge === false) {
+    hint.textContent = "AI 修复：DSH Bridge 未连接";
+    hint.className = "hint bad";
+  } else if (r.auto) {
+    hint.textContent = "AI 修复：自动开启";
+    hint.className = "hint ok";
+  } else {
+    hint.textContent = "AI 修复：自动关闭";
+    hint.className = "hint";
+  }
+  renderSelfhealRepairDetail();
+}
+
 function renderSelfhealStats() {
   const stats = state.selfheal.stats || {};
   $("selfhealHint").textContent =
     `待判定 ${stats.pending || 0} · 保留 ${stats.kept || 0} · 已删除 ${stats.deleted || 0}` +
-    (stats.mb != null ? ` · 占用 ${stats.mb} MB` : "");
+    (stats.mb != null ? ` · 占用 ${stats.mb} MB` : "") +
+    (state.selfheal.repair?.enabled === true && stats.repair_escalated
+      ? ` · 待判断 ${stats.repair_escalated}`
+      : "");
   $("selfhealHint").title = stats.dir ? "目录：" + stats.dir : "";
   $("selfhealCount").textContent = `${state.selfheal.items.length} 条`;
 }
@@ -784,6 +1165,9 @@ function renderSelfhealList() {
           ? `<img class="sh-thumb" src="${esc(item.image_url)}" alt="" loading="lazy">`
           : '<div class="sh-thumb sh-thumb-empty">无图</div>';
         const error = (item.error || "").split("\n")[0];
+        const repair = state.selfheal.repair?.enabled === true && item.repair_state && item.repair_state !== "idle"
+          ? `<span class="sh-badge ${esc(item.repair_state)}">${esc(REPAIR_LABELS[item.repair_state] || item.repair_state)}</span>`
+          : "";
         return `<div class="sh-item ${item.id === state.selfheal.selected ? "active" : ""}" data-id="${esc(item.id)}">
           ${thumb}
           <div class="sh-main">
@@ -791,6 +1175,7 @@ function renderSelfhealList() {
             <div class="sh-sub">${esc(item.created_at)} · ${esc(item.source_label || SELFHEAL_SOURCE[item.source] || item.source)}${item.note ? " · 有备注" : ""}</div>
             ${error ? `<div class="sh-error" title="${esc(error)}">${esc(error)}</div>` : ""}
             <span class="sh-badge ${esc(item.status)}">${esc(SELFHEAL_STATUS[item.status] || item.status)}</span>
+            ${repair}
           </div>
         </div>`;
       }).join("")
@@ -821,7 +1206,13 @@ function clearSelfhealDetail() {
   $("shNoImage").style.display = "none";
   $("shNote").value = "";
   $("shLogs").textContent = "—";
-  ["btnShKeep", "btnShPending", "btnShDelete", "btnShPurge", "btnShSaveNote"].forEach((key) => {
+  $("shRepairState").className = "sh-badge";
+  $("shRepairState").textContent = "未处理";
+  $("shRepairInfo").textContent = "发现新报错后 AI 会自动读取截图和日志";
+  $("shRepairSummary").style.display = "none";
+  $("shRepairSummary").textContent = "";
+  ["btnShKeep", "btnShPending", "btnShDelete", "btnShPurge", "btnShSaveNote",
+   "btnShRepair", "btnShRepairStop", "btnShRepairReset"].forEach((key) => {
     $(key).disabled = true;
   });
 }
@@ -858,12 +1249,43 @@ function renderSelfhealDetail(data) {
     $("shNoImage").style.display = "";
   }
 
-  $("shNote").value = data.note || "";
+  if (document.activeElement !== $("shNote")) $("shNote").value = data.note || "";
   $("shSaved").textContent = "";
   $("shLogs").textContent = data.log_text || "（没有日志）";
-  ["btnShKeep", "btnShPending", "btnShDelete", "btnShPurge", "btnShSaveNote"].forEach((key) => {
+  ["btnShKeep", "btnShPending", "btnShDelete", "btnShPurge", "btnShSaveNote",
+   "btnShRepair", "btnShRepairStop", "btnShRepairReset"].forEach((key) => {
     $(key).disabled = false;
   });
+  renderSelfhealRepairDetail();
+}
+
+function renderSelfhealRepairDetail() {
+  const data = state.selfheal.detail;
+  if (!data || !$("shRepairState")) return;
+  const repair = state.selfheal.repair || {};
+  if (repair.enabled !== true) {
+    $("selfhealRepairPanel")?.classList.add("hidden");
+    return;
+  }
+  $("selfhealRepairPanel")?.classList.remove("hidden");
+  const current = repair.current || {};
+  const stateName = data.repair_state || "idle";
+  const badge = $("shRepairState");
+  badge.className = "sh-badge " + stateName;
+  badge.textContent = REPAIR_LABELS[stateName] || stateName;
+  const bits = [];
+  if (data.repair_attempts) bits.push(`已尝试 ${data.repair_attempts} 次`);
+  if (current.id === data.id) bits.push(`正在${current.state === "running" ? "修复" : current.state}`);
+  if (data.repair_message) bits.push(data.repair_message);
+  if (data.repair_session) bits.push(`会话 ${data.repair_session}`);
+  $("shRepairInfo").textContent = bits.join(" · ") || "发现新报错后 AI 会自动读取截图和日志";
+  const summary = data.repair_summary || "";
+  $("shRepairSummary").textContent = summary;
+  $("shRepairSummary").style.display = summary ? "" : "none";
+  const busy = stateName === "running" || stateName === "queued";
+  $("btnShRepair").disabled = busy;
+  $("btnShRepairStop").disabled = !busy && current.id !== data.id;
+  $("btnShRepairReset").disabled = busy;
 }
 
 async function markSelfheal(status) {
@@ -951,6 +1373,69 @@ async function captureSelfheal() {
   }
 }
 
+function applyRepairConfig(config) {
+  if (!config) return;
+  $("selfhealRepairAuto").checked = config.auto !== false;
+  if (config.maxAttempts) $("shRepairAttempts").value = config.maxAttempts;
+  if (config.timeoutSeconds) $("shRepairTimeout").value = config.timeoutSeconds;
+}
+
+async function repairSelfheal() {
+  const detail = state.selfheal.detail;
+  if (!detail) { banner("err", ["先选择一条报错"]); return; }
+  if (state.selfheal.repair?.enabled !== true) {
+    banner("err", ["AI 修复已关闭，当前只保留报错记录"]);
+    return;
+  }
+  try {
+    const data = await post("/api/repair/start", { id: detail.id });
+    banner("ok", [data.message || "已加入 AI 修复队列"]);
+    await loadSelfheal(true);
+    await selectSelfheal(detail.id);
+  } catch (error) {
+    banner("err", ["启动修复失败：" + error.message]);
+  }
+}
+
+async function stopRepairSelfheal() {
+  try {
+    await post("/api/repair/stop", {});
+    banner("ok", ["已请求停止 AI 修复"]);
+    await loadSelfheal(true);
+    if (state.selfheal.detail) await selectSelfheal(state.selfheal.detail.id);
+  } catch (error) {
+    banner("err", ["停止失败：" + error.message]);
+  }
+}
+
+async function resetRepairSelfheal() {
+  const detail = state.selfheal.detail;
+  if (!detail) return;
+  try {
+    await post("/api/repair/reset", { id: detail.id });
+    banner("ok", ["已重置这条报错的修复状态"]);
+    await loadSelfheal(true);
+    await selectSelfheal(detail.id);
+  } catch (error) {
+    banner("err", ["重置失败：" + error.message]);
+  }
+}
+
+async function clearAllSelfheal() {
+  const stats = state.selfheal.stats || {};
+  if (!confirm(`一键清除全部报错截图？\n当前 ${stats.total || 0} 条记录、${stats.mb || 0} MB，含回收站，不能恢复。`)) return;
+  try {
+    const data = await post("/api/selfheal/clear", { confirm: true });
+    banner("ok", [`已清除 ${data.removed || 0} 条报错截图`]);
+    state.selfheal.selected = "";
+    state.selfheal.detail = null;
+    clearSelfhealDetail();
+    await loadSelfheal();
+  } catch (error) {
+    banner("err", ["清除失败：" + error.message]);
+  }
+}
+
 function applySelfhealConfig(config) {
   if ($("selfhealSettings").contains(document.activeElement)) return;
   $("selfhealAuto").checked = config.autoCapture !== false;
@@ -972,8 +1457,14 @@ async function saveSelfhealConfig() {
   };
   try {
     const data = await post("/api/selfheal/config", payload);
+    const repairData = await post("/api/repair/config", {
+      auto: $("selfhealRepairAuto").checked,
+      maxAttempts: Number($("shRepairAttempts").value) || 2,
+      timeoutSeconds: Number($("shRepairTimeout").value) || 600,
+    });
     applySelfhealConfig(data.config || {});
-    banner("ok", ["问题自纠设置已保存"]);
+    applyRepairConfig(repairData.config || {});
+    banner("ok", ["问题自纠与 AI 修复设置已保存"]);
     await loadSelfheal(true);
   } catch (error) {
     banner("err", ["保存设置失败：" + error.message]);
@@ -1013,14 +1504,35 @@ $("btnChildSpeedSave").addEventListener("click", saveChildSpeed);
 $("btnRecordReload").addEventListener("click", loadRecords);
 $("btnMercSave").addEventListener("click", saveMercRules);
 $("btnMercReload").addEventListener("click", loadMercRecords);
-$("btnTprecReload").addEventListener("click", loadTaskRecords);
+$("btnTprecReload").addEventListener("click", () => loadTaskRecords());
+$("tprecCity").addEventListener("change", () => {
+  state.tprec.city = $("tprecCity").value || "";
+  state.tprec.touched = true;
+  renderTprecRule();
+  renderTprecPool();
+  renderTprecBlacklist();
+  renderTprecRecords();
+});
+$("btnTprecSaveRule").addEventListener("click", saveTprecRule);
+$("btnTprecBlackAdd").addEventListener("click", addTprecBlacklist);
+$("tprecBlackInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") addTprecBlacklist();
+});
 $("tprecBody").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-black]");
   if (btn) blacklistTask(btn.dataset.black);
 });
-$("tprecBlacklist").addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-unblack]");
-  if (btn) unblacklistTask(btn.dataset.unblack);
+$("tprecPool").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-black]");
+  if (btn) blacklistTask(btn.dataset.black);
+});
+$("tprecGlobalBlack").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-unblack-global]");
+  if (btn) unblacklistTask(btn.dataset.unblackGlobal, "global");
+});
+$("tprecCityBlack").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-unblack-city]");
+  if (btn) unblacklistTask(btn.dataset.unblackCity, "city");
 });
 $("btnNotifySave").addEventListener("click", saveNotify);
 $("btnNotifyTest").addEventListener("click", testNotify);
@@ -1038,18 +1550,24 @@ $("selfhealFilter").addEventListener("change", () => {
 $("btnSelfhealReload").addEventListener("click", () => loadSelfheal());
 $("btnSelfhealCapture").addEventListener("click", captureSelfheal);
 $("btnSelfhealReport").addEventListener("click", () => window.open("/api/selfheal/report", "_blank"));
+$("btnSelfhealEscalation").addEventListener("click", () => window.open("/api/repair/escalation", "_blank"));
 $("btnSelfhealCleanup").addEventListener("click", cleanupSelfheal);
 $("btnSelfhealPurgeDeleted").addEventListener("click", purgeSelfhealDeleted);
+$("btnSelfhealClearAll").addEventListener("click", clearAllSelfheal);
 $("btnSelfhealSettings").addEventListener("click", () => {
   $("selfhealSettings").hidden = !$("selfhealSettings").hidden;
 });
 $("btnSelfhealSaveConfig").addEventListener("click", saveSelfhealConfig);
 $("selfhealAuto").addEventListener("change", saveSelfhealConfig);
+$("selfhealRepairAuto").addEventListener("change", saveSelfhealConfig);
 $("btnShKeep").addEventListener("click", () => markSelfheal("kept"));
 $("btnShPending").addEventListener("click", () => markSelfheal("pending"));
 $("btnShDelete").addEventListener("click", () => markSelfheal("deleted"));
 $("btnShPurge").addEventListener("click", purgeSelfheal);
 $("btnShSaveNote").addEventListener("click", saveSelfhealNote);
+$("btnShRepair").addEventListener("click", repairSelfheal);
+$("btnShRepairStop").addEventListener("click", stopRepairSelfheal);
+$("btnShRepairReset").addEventListener("click", resetRepairSelfheal);
 
 $("btnTaskpackCheck").addEventListener("click", () => runTaskpack("/api/taskpack/check"));
 $("btnTaskpackExport").addEventListener("click", () => {
@@ -1215,6 +1733,7 @@ function renderComboModuleOptions() {
 const RULE_WHEN_OPTIONS = [
   ["fail", "任务失败"],
   ["child_alert", "好娃提醒"],
+  ["pirate", "海盗事件"],
   ["offline", "设备离线"],
   ["loop_end", "每轮结束"],
 ];

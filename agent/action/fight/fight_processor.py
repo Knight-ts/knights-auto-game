@@ -2,6 +2,8 @@ from maa.agent.agent_server import AgentServer
 from maa.context import Context
 from maa.custom_action import CustomAction
 from utils import logger
+import json
+import os
 import time
 from typing import Any, Optional
 
@@ -13,8 +15,23 @@ CITY_CHANGING_FESTIVAL_MONTHS = frozenset({3, 5})
 
 # 年度任务是长流程：任何“看起来点击成功”的动作都必须在有限时间内
 # 重新观察到一个支持的状态，否则停止而不是继续消耗任务/资源。
-YEARLY_MONTH_RETRIES = 2
+YEARLY_MONTH_RETRIES = 3
 YEARLY_RECOVERY_STEPS = 12
+
+
+def _yearly_month_retries(context: Context) -> int:
+    """读取「任务失败继续轮数」；兼容 OCR 节点的 expected 结构。"""
+    data = context.get_node_data("YearlyMonthRetries") or {}
+    expected = data.get("recognition", {}).get("param", {}).get("expected", None)
+    if expected is None:
+        expected = data.get("expected", YEARLY_MONTH_RETRIES)
+    if isinstance(expected, (list, tuple)):
+        expected = expected[0] if expected else YEARLY_MONTH_RETRIES
+    try:
+        value = int(str(expected).strip())
+    except (TypeError, ValueError):
+        value = YEARLY_MONTH_RETRIES
+    return min(10, max(1, value))
 YEARLY_MONTH_WAIT_SECONDS = 8.0
 
 
@@ -192,6 +209,13 @@ def _ensure_at_target_city(context: Context, target_city: str) -> tuple:
     """
     max_swipe_times = 10
 
+    # 当前画面可能被佣兵加入/孩子出生等弹窗盖住，先处理再判断图层和城市；
+    # 否则会把弹窗误当成“找不到目标城市”。
+    for _ in range(3):
+        if not fight_utils.handle_interrupt_scene(context):
+            break
+        time.sleep(0.4)
+
     # 战后结算或随机事件可能把视角留在群岛层。目标主城位于大陆层，
     # 此时继续左右滑动永远找不到目标城市；先识别底部“前往大陆”并
     # 有界切层，看到“前往群岛”或目标城市后才继续。
@@ -246,6 +270,10 @@ def _ensure_at_target_city(context: Context, target_city: str) -> tuple:
         context.run_task("Map_MoveMainCityRight")
 
         current_img = context.tasker.controller.post_screencap().wait().get()
+        # 滑动后可能弹出佣兵加入/孩子出生页，先处理再识别城市。
+        if fight_utils.handle_interrupt_scene(context, current_img):
+            time.sleep(0.4)
+            current_img = context.tasker.controller.post_screencap().wait().get()
         reco_detail = context.run_recognition("EnterCity", current_img)
         if reco_detail.hit and reco_detail.best_result:
             current_city = reco_detail.best_result.text
@@ -419,6 +447,35 @@ def handle_mercenary_baby(context: Context) -> bool:
     return True
 
 
+def pirate_manual_mode(context: Context) -> bool:
+    """「海盗事件处理」选项：manual = 停下等玩家调整阵容，不自动开战。"""
+    data = context.get_node_data("PirateSelect")
+    if not data:
+        return False
+    expected = (data.get("recognition") or {}).get("param", {}).get("expected") or []
+    mode = expected[0] if expected else "auto"
+    return str(mode).strip().lower() == "manual"
+
+
+def _mark_pirate_manual() -> None:
+    """给网页版的组合脚本留标记：海盗事件需要手动处理。"""
+    try:
+        marker = os.path.join(os.getcwd(), "temp", "pirate_alert.json")
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        with open(marker, "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "action": "manual",
+                    "note": "海盗袭击：已设为手动处理，请调整阵容后再打",
+                },
+                handle,
+                ensure_ascii=False,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"写入海盗事件标记失败：{exc}")
+
+
 def detect_and_manage_event(context: Context, screenshot) -> str:
     """检测事件类型"""
     if context.run_recognition("Event_MercenaryJoin", screenshot).hit:
@@ -460,11 +517,24 @@ def detect_and_manage_event(context: Context, screenshot) -> str:
         context.run_task("Event_MercenarieRetire")
         return "mercenary_retire"
     elif context.run_recognition("Event_PirateRaid", screenshot).hit:
+        if pirate_manual_mode(context):
+            logger.info("海盗事件：设为手动处理，暂停任务，等待玩家调整阵容")
+            _mark_pirate_manual()
+            context.tasker.post_stop()
+            return "pirate_manual"
         logger.info("检测到海盗袭击庄园事件，跨图前往群岛作战")
         # PirateRaidProcessor 内部保证战斗结束回到大陆层；
         # 入口先收一次 Esc 防止横幅抖动导致重复触发。
         context.run_task("Event_PirateRaid_Dispatch")
         return "pirate_raid"
+    elif (
+        context.run_recognition("Event_CastleAttacked", screenshot).hit
+        or context.run_recognition("Event_CastleListWindow", screenshot).hit
+        or context.run_recognition("Event_CastleDefendWindow", screenshot).hit
+    ):
+        logger.info("检测到城堡被攻打事件")
+        context.run_task("Event_CastleAttack_Handle")
+        return "castle_attack"
     else:
         return None
 
@@ -473,6 +543,22 @@ def check_current_month(context: Context) -> int:
     """检查当前月份"""
     month = fight_utils.Map_CheckCurrentMonth(context)
     return month if 1 <= month <= 12 else None
+
+
+def _castle_marry_month(context: Context) -> int:
+    """城堡相亲月份（「城堡相亲月份」选项，默认 4 月）。"""
+    data = context.get_node_data("MarryMonthSelect")
+    month = 4
+    if data:
+        expected = data.get("recognition", {}).get("param", {}).get("expected", ["4"])
+        raw = expected[0] if isinstance(expected, list) and expected else expected
+        try:
+            value = int(str(raw).strip())
+            if 1 <= value <= 12:
+                month = value
+        except (TypeError, ValueError):
+            pass
+    return month
 
 
 def handle_festival_by_month(context: Context, month: int) -> bool:
@@ -488,13 +574,18 @@ def handle_festival_by_month(context: Context, month: int) -> bool:
         11: "亡人节，跳过",
         12: "创元节，跳过",
     }
+    castle_month = _castle_marry_month(context)
     festival_name = festival_info.get(month, "无节日")
+    if month == castle_month:
+        festival_name = f"城堡相亲（城堡主厅，配置为 {castle_month} 月）"
     logger.info(f"当前月份：{month}月 - 本月：{festival_name}")
 
-    if month == 3:
+    if month == castle_month:
+        if castle_month != 4:
+            logger.info(f"按「城堡相亲月份」配置，{castle_month} 月执行城堡相亲")
+        return handle_marry_festival(context, month=castle_month)
+    elif month == 3:
         return handle_sailing_festival(context)
-    elif month == 4:
-        return handle_marry_festival(context, month=4)
     elif month == 5:
         return handle_marry_festival(context, month=5)
     elif month == 8:
@@ -574,13 +665,13 @@ def handle_sailing_festival(context: Context) -> bool:
 
 
 def handle_marry_festival(context: Context, month: int = 4) -> bool:
-    """4月城堡主厅相亲 / 5月春林节相亲。"""
+    """城堡主厅相亲（月份可配） / 5月春林节相亲。"""
     if month == 5:
         label = "5月春林节相亲"
         enable_node = "Flag_EnableMaySpringMarry"
         manual_node = "Flag_MaySpringManual"
     else:
-        label = "4月城堡相亲（城堡主厅）"
+        label = f"{month}月城堡相亲（城堡主厅）"
         enable_node = "Flag_EnableAprCastleMarry"
         manual_node = "Flag_AprCastleManual"
 
@@ -776,13 +867,15 @@ class YearlyTaskProcessor(CustomAction):
             logger.error(f"无效的年度任务月份数: {total_months}")
             return CustomAction.RunResult(success=False)
 
+        month_retries = _yearly_month_retries(context)
+        logger.info(f"任务失败继续轮数：{month_retries}（可在设置里调整）")
         for month_offset in range(total_months):
             if context.tasker.stopping:
                 logger.info(f"已停止处理第 {month_offset + 1}/{total_months} 个月")
                 return CustomAction.RunResult(success=False)
             logger.info(f"开始处理第 {month_offset + 1}/{total_months} 个月")
             completed = False
-            for attempt in range(YEARLY_MONTH_RETRIES):
+            for attempt in range(month_retries):
                 if not _recover_yearly_to_bigmap(context):
                     logger.error(
                         f"第 {month_offset + 1}/{total_months} 个月恢复失败，停止年度任务"
@@ -803,7 +896,7 @@ class YearlyTaskProcessor(CustomAction):
                         break
                 logger.warning(
                     f"第 {month_offset + 1}/{total_months} 个月未确认进度 "
-                    f"({attempt + 1}/{YEARLY_MONTH_RETRIES})"
+                    f"({attempt + 1}/{month_retries})"
                 )
                 time.sleep(0.5)
             if not completed:
@@ -871,6 +964,46 @@ class ConfessionFailTask(CustomAction):
             return CustomAction.RunResult(success=False)
         mode = handle_confession_fail(context)
         return CustomAction.RunResult(success=mode in ("kept", "gaveup"))
+
+
+@AgentServer.custom_action("SceneGuardTask")
+class SceneGuardTask(CustomAction):
+    """组合步骤失败后再次确认场景：只在识别到短事件时处理，不盲点。"""
+
+    def run(
+        self, context: Context, argv: CustomAction.RunArg
+    ) -> CustomAction.RunResult:
+        events: list[str] = []
+        for _ in range(3):
+            img = context.tasker.controller.post_screencap().wait().get()
+            name = fight_utils.handle_interrupt_scene(
+                context, img, include_mercenary_join=False
+            )
+            if not name:
+                break
+            events.append(name)
+            time.sleep(0.5)
+
+        marker = os.path.join(os.getcwd(), "temp", "scene_guard.json")
+        try:
+            os.makedirs(os.path.dirname(marker), exist_ok=True)
+            with open(marker, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "events": events,
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    },
+                    handle,
+                    ensure_ascii=False,
+                )
+        except OSError as exc:
+            logger.warning(f"场景确认结果写入失败：{exc}")
+
+        if events:
+            logger.info(f"场景确认：已处理打断事件 {events}")
+        else:
+            logger.info("场景确认：当前没有需要处理的短事件")
+        return CustomAction.RunResult(success=bool(events))
 
 
 @AgentServer.custom_action("SailingFestivalTask")

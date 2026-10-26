@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -36,6 +37,16 @@ import uuid
 from pathlib import Path
 
 STATUSES = ("pending", "kept", "deleted")
+REPAIR_STATES = ("idle", "queued", "running", "fixed", "escalated", "stopped", "unavailable")
+REPAIR_LABELS = {
+    "idle": "未处理",
+    "queued": "排队中",
+    "running": "AI 修复中",
+    "fixed": "已修复",
+    "escalated": "需要你判断",
+    "stopped": "已停止",
+    "unavailable": "AI 不可用",
+}
 SOURCE_LABELS = {
     "task": "任务",
     "agent": "Agent",
@@ -193,6 +204,16 @@ class ErrorStore:
             "extra": data.get("extra") if isinstance(data.get("extra"), dict) else {},
             "decided_at": _text(data.get("decided_at"), 40),
             "decided_ts": round(_number(data.get("decided_ts"), 0.0), 3),
+            # AI 自动修复状态（不影响用户自己标 保留/删除）
+            "repair_state": data.get("repair_state") if data.get("repair_state") in REPAIR_STATES else "idle",
+            "repair_attempts": int(_number(data.get("repair_attempts"), 0)),
+            "repair_session": _text(data.get("repair_session"), 120),
+            "repair_started_at": _text(data.get("repair_started_at"), 40),
+            "repair_finished_at": _text(data.get("repair_finished_at"), 40),
+            "repair_message": _text(data.get("repair_message"), 2000),
+            "repair_summary": _text(data.get("repair_summary"), 4000),
+            "repair_files": data.get("repair_files") if isinstance(data.get("repair_files"), list) else [],
+            "repair_fingerprint": _text(data.get("repair_fingerprint"), 160),
         }
         return record
 
@@ -309,6 +330,15 @@ class ErrorStore:
             "decided_at": "",
             "decided_ts": 0,
             "size": size,
+            "repair_state": "idle",
+            "repair_attempts": 0,
+            "repair_session": "",
+            "repair_started_at": "",
+            "repair_finished_at": "",
+            "repair_message": "",
+            "repair_summary": "",
+            "repair_files": [],
+            "repair_fingerprint": "",
         }
         try:
             (folder / "meta.json").write_text(
@@ -419,9 +449,11 @@ class ErrorStore:
         with self._lock:
             items = list(self._items)
         counts = {status: 0 for status in STATUSES}
+        repairs = {state: 0 for state in REPAIR_STATES}
         total_bytes = 0
         for item in items:
             counts[item["status"]] = counts.get(item["status"], 0) + 1
+            repairs[item.get("repair_state", "idle")] = repairs.get(item.get("repair_state", "idle"), 0) + 1
             folder = self._folder_locked(item["id"], item["status"])
             if folder is not None:
                 total_bytes += _folder_size(folder)
@@ -432,6 +464,10 @@ class ErrorStore:
             "total": len(items),
             "bytes": total_bytes,
             "mb": round(total_bytes / 1048576, 2),
+            "repair": repairs,
+            "repair_running": repairs.get("running", 0) + repairs.get("queued", 0),
+            "repair_escalated": repairs.get("escalated", 0),
+            "repair_fixed": repairs.get("fixed", 0),
             "dir": _display_path(self.base, self.root),
             "report": _display_path(self.report_path, self.root),
         }
@@ -465,6 +501,7 @@ class ErrorStore:
             self._refresh_image_flags_locked()
             self._write_index_locked()
             self._write_report_locked()
+            self._write_meta_locked(record)
             return dict(record)
 
     def note(self, sid: str, note: str) -> dict | None:
@@ -475,7 +512,86 @@ class ErrorStore:
             record["note"] = _text(note, 1000)
             self._write_index_locked()
             self._write_report_locked()
+            self._write_meta_locked(record)
             return dict(record)
+
+    # ------------------------------------------------------------ AI 修复状态
+
+    @staticmethod
+    def fingerprint_of(record: dict) -> str:
+        """同一类报错（来源 + 入口 + 标题 + 首行错误）的稳定指纹。"""
+        if not isinstance(record, dict):
+            return ""
+        lines = (record.get("error") or "").strip().splitlines()
+        head = lines[0][:200] if lines else ""
+        raw = "|".join(
+            str(record.get(key) or "") for key in ("source", "entry", "title")
+        ) + "|" + head
+        return hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:24]
+
+    def fingerprint(self, sid: str) -> str:
+        record = self.get(sid)
+        return self.fingerprint_of(record) if record else ""
+
+    def update_repair(self, sid: str, **fields) -> dict | None:
+        """只更新 AI 修复相关字段，不动用户的 保留/删除/备注。"""
+        allowed = {
+            "repair_state",
+            "repair_attempts",
+            "repair_session",
+            "repair_started_at",
+            "repair_finished_at",
+            "repair_message",
+            "repair_summary",
+            "repair_files",
+            "repair_fingerprint",
+        }
+        with self._lock:
+            record = next((item for item in self._items if item["id"] == sid), None)
+            if record is None:
+                return None
+            for key, value in fields.items():
+                if key not in allowed:
+                    continue
+                if key == "repair_attempts":
+                    record[key] = max(0, int(_number(value, 0)))
+                elif key == "repair_files":
+                    record[key] = [_text(item, 300) for item in (value or [])][:40]
+                elif key == "repair_state":
+                    record[key] = value if value in REPAIR_STATES else "idle"
+                else:
+                    record[key] = _text(value, 4000)
+            if not record.get("repair_fingerprint"):
+                record["repair_fingerprint"] = self.fingerprint_of(record)
+            self._write_index_locked()
+            self._write_report_locked()
+            self._write_meta_locked(record)
+            return dict(record)
+
+    def _write_meta_locked(self, record: dict) -> None:
+        folder = self._folder_locked(record["id"], record.get("status", "pending"))
+        if folder is None:
+            return
+        try:
+            (folder / "meta.json").write_text(
+                json.dumps(record, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    def clear_all(self) -> dict:
+        """一键清空所有报错截图与记录（含回收站）。"""
+        with self._lock:
+            removed = len(self._items)
+            for folder in list(self.snapshots.glob("*")) + list(self.trash.glob("*")):
+                if folder.is_dir():
+                    shutil.rmtree(folder, ignore_errors=True)
+            self._items.clear()
+            self._dedupe.clear()
+            self._write_index_locked()
+            self._write_report_locked()
+            return {"removed": removed, "stats": self.stats()}
 
     def purge(self, sid: str | None = None) -> int:
         """彻底删除：给了 id 删一条（不管状态），否则清空所有 deleted。"""
@@ -521,7 +637,12 @@ class ErrorStore:
         for record in list(self._items):
             try:
                 age = now - float(record.get("ts") or 0)
-                if record["status"] == "pending" and pending_days > 0 and age > pending_days * 86400:
+                if (
+                    record["status"] == "pending"
+                    and record.get("repair_state") not in ("running", "queued")
+                    and pending_days > 0
+                    and age > pending_days * 86400
+                ):
                     self._move_to_trash_locked(record["id"])
                     trashed += 1
                     continue
@@ -564,7 +685,12 @@ class ErrorStore:
         return trashed, purged
 
     def _oldest_locked(self, statuses: tuple[str, ...]) -> dict | None:
-        candidates = [item for item in self._items if item["status"] in statuses]
+        candidates = [
+            item
+            for item in self._items
+            if item["status"] in statuses
+            and item.get("repair_state") not in ("running", "queued")
+        ]
         if not candidates:
             return None
         return min(candidates, key=lambda item: item.get("ts") or 0)
@@ -698,6 +824,16 @@ class ErrorStore:
             lines.append("```")
         if item.get("note"):
             lines.append(f"- 用户备注：{item['note']}")
+        repair_state = item.get("repair_state", "idle")
+        if repair_state != "idle":
+            lines.append(
+                f"- AI 修复：{REPAIR_LABELS.get(repair_state, repair_state)}"
+                f"（尝试 {item.get('repair_attempts', 0)} 次）"
+            )
+            if item.get("repair_summary"):
+                lines.append(f"- 修复结论：{item['repair_summary']}")
+            if item.get("repair_message") and repair_state != "fixed":
+                lines.append(f"- 修复说明：{item['repair_message']}")
         if folder is not None:
             try:
                 log_text = (folder / "logs.txt").read_text(encoding="utf-8")

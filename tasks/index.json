@@ -20,6 +20,8 @@
         "PopUpWindowTip",
         "Auto_SailingFestivalEvent",
         "Func_MapSwitch",
-        "AutoFight_Start"
+        "AutoFight_Start",
+        "Event_CastleDefense",
+        "BattlePieceProbe"
     ]
 }

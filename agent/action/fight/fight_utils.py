@@ -6,7 +6,7 @@ import time
 from typing import Any, Optional, Set
 
 from utils import logger
-from utils import task_records
+from utils import task_records, task_rules
 from utils.game_state import update as update_game_state
 from action.zshg.battle_world_map import BattleSessionRegistry, session_key
 from action.zshg.task_hud_recognizer import TaskHudRecognizer
@@ -66,6 +66,57 @@ def _read_game_year(context: Context, screenshot) -> int:
         return 0
 
 
+def handle_interrupt_scene(
+    context: Context, img: Any = None, include_mercenary_join: bool = True
+) -> str:
+    """再次确认当前场景：只处理会挡住主流程的短事件/弹窗。
+
+    典型场景：战斗结束后弹出「孩子出生/命名」页，或佣兵加入弹窗盖住
+    战利品「确定」按钮。这里处理完就返回事件名，调用方应重新截图确认
+    期望的按钮/场景，而不是直接判定任务失败。
+
+    不处理海盗/城堡等长流程事件，避免在事件处理器内部递归触发自己。
+    ``include_mercenary_join=False`` 时只处理命名/夭折/提示，适合没有
+    当前任务选项上下文的组合级 SceneGuard，避免误接受佣兵。
+    """
+    if img is None:
+        img = _screencap(context)
+    if img is None:
+        return ""
+    try:
+        # 局部导入：fight_processor 顶层 import 了 fight_utils，避免循环。
+        from action.fight.fight_processor import (
+            handle_mercenary_baby,
+            handle_mercenary_join,
+        )
+
+        if context.run_recognition("Event_MercenaryBaby", img).hit:
+            logger.info("场景确认：孩子出生/命名页，先自动处理再继续")
+            handle_mercenary_baby(context)
+            return "mercenary_baby"
+        if include_mercenary_join and context.run_recognition(
+            "Event_MercenaryJoin", img
+        ).hit:
+            logger.info("场景确认：佣兵加入弹窗，先处理再继续")
+            handle_mercenary_join(context, img)
+            return "mercenary_join"
+        if context.run_recognition("事件_孩子夭折了", img).hit:
+            logger.info("场景确认：孩子夭折弹窗，先处理再继续")
+            context.run_task("事件_孩子夭折了")
+            return "child_death"
+        # 旅行确认弹窗不是随机事件，交由 TravelDialog 的专用流程处理，
+        # 不能当普通「提示」点掉，否则会丢失目的地/交通选择。
+        if context.run_recognition("TravelDialog", img).hit:
+            return ""
+        if context.run_recognition("PopUpWindowTip", img).hit:
+            logger.info("场景确认：提示弹窗，先关闭再继续")
+            context.run_task("PopUpWindowTip")
+            return "popup_tip"
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"场景确认处理中断事件失败：{exc}")
+    return ""
+
+
 def ensure_at_bigmap(
     context: Context, auto_return: bool = True, max_attempts: int = 8
 ) -> bool:
@@ -88,6 +139,12 @@ def ensure_at_bigmap(
             return True
         if not auto_return:
             return False
+
+        # 先处理孩子出生/命名、佣兵加入等会挡按钮的短事件；
+        # 处理完重新截图确认，避免把“场景不对”当成任务失败。
+        if handle_interrupt_scene(context, img):
+            time.sleep(0.4)
+            continue
 
         # UI_ReturnBigMap 内含 JumpBack 循环，遇到未知弹窗时会无界等待。
         # 这里只执行可证明、有上限的单步恢复。
@@ -113,15 +170,17 @@ def ensure_task_accepted(context: Context) -> bool:
     Returns:
         bool: True 表示已接取任务，False 表示未接取
     """
-    if not context.run_recognition(
-        "UI_TaskPannelPageClose",
-        context.tasker.controller.post_screencap().wait().get(),
-    ).hit:
+    img = _screencap(context)
+    if img is None:
+        return False
+    if not context.run_recognition("InTaskPannel", img).hit:
         context.run_task("UI_TaskPannelPageOpen")
+        time.sleep(0.8)
+        img = _screencap(context)
+        if img is None:
+            return False
 
-    if context.run_recognition(
-        "TaskQuickLocation", context.tasker.controller.post_screencap().wait().get()
-    ).hit:
+    if context.run_recognition("TaskQuickLocation", img).hit:
         return True
 
     return False
@@ -374,14 +433,84 @@ def _read_map_task_name(context: Context) -> str:
         detail = context.run_recognition("HudTaskName", img)
         if detail.hit and detail.best_result is not None:
             text = (detail.best_result.text or "").strip()
-            if text and text not in ("未制定目标", "剩余时间"):
-                return text
+            # 排除 HUD 里相邻的固定文案/月度目标，避免把它们当成已接取任务名
+            if text and text not in ("未制定目标", "剩余时间", "女王密令"):
+                if not any(
+                    key in text
+                    for key in (
+                        "密令",
+                        "敕令",
+                        "剩余",
+                        "未制定",
+                        "诸神",
+                        "阶段",
+                        "任务目标",
+                    )
+                ):
+                    return text
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"读取大地图任务名失败：{exc}")
     return ""
 
 
 _last_fight_result: Optional[dict] = None
+
+# 主动战斗的可配置选项节点：模式 / 待机回合数 / 棋子识别。
+# 月度循环通过界面选项覆盖这些节点，但战斗是嵌套 run_task 跑的，
+# 嵌套任务不保证继承父任务的 pipeline_override，因此这里显式传下去。
+BATTLE_OPTION_NODES = (
+    "FightModeSelect",
+    "FightStandbyRounds",
+    "FightPieceRecognition",
+)
+
+
+def _node_expected_value(data: Any) -> Optional[str]:
+    """从节点定义里取 expected 的首个值，兼容两种结构。"""
+    if not isinstance(data, dict):
+        return None
+    expected: Any = None
+    recognition = data.get("recognition")
+    if isinstance(recognition, dict):
+        param = recognition.get("param")
+        if isinstance(param, dict):
+            expected = param.get("expected")
+    if expected is None:
+        expected = data.get("expected")
+    if isinstance(expected, (list, tuple)):
+        expected = expected[0] if expected else None
+    if expected is None:
+        return None
+    return str(expected)
+
+
+def battle_option_override(context: Context) -> dict:
+    """把当前任务上的战斗选项显式传给嵌套的 ``AutoFight_Start``。
+
+    月度循环（Auto_YearlyTask）的选项 override 挂在父任务上下文里；
+    嵌套跑战斗时如果不显式传，AutoFightProcessor 只能读到 pipeline 节点
+    默认值（待机 20 回合）。这里先取当前上下文的有效值再传下去。
+    """
+    override: dict = {}
+    values: dict = {}
+    for node in BATTLE_OPTION_NODES:
+        try:
+            value = _node_expected_value(context.get_node_data(node))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"读取战斗选项 {node} 失败：{exc}")
+            continue
+        if value is None:
+            continue
+        override[node] = {"expected": [value]}
+        values[node] = value
+    if values:
+        logger.info(
+            "战斗选项：模式="
+            f"{values.get('FightModeSelect', '默认')}，待机回合数="
+            f"{values.get('FightStandbyRounds', '默认')}，棋子识别="
+            f"{values.get('FightPieceRecognition', '默认')}"
+        )
+    return override
 
 
 def finalize_task_record(context: Context) -> None:
@@ -421,11 +550,14 @@ def _task_fail_mode(context: Context) -> str:
 
 def abandon_accepted_task(context: Context, max_swipes: int = 5) -> bool:
     """放弃当前已接取的任务（任务板里按钮为「放弃」的那条），然后回大地图。"""
+    # 先看大地图左下角：有任务名就说明任务还在，不能因为任务板没打开
+    # 就误判成“没有已接取任务”而提前返回。
+    hud_name = _read_map_task_name(context)
     img = _screencap(context)
     if img is None:
         return False
-    if not context.run_recognition("TaskQuickLocation", img).hit:
-        # 没有已接取任务，直接回大地图
+    if not hud_name and not context.run_recognition("TaskQuickLocation", img).hit:
+        # 大地图没任务名、任务板也没有快速定位 → 确实没有已接取任务
         return ensure_at_bigmap(context)
 
     if context.run_recognition("UI_TaskPannelPageClose", img).hit:
@@ -502,6 +634,44 @@ def dismiss_battle_result(context: Context, max_steps: int = 6) -> bool:
     return False
 
 
+TASK_FAILURE_RETRY_ATTEMPTS = 2
+
+
+def _retry_failed_task(context: Context, task_name: str = "") -> bool:
+    """失败后立即重试同一个已接取任务（真正再打一场）。
+
+    ``retry`` 模式以前只是返回 False 交给月度重试，但月度重试会重新跑
+    整月流程、失败两次就停掉年度任务，实际没有“再打一次”。这里直接复用
+    ``_process_fight`` 重新进入同一任务，最多 ``TASK_FAILURE_RETRY_ATTEMPTS``
+    次；全部失败由调用方回退到放弃并继续循环。
+    """
+    for attempt in range(1, TASK_FAILURE_RETRY_ATTEMPTS + 1):
+        if context.tasker.stopping:
+            logger.info("任务执行被停止")
+            return False
+        if not ensure_at_bigmap(context):
+            logger.warning("继续任务：重试前无法回到大地图")
+            return False
+
+        logger.info(
+            f"继续任务：第 {attempt}/{TASK_FAILURE_RETRY_ATTEMPTS} 次重试同一任务"
+        )
+        if task_name:
+            task_records.set_pending(
+                city=_current_city(context), task_name=task_name
+            )
+
+        if _process_fight(context):
+            finalize_task_record(context)
+            logger.info("继续任务：重试后战斗胜利，月度循环继续")
+            return True
+
+        finalize_task_record(context)
+        dismiss_battle_result(context)
+
+    return False
+
+
 def _handle_task_failure(context: Context) -> bool:
     """刷取任务失败后的走向；返回 True 表示本次月度循环可以继续。"""
     mode = _task_fail_mode(context)
@@ -513,7 +683,23 @@ def _handle_task_failure(context: Context) -> bool:
     dismiss_battle_result(context)
 
     if mode == "retry":
-        logger.info("继续任务：不放弃当前任务，交给月度重试再打一次")
+        logger.info("继续任务：不放弃当前任务，立即重试同一任务")
+        if _retry_failed_task(context, name):
+            return True
+        # 重试仍未胜利：以大地图左下角为准。任务还没结束就保留它，
+        # 下个月/下一轮继续同一个任务，不再放弃后重新接取。
+        if not ensure_at_bigmap(context):
+            logger.warning("继续任务：重试失败后无法回到大地图")
+        still_active = _read_map_task_name(context)
+        if still_active:
+            logger.warning(
+                f"继续任务：重试未胜利，但任务「{still_active}」还没结束，"
+                "保留任务，下一轮重试同一任务，不再重新接取"
+            )
+        else:
+            logger.info("继续任务：任务已结束，但本次没有胜利，下一轮重新接取")
+        # 没打赢就不能算这个月完成；返回 False 让月度循环重试，
+        # 否则上层会去等月份推进，等到超时后整轮失败。
         return False
 
     if mode == "blacklist":
@@ -524,10 +710,10 @@ def _handle_task_failure(context: Context) -> bool:
             logger.warning("任务名未知，没法拉黑，按换任务处理")
 
     if abandon_accepted_task(context):
-        logger.info("失败任务已放弃，已回到大地图，循环继续")
+        logger.info("失败任务已放弃，已回到大地图，本轮未胜利，月度循环重试本月")
     else:
-        logger.warning("放弃失败任务没有成功，仍继续循环")
-    return True
+        logger.warning("放弃失败任务没有成功，本轮未胜利，月度循环重试本月")
+    return False
 
 
 def start_task(context: Context) -> bool:
@@ -597,12 +783,17 @@ def _preprocess_accept_task(context: Context) -> bool:
     if not ensure_at_bigmap(context):
         return False
 
-    # 大地图左下角（女王密令下面、剩余时间上面）就是当前已接取任务的名字
+    # 大地图左下角那行并不总是“已接取任务”：很多时候显示的是月度目标
+    # 「王族敕令（24/24）」/「女王密令」。直接用它会误判成已有任务，
+    # 跳过任务板，随后又找不到「快速定位」。这里只把它当日志线索，
+    # 是否已接取一律以任务板里的「快速定位/放弃」按钮为准。
     hud_name = _read_map_task_name(context)
+    if hud_name:
+        logger.info(f"大地图左下角读到「{hud_name}」，到任务板确认是否已接取")
 
     if ensure_task_accepted(context):
-        # 已接取的任务也要记一笔：优先用大地图 HUD 的名字，其次任务板
-        name = hud_name or _read_accepted_task_name(context)
+        # HUD 不可靠时，用任务板里真正的已接取任务名
+        name = _read_accepted_task_name(context)
         task_records.set_pending(city=_current_city(context), task_name=name)
         return True
 
@@ -618,6 +809,10 @@ def _accept_new_task(context: Context) -> bool:
     """
     接取新任务 - 默认使用HUD动态识别模式
 
+    按当前城市读取 ``table/task_accept_rules.json`` 的等级区间与城市黑名单，
+    每次扫描任务板都会把结果写入 ``table/task_pool.json``，供网页「任务接取」
+    面板显示每条任务是否可接以及原因。
+
     Args:
         context: MAA 上下文对象
 
@@ -626,9 +821,17 @@ def _accept_new_task(context: Context) -> bool:
     """
     max_swipe_times = 5
 
-    # HUD动态识别器 - 默认筛选阈值 120级以下
     hud_recognizer = TaskHudRecognizer()
-    hud_max_level = 120
+    city = _current_city(context)
+    rule = task_rules.city_rule(city)
+    hud_min_level = rule["min_level"]
+    hud_max_level = rule["max_level"]
+    blacklist = set(task_rules.effective_blacklist(city))
+    logger.info(
+        f"任务规则：城市={city or '未知'}，可接等级 "
+        f"{hud_min_level}~{hud_max_level}，黑名单 {len(blacklist)} 个"
+        f"（全局 + 城市）"
+    )
 
     def scan_current_pool() -> bool:
         # 任务板会保留上一个月的滚动位置。如果上次扫到了列表底部，
@@ -637,11 +840,25 @@ def _accept_new_task(context: Context) -> bool:
         for _ in range(max_swipe_times):
             context.run_task("FindCityTask_SwipeUp")
 
+        # 任务板分屏显示：把每次下滑看到的任务合并起来，网页上才能看到
+        # 整块任务池，而不是最后一屏。
+        seen_items: dict = {}
         for swipe_count in range(max_swipe_times + 1):
             screenshot = context.tasker.controller.post_screencap().wait().get()
-            best_task = hud_recognizer.recognize_and_get_best_task(
-                context, screenshot, max_level=hud_max_level
+            items, eligible = hud_recognizer.scan_pool(
+                context,
+                screenshot,
+                min_level=hud_min_level,
+                max_level=hud_max_level,
+                city=city,
+                blacklist=blacklist,
             )
+            for item in items:
+                key = (item.get("name"), item.get("level"), item.get("type"))
+                seen_items[key] = item
+            if seen_items:
+                task_rules.save_pool(city, list(seen_items.values()))
+            best_task = hud_recognizer.pick_best(eligible)
 
             if best_task and best_task.accept_button_box:
                 accept_box = best_task.accept_button_box
@@ -650,12 +867,22 @@ def _accept_new_task(context: Context) -> bool:
                 context.tasker.controller.post_click(accept_x, accept_y).wait()
                 time.sleep(0.5)
                 task_records.set_pending(
-                    city=_current_city(context),
+                    city=city,
                     task_name=best_task.task_name,
                     task_type=best_task.task_type,
                     task_level=best_task.task_level,
                 )
+                logger.info(
+                    f"接取任务：{best_task.task_name}"
+                    f"（{best_task.task_type} / {best_task.task_level} / "
+                    f"{city or '未知城市'}）"
+                )
                 return True
+
+            if seen_items:
+                reason = _pool_reason_summary(list(seen_items.values()))
+                if reason:
+                    logger.info(f"任务板无候选：{reason}")
 
             if swipe_count < max_swipe_times:
                 logger.info(
@@ -683,6 +910,20 @@ def _accept_new_task(context: Context) -> bool:
     return False
 
 
+def _pool_reason_summary(items: list) -> str:
+    """把任务板里不可接的原因汇总成一行，便于日志和排查。"""
+    counts: dict = {}
+    for item in items:
+        if item.get("eligible"):
+            continue
+        reason = str(item.get("reason") or "未知")
+        key = reason.split("（")[0]
+        counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        return ""
+    return "，".join(f"{key}×{count}" for key, count in counts.items())
+
+
 def _process_fight(context: Context) -> bool:
     """
     战斗阶段：寻找任务点并完成战斗
@@ -707,16 +948,27 @@ def _process_fight(context: Context) -> bool:
 
 
 def _process_pre(context: Context) -> bool:
-    if not context.run_recognition(
-        "UI_TaskPannelPageClose",
-        context.tasker.controller.post_screencap().wait().get(),
-    ).hit:
-        context.run_task("UI_TaskPannelPageOpen")
+    # 先确保任务板真的打开，再找「快速定位」。
+    # 不能用底部按钮的 Open/Close 模板判断：地图状态偶尔会误命中 Close，
+    # 结果面板没开却直接去找快速定位，必然失败。
+    img = _screencap(context)
+    if img is None:
+        logger.error("战斗前置：截图失败")
+        return False
+    for attempt in range(2):
+        if context.run_recognition("TaskQuickLocation", img).hit:
+            break
+        if not context.run_recognition("InTaskPannel", img).hit:
+            context.run_task("UI_TaskPannelPageOpen")
+            time.sleep(0.8)
+        else:
+            time.sleep(0.5)
+        img = _screencap(context)
+        if img is None:
+            logger.error("战斗前置：打开任务板后截图失败")
+            return False
 
-    recoDetail = context.run_recognition(
-        "TaskQuickLocation",
-        context.tasker.controller.post_screencap().wait().get(),
-    )
+    recoDetail = context.run_recognition("TaskQuickLocation", img)
     if not recoDetail or not recoDetail.hit:
         logger.error("任务面板中未识别到快速定位按钮")
         return False
@@ -785,6 +1037,14 @@ def _process_fighting(context: Context) -> bool:
             "rounds": session.confirmed_rounds if session else 0,
             "result": "胜利" if ok else "失败",
         }
+        if session is not None and session.pieces:
+            # 棋子识别结果：整场战斗里每名棋子只保留最后一次识别。
+            summary = "、".join(
+                f"{name}（{record.get('range_class') or '范围未知'}，"
+                f"第{record.get('round_seen', 0)}回合）"
+                for name, record in session.pieces.items()
+            )
+            logger.info(f"本场棋子识别: {summary}")
         return ok
 
     if initial_state == "victory":
@@ -817,7 +1077,9 @@ def _process_fighting(context: Context) -> bool:
         f"new={entered_from_start}, confirmed_rounds={session.confirmed_rounds}, "
         f"explored={len(session.world.observed)}"
     )
-    auto_result = context.run_task("AutoFight_Start")
+    auto_result = context.run_task(
+        "AutoFight_Start", pipeline_override=battle_option_override(context)
+    )
 
     # CustomAction 返回后仍以持久结算页为最终依据，避免仅凭节点被尝试过
     # 或控制器点击成功就把整场战斗判为成功。
@@ -887,7 +1149,11 @@ def _process_post(context: Context) -> bool:
     ).hit:
         context.run_task("FightPopUp")
 
-    # 结束确认
+    # 结束确认前再确认一次场景：战利品/经验结算期间可能弹出孩子出生页。
+    for _ in range(2):
+        if not handle_interrupt_scene(context):
+            break
+        time.sleep(0.5)
     context.run_task("FightResult_ReturnBigMap")
     if _wait_for_recognition(context, "UI_MainWindows", timeout=6.0):
         logger.info("战后流程完成，已返回大地图")

@@ -418,12 +418,46 @@
     },
     "MarryRaceSelect": {
         "attach": {
-            "description": "联姻种族选择"
+            "description": "我方种族（过滤自己家族的公爵候选）"
         },
         "recognition": "OCR",
         "expected": [
-            "佩尔弗因王族"
+            "不限"
         ],
+        "enabled": true
+    },
+    "MarryTargetRaceSelect": {
+        "attach": {
+            "description": "对方种族（same 跟随我方 / 具体种族）：决定去哪个国家找、按哪张姓名表匹配"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "same"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "MarryFullBloodSelect": {
+        "attach": {
+            "description": "是否只相亲纯血（血统 100%）候选：yes / no"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "no"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
         "enabled": true
     },
     "MarryMultiSelect": {
@@ -453,6 +487,23 @@
         "recognition": "OCR",
         "expected": [
             "0"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "MarryAgeOrderSelect": {
+        "attach": {
+            "description": "年龄排序：auto 跟随区间（只设上限时从小到大）/ desc 从大到小 / asc 从小到大"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "auto"
         ],
         "roi": [
             0,

@@ -1,0 +1,23 @@
+{
+  "_说明": "按城市配置任务接取规则。cities 里的 min_level/max_level 覆盖 defaults；blacklist 只在该城市生效。全局黑名单在 task_blacklist.json。",
+  "defaults": {
+    "min_level": 0,
+    "max_level": 120
+  },
+  "cities": {
+    "暮角城": {
+      "min_level": 0,
+      "max_level": 85,
+      "blacklist": [
+        "爱情史诗",
+        "未知任务"
+      ]
+    },
+    "圣盾堡": {
+      "blacklist": [
+        "没人知道",
+        "神之察坛"
+      ]
+    }
+  }
+}
