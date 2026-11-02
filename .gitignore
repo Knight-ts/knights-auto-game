@@ -24,6 +24,8 @@ table/task_combos.json
 table/task_records.*
 table/task_pool.json
 table/piece_observations.json
+table/castle_resources.*
+table/bread_purchases.*
 *.bak
 
 # 打包产物
