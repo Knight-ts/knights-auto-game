@@ -68,6 +68,56 @@
         </div>
       </div>
     </div>
+    <div class="card scene-card" style="margin-top:14px">
+      <div class="row">
+        <h3 style="margin:0">场景处理（月度循环）</h3>
+        <span class="badge" id="sceneCount">—</span>
+        <span class="badge new" id="sceneNewBadge" hidden>新增</span>
+        <span class="hint" id="sceneUpdated"></span>
+        <span style="flex:1"></span>
+        <input type="text" id="sceneSearch" class="scene-search" placeholder="搜索场景 / 条件 / 处理">
+        <select id="sceneGroup"><option value="">全部类别</option></select>
+        <button class="btn small" id="btnSceneReload">刷新</button>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        月度循环遇到画面时「先认条件，再按结果处理」。表格可滚动 / 筛选；点处理函数名可以看源码并定位到行，「返回」是回大地图走的步骤（没单独配的场景由各自处理函数负责返回）。数据来自 table/scene_rules.json 与 table/return_routes.json。
+      </div>
+      <div class="scene-table-wrap">
+        <table class="scene-table">
+          <thead>
+            <tr>
+              <th class="scene-col-name">场景</th>
+              <th>识别条件（何时触发）</th>
+              <th>处理逻辑（结果）</th>
+              <th class="scene-col-task">任务入口</th>
+            </tr>
+          </thead>
+          <tbody id="sceneBody"></tbody>
+        </table>
+      </div>
+      <div class="scene-foot">
+        <div class="scene-recent-head">
+          <strong>最近命中</strong>
+          <span class="hint" id="sceneGuardHint"></span>
+        </div>
+        <ul class="scene-recent" id="sceneRecent"><li class="empty">还没有记录</li></ul>
+      </div>
+      <div class="unknown-block">
+        <div class="unknown-head">
+          <strong>未知界面</strong>
+          <span class="badge" id="unknownCount">—</span>
+          <span class="hint" id="unknownHint">
+            认不出的画面会先点 3 个安全位置（下方 / 返回键 / 中心），画面有变化就继续；还是没变化才记录在这里。
+          </span>
+          <span style="flex:1"></span>
+          <button class="btn small" id="btnUnknownReload">刷新</button>
+          <button class="btn small danger" id="btnUnknownClear">清空</button>
+        </div>
+        <div class="unknown-list" id="unknownList">
+          <div class="empty">还没有记录</div>
+        </div>
+      </div>
+    </div>
     <div class="card" style="margin-top:14px">
       <h3>最近日志</h3>
       <pre id="homeLogs">尚未连接设备</pre>
@@ -532,6 +582,18 @@
     </div>
   </section>
 </main>
+
+<dialog id="sourceDialog" class="source-dialog">
+  <div class="source-head">
+    <strong id="sourceTitle">源码</strong>
+    <span class="hint mono" id="sourceMeta"></span>
+    <span style="flex:1"></span>
+    <button class="btn small primary" id="btnSourceOpen">在编辑器打开</button>
+    <button class="btn small" id="btnSourceClose">关闭</button>
+  </div>
+  <pre class="source-code" id="sourceCode"></pre>
+  <div class="hint source-locations" id="sourceLocations"></div>
+</dialog>
 
 <div id="banner" class="banner hidden"></div>
 <datalist id="catalog"></datalist>

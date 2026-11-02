@@ -88,6 +88,7 @@ def handle_interrupt_scene(
         from action.fight.fight_processor import (
             handle_mercenary_baby,
             handle_mercenary_join,
+            handle_ration_prepay,
         )
 
         if context.run_recognition("Event_MercenaryBaby", img).hit:
@@ -104,6 +105,35 @@ def handle_interrupt_scene(
             logger.info("场景确认：孩子夭折弹窗，先处理再继续")
             context.run_task("事件_孩子夭折了")
             return "child_death"
+        # 口粮预交：只有确认粮食充足才点确定；不足会暂停，不能当普通提示点掉。
+        if context.run_recognition("Event_HarvestFestivalPrePay", img).hit:
+            logger.info("场景确认：口粮预交面板，按粮食是否充足处理")
+            return handle_ration_prepay(context, img) or "ration_prepay"
+        # 丰收节/年末「年度结算」页：只有「确定」，不点掉会一直卡在
+        # 这里，最终被恢复逻辑判成 unknown。必须在通用提示/地图之前处理。
+        if context.run_recognition("Event_HarvestFestivalAnnuaClosing", img).hit:
+            logger.info("场景确认：年度结算页，点击确定")
+            context.run_task("Event_HarvestFestivalAnnuaClosing")
+            return "annual_closing"
+        # 表白成功弹窗（「…向XXX表白成功！」）：点掉后直接进婚礼页，
+        # 交给 Event_ConfessionSuccess 的 next（Auto_WeddingTask）继续。
+        if context.run_recognition("Event_ConfessionSuccess", img).hit:
+            logger.info("场景确认：表白成功弹窗，走告白成功→婚礼流程")
+            context.run_task("Event_ConfessionSuccess")
+            return "confession_success"
+        # 表白失败弹窗（「表白失败！」+ 放弃追求/获取对象信息）会盖住大地图，
+        # 不处理的话年度恢复会判成 unknown 直接停掉。
+        if context.run_recognition("Event_ConfessionFail", img).hit:
+            logger.info("场景确认：表白失败弹窗，按选项处理")
+            from action.fight.fight_processor import handle_confession_fail
+
+            mode = handle_confession_fail(context)
+            return f"confession_fail:{mode}"
+        # 婚礼页同样会盖住大地图，直接交给婚礼处理器
+        if context.run_recognition("Event_WeddingPage", img).hit:
+            logger.info("场景确认：婚礼页面，交给 WeddingProcessor")
+            context.run_task("Auto_WeddingTask")
+            return "wedding"
         # 旅行确认弹窗不是随机事件，交由 TravelDialog 的专用流程处理，
         # 不能当普通「提示」点掉，否则会丢失目的地/交通选择。
         if context.run_recognition("TravelDialog", img).hit:
@@ -131,11 +161,17 @@ def ensure_at_bigmap(
         bool: 成功在大地图返回True，否则返回False
     """
     attempts = max(1, max_attempts if auto_return else 1)
+    clicked: list[str] = []
     for _ in range(attempts):
         img = _screencap(context)
         if img is None:
             return False
         if context.run_recognition("UI_MainWindows", img).hit:
+            # 大地图模板会透过弹窗命中，必须先确认没有佣兵加入/孩子出生
+            # 等挡住按钮的事件，否则会误判“已回大地图”而跳过事件处理。
+            if handle_interrupt_scene(context, img):
+                time.sleep(0.4)
+                continue
             return True
         if not auto_return:
             return False
@@ -150,10 +186,31 @@ def ensure_at_bigmap(
         # 这里只执行可证明、有上限的单步恢复。
         if context.run_recognition("BackButton_500ms", img).hit:
             context.run_task("BackButton_500ms")
+            clicked.append("back_button")
         else:
             context.run_task("ClickCenter_500ms")
+            clicked.append("click_center")
         time.sleep(0.4)
 
+    # 真的试了多次还回不去，把最后一帧记成未知画面：截图 + 调用栈 + 点过什么，
+    # 免得只在日志里留一句“未能回到大地图”。只试 1~2 次的调用方不记，避免误报。
+    if auto_return and len(clicked) >= 4:
+        try:
+            from action.fight import scene_return
+
+            current = _screencap(context)
+            if current is not None and _detect_battle_state(context, current) != "unknown":
+                # 战斗页不是未知画面，交给战斗流程处理，别记成“认不出来”。
+                return False
+            scene_return.record_unknown(
+                context,
+                current,
+                source="ensure_at_bigmap",
+                reason=f"连续 {len(clicked)} 次返回尝试后仍不在大地图",
+                attempts=[{"step": step} for step in clicked],
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"未知画面记录失败：{exc}")
     return False
 
 
@@ -319,10 +376,12 @@ def open_city_task_panel(context: Context, max_steps: int = 12) -> bool:
 
 
 def abandon_noncombat_accepted_task(context: Context, max_swipes: int = 5) -> bool:
-    """在当前主城任务板中放弃已接取的采购/配送任务。
+    """放弃当前主城任务板里已接取的采购/配送任务。
 
-    仅点击同时满足以下条件的任务：描述命中明确的非战斗关键词，且按钮
-    OCR 为“放弃”。可领取的同类任务按钮是“接受”，不会被误点。
+    注意：月度流程已不再调用本函数。采购/配送任务在扫描任务板时由
+    ``TaskHudRecognizer.evaluate_task`` 按描述关键词分类排除，不会被接取；
+    极少数漏网的非战斗任务由 ``_process_pre`` 按「放弃」按钮兜底。
+    保留此函数供单独排查/脚本使用。
     """
     img = _screencap(context)
     if img is None:
@@ -445,6 +504,10 @@ def _read_map_task_name(context: Context) -> str:
                         "诸神",
                         "阶段",
                         "任务目标",
+                        "银币",
+                        "工资",
+                        "总支出",
+                        "年度结算",
                     )
                 ):
                     return text
@@ -611,7 +674,17 @@ def dismiss_battle_result(context: Context, max_steps: int = 6) -> bool:
         if img is None:
             return False
         if context.run_recognition("UI_MainWindows", img).hit:
+            # 结算页消失后，佣兵加入/孩子出生弹窗可能盖在地图上；
+            # 不先处理就会在后续重试时找不到「快速定位」。
+            if handle_interrupt_scene(context, img):
+                time.sleep(0.5)
+                continue
             return True
+        if context.run_recognition("Event_HarvestFestivalAnnuaClosing", img).hit:
+            logger.info("点掉年度结算页")
+            context.run_task("Event_HarvestFestivalAnnuaClosing")
+            time.sleep(0.6)
+            continue
         if context.run_recognition("FightFail", img).hit:
             logger.info("点掉战斗失败结算页")
             context.run_task("FightFail")
@@ -672,11 +745,15 @@ def _retry_failed_task(context: Context, task_name: str = "") -> bool:
     return False
 
 
-def _handle_task_failure(context: Context) -> bool:
+def _handle_task_failure(context: Context, fallback_name: str = "") -> bool:
     """刷取任务失败后的走向；返回 True 表示本次月度循环可以继续。"""
     mode = _task_fail_mode(context)
     pending = task_records.get_pending() or {}
-    name = (pending.get("task") or "").strip() or _read_map_task_name(context)
+    name = (
+        (pending.get("task") or "").strip()
+        or (fallback_name or "").strip()
+        or _read_map_task_name(context)
+    )
 
     logger.warning(f"刷取任务失败（{name or '未知任务'}），处理方式：{mode}")
 
@@ -730,11 +807,13 @@ def start_task(context: Context) -> bool:
     if not _preprocess_accept_task(context):
         return False
 
+    pending = task_records.get_pending() or {}
+    failed_name = (pending.get("task") or "").strip()
     ok = _process_fight(context)
     finalize_task_record(context)
     if ok:
         return True
-    return _handle_task_failure(context)
+    return _handle_task_failure(context, failed_name)
 
 
 @AgentServer.custom_action("SingleFightTaskProcessor")
@@ -955,6 +1034,13 @@ def _process_pre(context: Context) -> bool:
     if img is None:
         logger.error("战斗前置：截图失败")
         return False
+    for _ in range(2):
+        if not handle_interrupt_scene(context, img):
+            break
+        time.sleep(0.5)
+        img = _screencap(context)
+        if img is None:
+            return False
     for attempt in range(2):
         if context.run_recognition("TaskQuickLocation", img).hit:
             break

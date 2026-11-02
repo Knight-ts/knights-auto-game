@@ -52,6 +52,42 @@ def _now() -> str:
     return time.strftime("%H:%M:%S")
 
 
+def _current_task_path() -> Path:
+    return ROOT / "temp" / "current_task.json"
+
+
+def write_current_task(entry: str, name: str) -> None:
+    """把「现在在跑哪个任务」写给 Agent 看。
+
+    未知画面记录需要知道当时是哪个任务 / 哪一步，Agent 进程本身拿不到
+    网页的任务名，所以由这里写一个 temp/current_task.json 的标记。
+    """
+    path = _current_task_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "entry": entry,
+                    "name": name,
+                    "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "pid": os.getpid(),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def clear_current_task() -> None:
+    try:
+        _current_task_path().unlink()
+    except OSError:
+        pass
+
+
 class Runtime:
     STUCK_SECONDS = 240
 
@@ -88,6 +124,13 @@ class Runtime:
             self.logs.append(line)
             self.last_log_at = time.time()
         print(line, flush=True)
+
+    def _child_alert_since(self, started: float) -> bool:
+        """好娃提醒是主动暂停，不是任务失败；以标记文件写入时间为准。"""
+        try:
+            return (ROOT / "temp" / "child_alert.json").stat().st_mtime > started
+        except OSError:
+            return False
 
     def _agent_healthy(self, check_rpc: bool = False) -> bool:
         """Agent 连接健康检查。
@@ -609,8 +652,12 @@ class Runtime:
                 raise RuntimeError("Tasker 未就绪，请先连接设备")
             tasker = self.tasker
         self.log(f"场景确认：运行内部任务 {entry}")
-        job = tasker.post_task(entry, override or {})
-        job.wait()
+        write_current_task(entry, f"场景确认（{entry}）")
+        try:
+            job = tasker.post_task(entry, override or {})
+            job.wait()
+        finally:
+            clear_current_task()
         ok = bool(job.succeeded)
         self.log(f"场景确认：{entry} → {'已处理' if ok else '没有命中事件'}")
         return ok
@@ -647,6 +694,7 @@ class Runtime:
             self.task_state = "running"
             self.task_name = name or entry
             self.last_error = ""
+            write_current_task(entry, self.task_name)
             self.log(f"开始任务：{self.task_name}（{entry}），override 节点 {len(override)} 个")
 
         def worker() -> None:
@@ -678,15 +726,24 @@ class Runtime:
                 job = self.tasker.post_task(entry, override)
                 job.wait()
                 ok = job.succeeded
-                state = "done" if ok else "failed"
-                if not ok:
-                    error = self.stuck_reason or (
-                        "MaaFramework 返回失败：任务节点没有走完（多为识别超时或界面卡住）"
-                    )
+                paused_for_child = False
+                if not ok and self._child_alert_since(started):
+                    # 好娃提醒由 Agent 主动 post_stop，Maa 会返回失败；
+                    # 这是按设计暂停，不应当成报错，也不弹报错截图。
+                    paused_for_child = True
+                    state = "done"
+                    error = ""
+                    self.log("好娃提醒触发：任务按设计暂停，不计为失败")
+                else:
+                    state = "done" if ok else "failed"
+                    if not ok:
+                        error = self.stuck_reason or (
+                            "MaaFramework 返回失败：任务节点没有走完（多为识别超时或界面卡住）"
+                        )
                 self.stuck_reason = ""
                 with self.lock:
                     self.task_state = state
-                if not ok:
+                if not ok and not paused_for_child:
                     self.capture_error(
                         "task",
                         f"任务失败：{name or entry}",
@@ -699,7 +756,10 @@ class Runtime:
                         },
                         dedupe_key=f"task|{entry}",
                     )
-                self.log(f"任务结束：{self.task_name} → {'成功' if ok else '失败'}")
+                if paused_for_child:
+                    self.log(f"任务结束：{self.task_name} → 已暂停（好娃提醒）")
+                else:
+                    self.log(f"任务结束：{self.task_name} → {'成功' if ok else '失败'}")
             except Exception as exc:  # noqa: BLE001
                 error = str(exc)
                 with self.lock:
@@ -717,6 +777,7 @@ class Runtime:
                 self.log(f"任务异常：{exc}")
             finally:
                 monitor_stop.set()
+                clear_current_task()
                 with self.lock:
                     self.history.appendleft(
                         {

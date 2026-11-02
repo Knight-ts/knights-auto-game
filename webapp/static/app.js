@@ -13,6 +13,9 @@ const state = {
   combos: [], comboModules: [], comboSelections: {}, comboIndex: -1, comboRunning: null,
   comboOpenSteps: new Set(),
   selfheal: { items: [], detail: null, selected: "", stats: {}, repair: {} },
+  scenes: { data: null, tableKey: "", recentKey: "" },
+  unknowns: { data: null, items: [], presets: [], defaultRoute: {}, stats: {}, key: "" },
+  source: { path: "", line: 0 },
 };
 const timers = {};
 let selectionTimer = null;
@@ -94,6 +97,11 @@ function switchTab(name) {
   clearInterval(timers.combos);
   clearInterval(timers.selfheal);
   clearInterval(timers.tprec);
+  clearInterval(timers.scenes);
+  if (name === "home") {
+    loadScenes(true);
+    timers.scenes = setInterval(() => { if (state.activeTab === "home") loadScenes(true); }, 10000);
+  }
   if (name === "shot") { refreshShot(); timers.shot = setInterval(() => { if ($("shotAuto").checked) refreshShot(); }, 2000); }
   if (name === "logs") { loadLogs(); timers.logs = setInterval(() => { if ($("logAuto").checked) loadLogs(); }, 1500); }
   if (name === "tasks") { loadTasks(); loadTaskpack(); }
@@ -200,6 +208,303 @@ async function stopAgent() {
     await refreshState();
   } catch (error) {
     banner("err", [error.message]);
+  }
+}
+
+/* ------------------------------------------------------------ 场景处理（月度循环） */
+
+async function loadScenes(silent, force) {
+  try {
+    const data = await api("/api/scenes");
+    state.scenes.data = data;
+    const tableKey = [
+      data.updated, data.count, data.routes_updated,
+      (data.scenes || []).map((scene) => `${scene.id}${scene.new ? "*" : ""}${scene.route ? scene.route.id : ""}`).join(","),
+    ].join("|");
+    if (force || state.scenes.tableKey !== tableKey) {
+      state.scenes.tableKey = tableKey;
+      renderSceneGroups(data.groups || []);
+      renderScenes();
+    }
+    renderSceneRecent(data);
+    await loadUnknowns(true);
+    return data;
+  } catch (error) {
+    if (!silent) banner("err", ["读取场景处理失败：" + error.message]);
+    const body = $("sceneBody");
+    if (body) body.innerHTML = `<tr><td colspan="4" class="empty">读取失败：${esc(error.message)}</td></tr>`;
+    return null;
+  }
+}
+
+function renderSceneGroups(groups) {
+  const select = $("sceneGroup");
+  if (!select) return;
+  const existing = [...select.options].slice(1).map((option) => option.value);
+  if (existing.length === groups.length && groups.every((group, i) => group === existing[i])) return;
+  const current = select.value;
+  select.innerHTML = '<option value="">全部类别</option>' +
+    groups.map((group) => `<option value="${esc(group)}">${esc(group)}</option>`).join("");
+  if (groups.includes(current)) select.value = current;
+}
+
+function renderScenes() {
+  const data = state.scenes.data;
+  if (!data) return;
+  const body = $("sceneBody");
+  if (!body) return;
+  const wrap = body.closest(".scene-table-wrap");
+  const scrollTop = wrap ? wrap.scrollTop : 0;
+  const query = ($("sceneSearch").value || "").trim().toLowerCase();
+  const group = $("sceneGroup").value || "";
+  const items = (data.scenes || []).filter((scene) => {
+    if (group && scene.group !== group) return false;
+    if (!query) return true;
+    const haystack = [
+      scene.name, scene.group, scene.when, scene.then, scene.handler,
+      scene.route ? scene.route.label : "", scene.route ? (scene.route.steps || []).join(" ") : "",
+      (scene.nodes || []).join(" "),
+    ].join(" ").toLowerCase();
+    return haystack.includes(query);
+  });
+
+  $("sceneCount").textContent = `${items.length}/${data.count || items.length} 个场景`;
+  $("sceneUpdated").textContent = data.updated ? `更新：${data.updated}` : "";
+  const newScenes = (data.scenes || []).filter((scene) => scene.new).map((scene) => scene.name);
+  const newBadge = $("sceneNewBadge");
+  newBadge.hidden = !newScenes.length;
+  if (newScenes.length) newBadge.textContent = `新增：${newScenes.join(" / ")}`;
+
+  body.innerHTML = items.length ? items.map((scene) => {
+    const nodes = (scene.nodes || []).map((node) => `<code>${esc(node)}</code>`).join(" ");
+    const task = scene.task
+      ? `<button class="btn small" data-scene-task="${esc(scene.task)}">去任务</button>`
+      : '<span class="hint">—</span>';
+    const newBadge = scene.new ? '<span class="badge new">新</span>' : "";
+    const note = scene.note ? `<div class="hint scene-note">${esc(scene.note)}</div>` : "";
+    const handler = scene.handler
+      ? `<button class="link-btn mono" data-source-symbol="${esc(scene.handler)}" title="查看处理函数源码">${esc(scene.handler)}</button>`
+      : ((scene.nodes || []).length
+        ? `<button class="link-btn" data-source-node="${esc(scene.nodes[0])}" title="查看识别节点源码">源码</button>`
+        : "");
+    const route = scene.route
+      ? `<div class="hint scene-route">返回：${esc(scene.route.label)} <code>${esc((scene.route.steps || []).join(" → "))}</code>`
+        + (scene.route.symbol
+          ? ` <button class="link-btn" data-source-symbol="${esc(scene.route.symbol)}" title="查看返回逻辑源码">实现</button>`
+          : "")
+        + "</div>"
+      : "";
+    return `<tr class="${scene.new ? "scene-row-new" : ""}">
+      <td>
+        <div class="scene-name">${esc(scene.name)}${newBadge}</div>
+        <span class="badge">${esc(scene.group || "其他")}</span>
+        ${handler}
+      </td>
+      <td>${esc(scene.when)}${nodes ? `<div class="scene-nodes">${nodes}</div>` : ""}</td>
+      <td>${esc(scene.then)}${note}${route}</td>
+      <td>${task}</td>
+    </tr>`;
+  }).join("") : '<tr><td colspan="4" class="empty">没有匹配的场景</td></tr>';
+  if (wrap) wrap.scrollTop = scrollTop;
+}
+
+function renderSceneRecent(data) {
+  const recent = data.recent || [];
+  const guard = data.guard || {};
+  const guardEvents = guard.events || [];
+  const labels = {
+    mercenary_baby: "佣兵生娃",
+    mercenary_join: "佣兵加入",
+    child_death: "孩子夭折",
+    annual_closing: "年度结算",
+    popup_tip: "提示弹窗",
+    ration_prepay: "口粮预交",
+    ration_short: "口粮不足",
+    ration_prepay_failed: "口粮预交点确定失败",
+    unknown_recovered: "未知界面已恢复",
+    unknown_recorded: "未知界面已记录",
+  };
+  const key = `${(recent || []).join("|")}::${guard.time}::${guardEvents.join("|")}`;
+  if (state.scenes.recentKey === key) return;
+  state.scenes.recentKey = key;
+  const guardText = guardEvents.map((event) => labels[event] || event).join("、");
+  $("sceneGuardHint").textContent = guard.time
+    ? `上次场景确认：${guard.time}${guardEvents.length ? "（处理 " + guardText + "）" : "（没有短事件）"}`
+    : "";
+  $("sceneRecent").innerHTML = recent.length
+    ? recent.map((line) => `<li>${esc(line)}</li>`).join("")
+    : '<li class="empty">还没有记录</li>';
+}
+
+async function gotoSceneTask(entry) {
+  if (!entry) return;
+  try {
+    if (!state.tasks.length) await fetchTasks();
+    const index = state.tasks.findIndex((task) => task.entry === entry);
+    if (index < 0) {
+      banner("err", [`任务列表里没有入口 ${entry}（可能已隐藏或未打包）`]);
+      return;
+    }
+    switchTab("tasks");
+    selectTask(index);
+  } catch (error) {
+    banner("err", ["打开任务失败：" + error.message]);
+  }
+}
+
+/* ------------------------------------------------------------ 未知界面 + 源码定位 */
+
+async function loadUnknowns(silent) {
+  try {
+    const data = await api("/api/unknowns");
+    state.unknowns.data = data;
+    state.unknowns.items = data.items || [];
+    state.unknowns.presets = data.presets || [];
+    state.unknowns.defaultRoute = data.default || {};
+    state.unknowns.stats = data.stats || {};
+    renderUnknowns();
+    return data;
+  } catch (error) {
+    if (!silent) banner("err", ["读取未知界面记录失败：" + error.message]);
+    return null;
+  }
+}
+
+function unknownRouteOptions(selected) {
+  const data = state.unknowns || {};
+  const presetIds = (data.presets || []).map((preset) => preset.id);
+  const chosen = presetIds.includes(selected) ? selected : "";
+  const label = (data.defaultRoute && data.defaultRoute.label) || "默认路线";
+  const steps = ((data.defaultRoute && data.defaultRoute.steps) || []).join(" → ");
+  const opts = [`<option value=""${chosen ? "" : " selected"}>${esc(label)}${steps ? "（" + esc(steps) + "）" : ""}</option>`];
+  for (const preset of data.presets || []) {
+    opts.push(
+      `<option value="${esc(preset.id)}"${preset.id === chosen ? " selected" : ""}>${esc(preset.label)}（${esc((preset.steps || []).join(" → "))}）</option>`
+    );
+  }
+  return opts.join("");
+}
+
+function renderUnknowns() {
+  const data = state.unknowns || {};
+  const items = data.items || [];
+  const stats = data.stats || {};
+  const count = $("unknownCount");
+  if (count) {
+    count.textContent = `${items.length} 条` + (stats.hits ? ` · 遇到 ${stats.hits} 次` : "")
+      + (stats.routed ? ` · ${stats.routed} 条已配返回` : "");
+  }
+  const list = $("unknownList");
+  if (!list) return;
+  const key = [
+    stats.total, stats.hits, stats.routed,
+    items.map((item) => [item.id, item.hits, item.route_id, item.note, item.has_image].join(":")).join(","),
+  ].join("|");
+  if (state.unknowns.key === key) return;
+  state.unknowns.key = key;
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty">还没有记录。遇到认不出的画面时，会先点 3 个安全位置；画面仍无变化才记在这里。</div>';
+    return;
+  }
+
+  list.innerHTML = items.map((item) => {
+    const attempts = (item.attempts || []).map((step) => {
+      const mark = step.changed === true ? "（变了）" : step.changed === false ? "（没变）" : "";
+      return `${esc(step.step)}${mark}`;
+    }).join(" → ") || "—";
+    const probes = (item.probes || [])
+      .filter((probe) => probe.hit || Number(probe.score || 0) >= 0.6)
+      .map((probe) => `${esc(probe.node)}（${esc(probe.score)}）`)
+      .join("、");
+    const shot = item.has_image
+      ? `<a class="unknown-shot-link" href="/api/unknowns/image?id=${encodeURIComponent(item.id)}" target="_blank" rel="noreferrer" title="点开大图"><img class="unknown-shot" src="/api/unknowns/image?id=${encodeURIComponent(item.id)}" alt="未知界面截图" loading="lazy"></a>`
+      : '<div class="unknown-shot empty">无截图</div>';
+    const source = item.source_path
+      ? `<button class="link-btn mono" data-source-path="${esc(item.source_path)}" data-source-line="${item.source_line || 1}">${esc(item.source_path)}:${item.source_line || 0} ${esc(item.source_function || "")}</button>`
+      : '<span class="hint">来源未知（没有调用栈）</span>';
+    return `<div class="unknown-item" data-id="${esc(item.id)}">
+      ${shot}
+      <div class="unknown-body">
+        <div class="unknown-line">
+          <strong>${esc(item.created_at)}</strong>
+          <span class="badge">${esc(item.task || item.entry || "未知任务")}</span>
+          <span class="hint">命中 ${item.hits || 1} 次</span>
+          ${item.route_saved ? '<span class="badge new">已配返回</span>' : ""}
+        </div>
+        <div class="unknown-line">${source}</div>
+        <div class="unknown-line hint">点过：${attempts}</div>
+        ${probes ? `<div class="unknown-line hint">可疑识别：${probes}</div>` : ""}
+        ${item.reason ? `<div class="unknown-line hint">原因：${esc(item.reason)}</div>` : ""}
+        <div class="unknown-line">
+          <select data-unknown-route="${esc(item.id)}">${unknownRouteOptions(item.route_id)}</select>
+          <button class="btn small" data-unknown-save="${esc(item.id)}">保存返回方式</button>
+          <button class="btn small" data-unknown-note="${esc(item.id)}">备注</button>
+          <button class="btn small danger" data-unknown-delete="${esc(item.id)}">删除</button>
+        </div>
+        ${item.note ? `<div class="hint unknown-note">备注：${esc(item.note)}</div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function saveUnknownRoute(id, routeId) {
+  try {
+    await post("/api/unknowns/route", { id, route: routeId });
+    banner("ok", [routeId ? "返回方式已保存：下次遇到同一画面会照着这几步点" : "已改回默认返回方式"]);
+    state.unknowns.key = "";
+    await loadUnknowns(true);
+  } catch (error) {
+    banner("err", ["保存返回方式失败：" + error.message]);
+  }
+}
+
+async function showSource({ symbol, node, path, line }) {
+  try {
+    const query = new URLSearchParams();
+    if (symbol) query.set("symbol", symbol);
+    if (node) query.set("node", node);
+    if (path) query.set("path", path);
+    if (line) query.set("line", String(line));
+    const data = await api("/api/source?" + query.toString());
+    const code = data.code;
+    if (!code) {
+      banner("err", ["没有找到对应的源码位置"]);
+      return;
+    }
+    state.source = { path: code.path, line: code.line };
+    const name = code.path.split("/").pop();
+    $("sourceTitle").textContent = `源码 · ${name}`;
+    $("sourceMeta").textContent = `${code.path}:${code.line}` +
+      ((data.locations || []).length > 1 ? `（共 ${data.locations.length} 处，点下面切换）` : "");
+    $("sourceCode").textContent = code.text;
+    $("sourceLocations").innerHTML = (data.locations || []).length > 1
+      ? data.locations.map((loc) =>
+          `<button class="link-btn mono" data-source-path="${esc(loc.path)}" data-source-line="${loc.line}">${esc(loc.path)}:${loc.line}${loc.qualname && loc.qualname !== loc.name ? " " + esc(loc.qualname) : ""}</button>`
+        ).join(" ")
+      : `<span>${esc(data.uri || "")}</span>`;
+    const dialog = $("sourceDialog");
+    if (dialog && typeof dialog.showModal === "function") {
+      if (!dialog.open) dialog.showModal();
+    } else if (dialog) {
+      dialog.setAttribute("open", "");
+    }
+  } catch (error) {
+    banner("err", ["读取源码失败：" + error.message]);
+  }
+}
+
+async function openSourceInEditor() {
+  if (!state.source.path) return;
+  try {
+    const result = await post("/api/source/open", state.source);
+    if (result.ok) {
+      banner("ok", [`已用 ${result.opened} 打开 ${result.path}:${result.line}` + (result.note ? `（${result.note}）` : "")]);
+    } else {
+      banner("err", ["打开编辑器失败：" + (result.error || "未知原因"), `可以复制这个链接打开：${result.uri || ""}`]);
+    }
+  } catch (error) {
+    banner("err", ["打开编辑器失败：" + error.message]);
   }
 }
 
@@ -1482,6 +1787,86 @@ $("btnConnect").addEventListener("click", connectDevice);
 $("btnScan").addEventListener("click", refreshState);
 $("btnAgentStart").addEventListener("click", startAgent);
 $("btnAgentStop").addEventListener("click", stopAgent);
+$("btnSceneReload").addEventListener("click", () => loadScenes(false, true));
+$("sceneSearch").addEventListener("input", renderScenes);
+$("sceneGroup").addEventListener("change", renderScenes);
+$("sceneBody").addEventListener("click", (e) => {
+  const taskBtn = e.target.closest("button[data-scene-task]");
+  if (taskBtn) { gotoSceneTask(taskBtn.dataset.sceneTask); return; }
+  const symbolBtn = e.target.closest("button[data-source-symbol]");
+  if (symbolBtn) { showSource({ symbol: symbolBtn.dataset.sourceSymbol }); return; }
+  const nodeBtn = e.target.closest("button[data-source-node]");
+  if (nodeBtn) { showSource({ node: nodeBtn.dataset.sourceNode }); }
+});
+
+$("btnUnknownReload").addEventListener("click", () => {
+  state.unknowns.key = "";
+  loadUnknowns(false);
+});
+$("btnUnknownClear").addEventListener("click", async () => {
+  if (!confirm("清空全部未知界面记录？截图和记录都会删除，不能恢复（返回方式表不受影响）。")) return;
+  try {
+    const result = await post("/api/unknowns/clear", { confirm: true });
+    banner("ok", [`已清空 ${result.removed || 0} 条未知界面记录`]);
+    state.unknowns.key = "";
+    await loadUnknowns(true);
+  } catch (error) {
+    banner("err", ["清空失败：" + error.message]);
+  }
+});
+$("unknownList").addEventListener("click", async (e) => {
+  const saveBtn = e.target.closest("button[data-unknown-save]");
+  if (saveBtn) {
+    const id = saveBtn.dataset.unknownSave;
+    const select = e.target.closest(".unknown-item")?.querySelector("select[data-unknown-route]");
+    await saveUnknownRoute(id, select ? select.value : "");
+    return;
+  }
+  const noteBtn = e.target.closest("button[data-unknown-note]");
+  if (noteBtn) {
+    const id = noteBtn.dataset.unknownNote;
+    const current = (state.unknowns.items || []).find((item) => item.id === id);
+    const text = prompt("备注（只给自己看，会写进 debug/unknown）", (current && current.note) || "");
+    if (text === null) return;
+    try {
+      await post("/api/unknowns/note", { id, note: text });
+      banner("ok", ["备注已保存"]);
+      state.unknowns.key = "";
+      await loadUnknowns(true);
+    } catch (error) {
+      banner("err", ["保存备注失败：" + error.message]);
+    }
+    return;
+  }
+  const deleteBtn = e.target.closest("button[data-unknown-delete]");
+  if (deleteBtn) {
+    if (!confirm("删除这条未知界面记录？截图和记录都会删除，不能恢复。")) return;
+    try {
+      await post("/api/unknowns/delete", { id: deleteBtn.dataset.unknownDelete });
+      banner("ok", ["已删除"]);
+      state.unknowns.key = "";
+      await loadUnknowns(true);
+    } catch (error) {
+      banner("err", ["删除失败：" + error.message]);
+    }
+    return;
+  }
+  const sourceBtn = e.target.closest("button[data-source-path]");
+  if (sourceBtn) {
+    showSource({ path: sourceBtn.dataset.sourcePath, line: Number(sourceBtn.dataset.sourceLine || 1) });
+  }
+});
+
+$("btnSourceOpen").addEventListener("click", openSourceInEditor);
+$("btnSourceClose").addEventListener("click", () => {
+  const dialog = $("sourceDialog");
+  if (dialog && typeof dialog.close === "function") dialog.close();
+  else if (dialog) dialog.removeAttribute("open");
+});
+$("sourceLocations").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-source-path]");
+  if (btn) showSource({ path: btn.dataset.sourcePath, line: Number(btn.dataset.sourceLine || 1) });
+});
 $("btnRun").addEventListener("click", runTask);
 $("btnRenameTask").addEventListener("click", renameTask);
 $("btnDeleteTask").addEventListener("click", deleteTask);
@@ -2052,3 +2437,7 @@ renderRuleSelects();
 clearSelfhealDetail();
 refreshState();
 setInterval(refreshState, 3000);
+loadScenes();
+if (!timers.scenes) {
+  timers.scenes = setInterval(() => { if (state.activeTab === "home") loadScenes(true); }, 10000);
+}

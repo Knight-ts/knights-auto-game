@@ -296,7 +296,7 @@
     "CastleMarryJustThisReadName": {
         "recognition": "OCR",
         "expected": [
-            "确认向[一-龥]{1,5}发送"
+            "确认向[一-龥]{1,10}发送"
         ],
         "roi": [
             84,
@@ -514,6 +514,44 @@
         "timeout": 1000,
         "enabled": true
     },
+    "MarryCheckOn": {
+        "attach": {
+            "description": "筛选面板：已勾选的复选框（模板，配合 ROI 覆盖判断某个爵位勾没勾）"
+        },
+        "recognition": "TemplateMatch",
+        "template": [
+            "Marry/check_on.png"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "threshold": 0.8,
+        "action": "DoNothing",
+        "timeout": 1000,
+        "enabled": true
+    },
+    "MarryCheckOff": {
+        "attach": {
+            "description": "筛选面板：未勾选的复选框（模板）"
+        },
+        "recognition": "TemplateMatch",
+        "template": [
+            "Marry/check_off.png"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "threshold": 0.8,
+        "action": "DoNothing",
+        "timeout": 1000,
+        "enabled": true
+    },
     "MarryAgeMax": {
         "attach": {
             "description": "相亲年龄上限（0 = 不限）"
@@ -589,11 +627,28 @@
     },
     "MarryBanquetSelect": {
         "attach": {
-            "description": "婚礼宴会档位（auto 按爵位 / 乡村宴会 / 祝福婚宴）"
+            "description": "婚礼宴会档位（auto 按爵位 / 秘密婚礼 / 简约聚会 / 祝福婚宴 / 乡村筵席 / 其他八个档位）"
         },
         "recognition": "OCR",
         "expected": [
             "auto"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "MarryBanquetCustom": {
+        "attach": {
+            "description": "自定义宴会档位名（非空时优先于下拉选项，直接按游戏里的名字点）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "none"
         ],
         "roi": [
             0,
@@ -791,5 +846,26 @@
         "action": "Click",
         "post_delay": 800,
         "timeout": 2000
+    },
+    "CastleMarryBusyTip": {
+        "attach": {
+            "description": "角色属性页上的气泡提示（如「我的求婚信才刚刚发出去，伙计。」），会挡住返回，需要先点掉"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "求婚信",
+            "伙计",
+            "刚刚发出去",
+            "正在相亲"
+        ],
+        "roi": [
+            150,
+            640,
+            520,
+            220
+        ],
+        "action": "Click",
+        "post_delay": 600,
+        "timeout": 1500
     }
 }

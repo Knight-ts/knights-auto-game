@@ -36,6 +36,12 @@ class MarryProcessor(CustomAction):
     处理联姻相关任务
     """
 
+    # 点「就这个」后等「确认向XXX发送」的时限，超时视为该候选无法相亲
+    SEND_TIMEOUT = 5.0
+    # 联姻列表里看角色属性要点住不放：先 3 秒，不行再 5 秒
+    LONG_PRESS_MS = 3000
+    LONG_PRESS_MAX_MS = 5000
+
     def __init__(self) -> None:
         super().__init__()
         self.all_boxes = []
@@ -105,6 +111,11 @@ class MarryProcessor(CustomAction):
         self._age_max = 0  # 年龄上限，0 = 不限
         self._age_order_mode = "auto"  # 年龄排序：auto / desc（大→小）/ asc（小→大）
         self._name_attempts = 0  # 本次姓名匹配实际尝试次数
+        self._card_cursor = 0  # 没有「下一位」时按网格点下一个候选格的游标
+        self._detail_fail_streak = 0  # 连续打不开角色详情的次数（判断列表到底）
+        self._in_detail = False  # 当前是否停在角色属性页（需要退回列表）
+        self._current_box = None  # 当前正在处理的卡片位置（退回列表后轻点选中用）
+        self._stop_requested = False  # 需要提前结束整轮相亲（回不到主界面等）
         self._target_race_option = "不限"  # 我方种族（过滤自己家族的候选），不限 = 不按种族过滤
         self._target_race_wanted = "same"  # 对方种族，same = 跟随我方
         self._full_blood_only = False  # 是否只相亲纯血（血统 100%）
@@ -261,45 +272,20 @@ class MarryProcessor(CustomAction):
             return CustomAction.RunResult(success=False)
 
         # 正式处理阶段
-        self._current_max_attempts = self._objects_count
+        # 正式处理阶段：逐个娃处理，每个娃先读血统定种族/国家，再按姓名发一封
+        self._current_max_attempts = max(1, int(self._objects_count or 1))
 
-        # 获取用户选择的相亲种族（单角色模式必须指定种族；「不限」按高阶精灵处理）
-        self._target_race = self._target_race_option
-        if self._target_race == "不限":
-            logger.warning("单角色相亲必须指定种族，「不限」按高阶精灵处理")
-            self._target_race = "高阶精灵"
-        self._target_country = self.race_country_mapping.get(self._target_race, "未知")
-        self._current_race = self._target_race  # 用于面部特征识别
+        candidates = self._find_available_candidates(context)
+        if not candidates:
+            logger.warning("没有可相亲的对象，结束本次相亲")
+            return CustomAction.RunResult(success=False)
 
+        self._total_candidates = len(candidates)
         logger.info(
-            f"选择的相亲种族: {self._target_race}，对应的国家: {self._target_country}"
+            f"本批可相亲娃 {len(candidates)} 个，回信 {self._email_current}/{self._email_total}"
         )
 
-        # 点「联姻」进候选人窗口之前，先清掉可能残留的被拒弹窗
-        self._handle_marry_reject(context)
-
-        select_result = self._run_task_bounded(
-            context,
-            "CastleMarrySelectStart",
-            pipeline_override={
-                "CastleMarrySelectCountry": {"expected": [self._target_country]}
-            },
-            timeout=25.0,
-        )
-        if select_result is None:
-            logger.error("选择联姻国家超时（子任务卡住），停止本次相亲")
-            return CustomAction.RunResult(success=False)
-        if not self._task_ok(select_result):
-            logger.warning("选择联姻国家未成功，停止本次相亲")
-            return CustomAction.RunResult(success=False)
-
-        # 执行基于血统的匹配或特征匹配
-        if self._mode == "trait":
-            logger.info("开始执行特征匹配")
-            self._execute_chat_matching(context)
-        else:
-            logger.info(f"开始执行血统匹配，目标种族: {self._target_race}")
-            self._execute_high_blood_matching(context, self._target_race)
+        self._run_candidate_queue(context, candidates)
 
         # 后处理：记录完成日志
         self._post_process()
@@ -775,17 +761,34 @@ class MarryProcessor(CustomAction):
         self._total_candidates = len(candidates)
         self._candidate_index = 0
 
-        for row_idx, col_idx, box in candidates:
+        self._run_candidate_queue(context, candidates)
+
+    def _run_candidate_queue(self, context: Context, candidates: list) -> None:
+        """逐娃处理队列。
+
+        关键：一个娃发送成功后会从列表里消失，后面的卡片整体前移一格，
+        所以此时 **index 不能加**（同一个网格位置现在就是下一个娃）。
+        只有「跳过这个娃」（血统不符/年龄不符/进不去详情）时 index 才 +1。
+        否则会像之前那样跳过一个娃、直接看第三个。
+        """
+        index = 0
+        while index < len(candidates):
             if context.tasker.stopping:
                 logger.info("相亲任务已停止")
                 break
-
-            # 检查是否应该继续处理
-            if not self._should_continue():
-                logger.info("检测到联姻条件不满足，停止处理")
+            if self._stop_requested or self._email_full() or not self._should_continue():
+                logger.info("回信已满或流程已结束，停止相亲")
+                break
+            if self._detail_fail_streak >= 3:
+                logger.info("连续 3 次打不开角色详情，列表里没有可相亲的娃了")
                 break
 
-            self._process_single_candidate(context, box)
+            before = self._email_current
+            self._process_single_candidate(context, candidates[index][2])
+            if self._email_current > before:
+                logger.info("这个娃已发出联姻请求（卡片移出列表），继续看同一格的下一个娃")
+                continue
+            index += 1
 
     def _should_continue(self) -> bool:
         """检查是否应该继续处理下一个相亲对象"""
@@ -806,10 +809,15 @@ class MarryProcessor(CustomAction):
 
         # 3.1 点击选中角色并进入详情
         if not self._enter_role_details(context, roleBoxCenter):
+            # 进不去详情：可能列表到底/卡片被移走，退回主界面再让外层换下一个
+            self._detail_fail_streak += 1
+            self._back_to_marry_main(context)
             return
+        self._detail_fail_streak = 0
 
         # 3.2 读取年龄并按偏好过滤
         if not self._check_and_filter_by_age(context):
+            self._back_to_marry_main(context)
             return
 
         # 3.3 提取血统信息并确定联姻目标（我方种族 / 对方种族 / 对方国家）
@@ -818,20 +826,23 @@ class MarryProcessor(CustomAction):
         )
         if not own_race:
             # 纯血过滤没通过（日志已在里面打了）
+            self._back_to_marry_main(context)
             return
 
         self._current_race = target_race  # 对方种族，供面部特征识别使用
 
-        # 3.3.1 按「我方种族」过滤：自己家族的公爵血统对不上就跳过
+        # 3.3.1 按「我方种族」过滤：自己家族的公爵血统对不上就跳过（跳下一个娃，不结束）
         if not self._race_matches(own_race):
             logger.info(
                 f"我方候选血统 {own_race} 与「我方种族」"
-                f"{self._target_race_option} 不符，跳过"
+                f"{self._target_race_option} 不符，跳过这个娃，继续下一个"
             )
+            self._back_to_marry_main(context)
             return
 
         if not target_country or target_country == "未知":
-            logger.warning(f"未识别到联姻国家")
+            logger.warning(f"未识别到联姻国家，跳过这个娃")
+            self._back_to_marry_main(context)
             return
 
         # 计算当前候选人的最大尝试次数（向上取整均分）
@@ -847,7 +858,13 @@ class MarryProcessor(CustomAction):
         )
 
         # 3.4 进入正式相亲页面进行匹配
+        self._current_box = box  # 退回列表后要轻点这张卡，选中要联姻的娃
         self._execute_marriage_matching(context, target_race, target_country)
+
+        # 3.5 回到联姻主界面，准备处理下一个娃
+        if not self._stop_requested and not self._back_to_marry_main(context):
+            logger.warning("发送后回不到联姻主界面，停止本次相亲")
+            self._stop_requested = True
 
         logger.info(f"完成第{self._processed_count}个角色的处理")
         self._candidate_index += 1
@@ -855,33 +872,32 @@ class MarryProcessor(CustomAction):
     def _enter_role_details(self, context: Context, roleBoxCenter: tuple) -> bool:
         """选中角色并进入详情：优先点“了解TA”，不行再长按卡片。"""
         x, y = roleBoxCenter
-        context.tasker.controller.post_click(x, y).wait()
-        time.sleep(0.4)
 
         def detail_visible() -> bool:
             img = context.tasker.controller.post_screencap().wait().get()
             return context.run_recognition("CastleMarry_AgeCheck", img).hit
 
-        if detail_visible():
-            return True
+        # 联姻界面单击通常只是选中，看属性必须**长按 2~5 秒**；
+        # 先长按 3 秒，不行再试「了解TA」，最后长按 5 秒。
+        for duration in (self.LONG_PRESS_MS, self.LONG_PRESS_MAX_MS):
+            logger.info(f"长按卡片 {duration / 1000:.1f}s 查看角色详情")
+            context.tasker.controller.post_swipe(x, y, x, y, duration).wait()
+            time.sleep(0.6)
+            if detail_visible():
+                logger.info("已通过长按进入角色详情")
+                self._in_detail = True
+                return True
 
         # 选中后通常会出现“了解TA/了解全部”
+        context.tasker.controller.post_click(x, y).wait()
+        time.sleep(0.4)
         for node in ("CastleMarryGetInfoButton", "CastleMarryGetInfoButtonAll"):
             context.run_task(node)
             time.sleep(0.5)
             if detail_visible():
                 logger.info(f"已通过 {node} 进入角色详情")
+                self._in_detail = True
                 return True
-
-        # 兜底：长按卡片中心（target 需要矩形，不能传点）
-        context.run_task(
-            "LongPressRole",
-            pipeline_override={"LongPressRole": {"target": [x - 6, y - 6, 12, 12]}},
-        )
-        time.sleep(0.6)
-        if detail_visible():
-            logger.info("已通过长按进入角色详情")
-            return True
 
         logger.warning("未能进入角色详情，跳过该候选人")
         return False
@@ -959,30 +975,140 @@ class MarryProcessor(CustomAction):
         target_country: str,
     ) -> None:
         """执行联姻匹配流程（分支点）"""
-        context.run_task("BackButton_500ms")
-        context.run_task(
-            "CastleMarrySelectStart",
-            pipeline_override={
-                "CastleMarrySelectCountry": {"expected": [target_country]}
-            },
-        )
+        self._leave_detail(context)
+        # 退回列表后必须轻点这个角色，否则「联姻」默认用的是列表第一个娃（种族就不是刚查的那个了）
+        self._tap_current_card(context)
+        if not self._select_country(context, target_country):
+            logger.warning(f"没能进入「{target_country}」的候选列表，跳过这个娃")
+            self._stop_requested = not self._back_to_marry_main(context)
+            return
 
         if self._mode == "trait":
             self._execute_chat_matching(context)
         else:
             self._execute_high_blood_matching(context, target_race)
 
+    def _tap_current_card(self, context: Context) -> bool:
+        """轻点当前卡片，把「联姻」的目标选中成刚查过属性的这个娃。
+
+        长按看完属性退回列表后，游戏仍停在上一次选中的角色上（默认第一个），
+        不轻点一下就会给错人发求婚信。
+        """
+        box = getattr(self, "_current_box", None)
+        if not box:
+            logger.warning("没有记录当前卡片位置，跳过轻点选中")
+            return False
+        x = box[0] + box[2] // 2
+        y = box[1] + box[3] // 2
+        context.tasker.controller.post_click(x, y).wait()
+        time.sleep(0.6)
+        logger.info(f"轻点卡片 ({x},{y}) 选中要联姻的娃")
+        return True
+
+    def _select_country(self, context: Context, country: str) -> bool:
+        """点「联姻」→ 在国家列表里找到 country → 确定。
+
+        不用 pipeline 里的 JumpBack 循环：找不到国家时会一直翻页，
+        以前就是这样卡满 25 秒看门狗。这里最多翻 8 页，失败就返回 False。
+        """
+        override = {"expected": [country]}
+        result = context.run_task(
+            "CastleMarrySelectStart",
+            pipeline_override={"CastleMarrySelectStart": {"next": []}},
+        )
+        if not self._task_ok(result):
+            logger.warning("没找到「联姻」按钮，可能不在联姻主界面")
+            return False
+
+        time.sleep(0.6)
+        for page in range(8):
+            img = context.tasker.controller.post_screencap().wait().get()
+            if context.run_recognition("CastleMarrySelectReject", img).hit:
+                logger.info("出现「被拒绝啦」提示，本次相亲结束")
+                return False
+            hit = context.run_recognition(
+                "CastleMarrySelectCountry",
+                img,
+                pipeline_override={"CastleMarrySelectCountry": override},
+            )
+            if hit.hit:
+                logger.info(f"选择联姻国家：{country}（第 {page + 1} 页）")
+                context.run_task(
+                    "CastleMarrySelectCountry",
+                    pipeline_override={"CastleMarrySelectCountry": override},
+                )
+                context.run_task("CastleMarrySelectCountryConfirm")
+                return True
+            context.run_task("CastleMarrySelectCountrySweepDown")
+
+        logger.warning(f"翻遍国家列表也没找到「{country}」")
+        return False
+
+    def _busy_tip_visible(self, context: Context, img=None) -> bool:
+        if img is None:
+            img = context.tasker.controller.post_screencap().wait().get()
+        return bool(context.run_recognition("CastleMarryBusyTip", img).hit)
+
+    def _dismiss_marry_busy_tip(self, context: Context) -> bool:
+        """点掉「我的求婚信才刚刚发出去，伙计。」这类气泡，它会挡住返回。"""
+        img = context.tasker.controller.post_screencap().wait().get()
+        if not context.run_recognition("CastleMarryBusyTip", img).hit:
+            return False
+        logger.info("角色属性页有气泡提示挡住返回，先点掉")
+        context.run_task("CastleMarryBusyTip")
+        time.sleep(0.6)
+        return True
+
+    def _leave_detail(self, context: Context) -> None:
+        """从角色属性页退回联姻列表（只退一层）。"""
+        if not getattr(self, "_in_detail", False):
+            return
+        self._dismiss_marry_busy_tip(context)
+        context.run_task("BackButton_500ms")
+        time.sleep(0.7)
+        self._in_detail = False
+        # 气泡后弹/挡住时会没退出去，再处理一次
+        if self._busy_tip_visible(context):
+            self._dismiss_marry_busy_tip(context)
+            context.run_task("BackButton_500ms")
+            time.sleep(0.6)
+
+    def _back_to_marry_main(self, context: Context, attempts: int = 3) -> bool:
+        """回到联姻主界面。
+
+        注意：角色属性页盖上来时「剩余相亲对象数量」仍然可见，光看这个文字会误判成
+        「已经在列表」，结果详情页一直不关、反复重复看同一个娃。所以先按状态位退一层。
+        """
+        self._leave_detail(context)
+        for _ in range(attempts):
+            img = context.tasker.controller.post_screencap().wait().get()
+            if context.run_recognition("CastleMarryObjectsCheck", img).hit and not context.run_recognition(
+                "CastleMarryBusyTip", img
+            ).hit:
+                return True
+            self._dismiss_marry_busy_tip(context)
+            context.run_task("BackButton_500ms")
+            time.sleep(0.6)
+        return False
+
     def _execute_chat_matching(self, context: Context) -> None:
-        """聊天看相模式：识别橙色特征即接受，无则尝试下一位"""
+        """聊天看相模式：识别橙色特征即接受；发完一封回信没满就继续下一位。"""
 
         max_attempts = self._current_max_attempts
+        accepted_any = 0
 
         for attempt in range(1, max_attempts + 1):
             if context.tasker.stopping:
                 return
+            if self._email_full():
+                logger.info(
+                    f"回信已满（{self._email_current}/{self._email_total}），停止相亲"
+                )
+                return
 
             profile = ChatCandidateProfile()
             profile.name = ""  # 每次尝试重置
+            accepted = False
 
             logger.info(f"第 {attempt}/{max_attempts} 次尝试")
 
@@ -1011,50 +1137,70 @@ class MarryProcessor(CustomAction):
                             f"第 {attempt} 次尝试识别到橙色特征，接受该相亲对象: "
                             f"姓名={profile.name}, 爵位={profile.title}"
                         )
-                        context.run_task("CastleMarryJustThisButton")
-                        context.run_task("PopUpWindowConfirm")
-                        self._email_current += 1
-                        self._handle_marry_reject(context)
-                        return
-                    else:
-                        if getattr(self, "_feature_mode", "orange") == "any":
-                            logger.info(
-                                f"第 {attempt} 次尝试未要求橙色特征，接受该对象: "
-                                f"姓名={profile.name}, 爵位={profile.title}"
-                            )
-                            context.run_task("CastleMarryJustThisButton")
-                            context.run_task("PopUpWindowConfirm")
-                            self._email_current += 1
-                            self._handle_marry_reject(context)
-                            return
-                        # 无橙色特征，尝试下一位
-                        logger.info(
-                            f"第 {attempt} 次尝试无橙色特征，尝试下一位: "
-                            f"姓名={profile.name}"
-                        )
+                        accepted = self._accept_candidate(context)
                         break
+                    if getattr(self, "_feature_mode", "orange") == "any":
+                        logger.info(
+                            f"第 {attempt} 次尝试未要求橙色特征，接受该对象: "
+                            f"姓名={profile.name}, 爵位={profile.title}"
+                        )
+                        accepted = self._accept_candidate(context)
+                        break
+                    # 无橙色特征，尝试下一位
+                    logger.info(
+                        f"第 {attempt} 次尝试无橙色特征，尝试下一位: {profile.name}"
+                    )
+                    break
                 elif state == "end":
                     if getattr(self, "_feature_mode", "orange") == "any":
                         logger.info("未要求橙色特征，直接接受该候选人")
-                        context.run_task("CastleMarryJustThisButton")
-                        context.run_task("PopUpWindowConfirm")
-                        self._email_current += 1
-                        self._handle_marry_reject(context)
-                        return
+                        accepted = self._accept_candidate(context)
+                        break
                     # 未识别到照片就到了结束，直接尝试下一位
                     logger.info(f"第 {attempt} 次尝试未识别到照片，尝试下一位")
                     break
 
                 context.run_task("CastleMarryGetInfoButton")
 
+            if accepted:
+                accepted_any += 1
+                if self._email_full():
+                    logger.info(
+                        f"回信已满（{self._email_current}/{self._email_total}），"
+                        f"本次相亲结束"
+                    )
+                    return
+                if not self._back_to_candidate_list(context):
+                    logger.info("发送后回不到候选列表，本次相亲结束")
+                    return
+                logger.info(
+                    f"回信还有空位（{self._email_current}/{self._email_total}），"
+                    f"继续找下一位"
+                )
+                continue
+
             # 当前尝试结束，尝试下一位
             if attempt < max_attempts:
                 context.run_task("CastleMarryNextOneButton")
 
-        # 5次都失败，拒绝并离开
+        if accepted_any:
+            logger.info(f"本次共发送 {accepted_any} 封联姻请求")
+            return
+
         logger.info(f"经过 {max_attempts} 次尝试均无橙色特征，拒绝该候选人")
         self._handle_marry_reject(context)
         context.run_task("CastleMarryLeave")
+
+    def _accept_candidate(self, context: Context) -> bool:
+        """点「就这个」+ 确定，发一封联姻请求；返回是否发出。"""
+        if not self._task_ok(context.run_task("CastleMarryJustThisButton")):
+            logger.warning("没找到「就这个」按钮，无法发送")
+            return False
+        context.run_task("PopUpWindowConfirm")
+        self._email_current += 1
+        self._handle_marry_reject(context)
+        time.sleep(0.8)
+        return True
 
     def _execute_high_blood_matching(self, context: Context, target_race: str) -> None:
         """High blood 模式：循环匹配姓名"""
@@ -1253,21 +1399,30 @@ class MarryProcessor(CustomAction):
     ) -> bool:
         """循环匹配姓名：点「就这个」→ 读「确认向XXX发送」→ 配对 / 换下一位。
 
-        读不到姓名时不再直接退出（之前第一次读不到就 return，等于只看了一个候选
-        却报“尝试了 N 次”），改成换下一位继续，直到用完本次候选人的尝试次数。
+        命中的不只是一封就收工：只要回信没满（`_email_current < _email_total`）、
+        列表里还有下一位，就继续给下一个候选发信，直到回信满 / 没有下一位 / 用完尝试次数。
+        读不到姓名时也不直接退出，改成换下一位继续。
         """
         max_attempts = max(1, int(self._current_max_attempts or 1))
         self._name_attempts = 0
+        sent = 0
 
         for attempt in range(max_attempts):
             if context.tasker.stopping:
-                return False
+                return sent > 0
             self._name_attempts = attempt + 1
-            logger.info(f"第 {attempt + 1}/{max_attempts} 次尝试匹配姓名")
+            logger.info(
+                f"第 {attempt + 1}/{max_attempts} 次尝试匹配姓名"
+                f"（已发送 {sent} 封，回信 {self._email_current}/{self._email_total}）"
+            )
 
             if not self._open_send_dialog(context):
-                logger.warning("没打开「确认向XXX发送」弹窗，换下一位")
-                context.run_task("PopUpWindowCancel")
+                reason = self._handle_blocked_candidate(context)
+                logger.warning(
+                    f"第 {attempt + 1} 位点击后 {self.SEND_TIMEOUT:g} 秒无响应"
+                    + (f"（{reason}）" if reason else "")
+                    + "，直接看下一位"
+                )
                 if not self._next_candidate(context):
                     break
                 continue
@@ -1280,13 +1435,35 @@ class MarryProcessor(CustomAction):
                     break
                 continue
 
-            if detected_name in target_names:
+            # 系统命名里带爵位（如「金枝女骑士」），名字就能判断爵位，
+            # 筛选被人为改掉时靠这一步兜底，直接换下一位。
+            rank = self._rank_from_name(detected_name)
+            target_title = getattr(self, "_target_title", "") or ""
+            if target_title in self._RANK_ORDER and rank and rank != target_title:
                 logger.info(
-                    f"姓名匹配成功：{detected_name} 在 {target_race} 的高血名单中"
+                    f"姓名「{detected_name}」提示爵位={rank}，"
+                    f"与筛选的{target_title}不符，换下一位"
+                )
+                context.run_task("PopUpWindowCancel")
+                if not self._next_candidate(context):
+                    break
+                continue
+
+            if self._name_in_table(detected_name, target_names):
+                logger.info(
+                    f"姓名匹配成功：{detected_name} 在 {target_race} 的高血名单中，"
+                    f"发送联姻请求（第 {sent + 1} 封）"
                 )
                 context.run_task("PopUpWindowConfirm")
                 self._email_current += 1  # 约会人数 +1
+                sent += 1
                 self._handle_marry_reject(context)
+                time.sleep(0.8)
+                logger.info(
+                    f"第 {self._email_current}/{self._email_total} 封联姻请求已发送，"
+                    f"这个娃处理完了，回去看下一个"
+                )
+                # 一个娃只发一封：发完立刻返回，由外层循环换下一个娃
                 return True
 
             logger.info(f"姓名不匹配：{detected_name} 不在高血名单中，换下一位")
@@ -1294,26 +1471,73 @@ class MarryProcessor(CustomAction):
             if not self._next_candidate(context):
                 break
 
-        return False
+        if sent:
+            logger.info(f"本次共发送 {sent} 封联姻请求")
+        return sent > 0
+
+    def _email_full(self) -> bool:
+        """回信数是否已满（8/8）。"""
+        return bool(self._email_total) and self._email_current >= self._email_total
+
+    def _back_to_candidate_list(self, context: Context) -> bool:
+        """确认「就这个」按钮还在；不在就退回一层再确认。"""
+        img = context.tasker.controller.post_screencap().wait().get()
+        if context.run_recognition("CastleMarryJustThisButton", img).hit:
+            return True
+        context.run_task("BackButton_500ms")
+        time.sleep(0.5)
+        img = context.tasker.controller.post_screencap().wait().get()
+        return context.run_recognition("CastleMarryJustThisButton", img).hit
 
     def _open_send_dialog(self, context: Context) -> bool:
-        """点「就这个」并等「确认向XXX发送」弹窗出现（最多约 4 秒）。"""
-        clicked = False
-        for _ in range(3):
-            if self._task_ok(context.run_task("CastleMarryJustThisButton")):
-                clicked = True
-                break
-            time.sleep(0.5)
-        if not clicked:
-            logger.warning("没找到「就这个」按钮，候选人列表可能还没准备好")
-            return False
+        """点一次「就这个」，5 秒内没弹出「确认向XXX发送」就认为这个候选没法相亲。"""
+        if not self._task_ok(context.run_task("CastleMarryJustThisButton")):
+            logger.info("没找到「就这个」按钮（列表可能没刷新），按无响应处理")
 
-        for _ in range(10):
+        deadline = time.monotonic() + self.SEND_TIMEOUT
+        while time.monotonic() < deadline:
             time.sleep(0.4)
             img = context.tasker.controller.post_screencap().wait().get()
             if context.run_recognition("CastleMarryJustThisReadName", img).hit:
                 return True
+        logger.warning(
+            f"点击「就这个」后 {self.SEND_TIMEOUT:g} 秒没有出现确认框，"
+            f"判定该候选无法相亲"
+        )
         return False
+
+    def _handle_blocked_candidate(self, context: Context) -> str:
+        """点「就这个」后没出现确认框：该候选多半无法相亲。
+
+        常见原因：已经在相亲（等回信）、被标记星星、或特性限制不能结婚。
+        读一下屏幕上的提示文字（有的话）并把弹窗关掉，返回提示文字。
+        """
+        # 先点掉「求婚信才刚发出去」这类气泡，否则会一直卡在详情页
+        self._dismiss_marry_busy_tip(context)
+        img = context.tasker.controller.post_screencap().wait().get()
+        text = ""
+        try:
+            reco = context.run_recognition(
+                "MarryUIText",
+                img,
+                pipeline_override={
+                    "MarryUIText": {
+                        "roi": [90, 430, 540, 430],
+                        "expected": ["[一-龥，。！？、0-9]{2,40}"],
+                    }
+                },
+            )
+            if reco.hit and reco.best_result is not None:
+                text = (reco.best_result.text or "").strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"读提示文字失败：{exc}")
+
+        if context.run_recognition("PopUpWindowCancel", img).hit:
+            context.run_task("PopUpWindowCancel")
+        elif context.run_recognition("PopUpWindowConfirm", img).hit:
+            context.run_task("PopUpWindowConfirm")
+        time.sleep(0.4)
+        return text
 
     def _read_send_dialog_name(self, context: Context) -> str:
         """从「确认向XXX发送」弹窗里读姓名。"""
@@ -1326,17 +1550,70 @@ class MarryProcessor(CustomAction):
         return self._extract_name_from_ocr(reco.best_result.text)
 
     def _next_candidate(self, context: Context) -> bool:
-        """点「下一位」；按钮不在（列表到底）返回 False。"""
-        return self._task_ok(context.run_task("CastleMarryNextOneButton"))
+        """换下一位：先点「下一位」，没有这个按钮就点候选列表里的下一个格子。"""
+        if self._task_ok(context.run_task("CastleMarryNextOneButton")):
+            return True
+        return self._click_next_card(context)
+
+    def _click_next_card(self, context: Context) -> bool:
+        """按网格顺序点下一个候选格（跳过已标星/正在相亲的格子）。"""
+        cells = [box for row in (getattr(self, "all_boxes", None) or []) for box in row]
+        if not cells:
+            return False
+
+        img = context.tasker.controller.post_screencap().wait().get()
+        start = getattr(self, "_card_cursor", 0)
+        for offset in range(len(cells)):
+            index = (start + offset) % len(cells)
+            box = cells[index]
+            if context.run_recognition(
+                "CastleMarryingCheck",
+                img,
+                pipeline_override={"CastleMarryingCheck": {"roi": box}},
+            ).hit:
+                continue
+            x = box[0] + box[2] // 2
+            y = box[1] + box[3] // 2
+            context.tasker.controller.post_click(x, y).wait()
+            time.sleep(0.4)
+            self._card_cursor = index + 1
+            logger.info(f"没有「下一位」按钮，改为点第 {index + 1} 个候选格")
+            return True
+        return False
 
     def _extract_name_from_ocr(self, ocr_text: str) -> str:
-        """从OCR文本中提取姓名"""
-        name_match = re.search(r"向([\u4e00-\u9fa5]{1,5})发送", ocr_text)
+        """从OCR文本中提取姓名（名字可能带爵位后缀，如「金枝女骑士」）"""
+        name_match = re.search(r"向([\u4e00-\u9fa5]{1,10})发送", ocr_text)
         if not name_match:
             logger.warning(f"无法从 OCR 结果中提取姓名：{ocr_text}")
             return ""
 
         return name_match.group(1)
+
+    # 系统命名规则：名字后面会带「性别+爵位」，例如 金枝女骑士 / XX公爵
+    _RANK_ORDER = ("平民", "骑士", "男爵", "伯爵", "公爵")
+
+    def _rank_from_name(self, name: str) -> str:
+        """从系统命名里读爵位（读不到返回空串）。"""
+        for rank in reversed(self._RANK_ORDER):
+            if rank in name:
+                return rank
+        return ""
+
+    def _strip_rank(self, name: str) -> str:
+        """去掉名字末尾的「(女|男)+爵位」，还原成姓名表里的名字。"""
+        return re.sub(
+            r"(?:女|男)?(?:大公爵|公爵|伯爵|男爵|骑士|平民)$", "", name
+        )
+
+    def _name_in_table(self, name: str, target_names: list) -> bool:
+        """姓名是否在目标种族姓名表里（允许名字后面带爵位后缀）。"""
+        if not name:
+            return False
+        if name in target_names:
+            return True
+        stripped = self._strip_rank(name)
+        return bool(stripped) and stripped in target_names
 
     # ==================== 后处理阶段 ====================
 
@@ -1513,7 +1790,7 @@ class WeddingProcessor(CustomAction):
         return CustomAction.RunResult(success=True)
 
     def _get_selected_banquet(self, context: Context) -> str:
-        """读取用户选择的宴会档位：auto（按爵位）/ 乡村宴会 / 祝福婚宴。"""
+        """读取用户选择的宴会档位：auto（按爵位）/ 具体档位名 / 自定义名优先。"""
         data = context.get_node_data("MarryBanquetSelect")
         banquet = "auto"
         if data:
@@ -1524,119 +1801,212 @@ class WeddingProcessor(CustomAction):
                 banquet = expected[0]
             elif isinstance(expected, str) and expected:
                 banquet = expected
+
+        custom = ""
+        custom_data = context.get_node_data("MarryBanquetCustom")
+        if custom_data:
+            raw = custom_data.get("recognition", {}).get("param", {}).get(
+                "expected", ["none"]
+            )
+            value = raw[0] if isinstance(raw, list) and raw else raw
+            value = str(value or "").strip()
+            if value and value.lower() not in ("none", "auto"):
+                custom = value
+
+        if custom:
+            logger.info(f"宴会档位选项：{banquet}，自定义优先：{custom}")
+            return custom
         logger.info(f"宴会档位选项：{banquet}")
         return banquet
 
+    # 婚宴卡片右侧的威望数字，唯一标识每一档（实机截图确认）
+    BANQUET_NUMBERS = {
+        "秘密婚礼": "-600",
+        "简约聚会": "-150",
+        "祝福婚宴": "-20",
+        "乡村筵席": "-2",
+        "城堡舞会": "-1",
+        "贵族婚宴": "+1500",
+        "奢华宴会": "+5400",
+        "王室盛宴": "+16200",
+    }
+    # 标题 OCR 用短词兜底：实机里 OCR 会把「乡村筵席」读成「村筵席」
+    BANQUET_NAME_PATTERNS = {
+        "秘密婚礼": ["秘密婚礼", "秘密"],
+        "简约聚会": ["简约聚会", "简约"],
+        "祝福婚宴": ["祝福婚宴", "祝福"],
+        "乡村筵席": ["乡村筵席", "乡村", "筵席"],
+        "城堡舞会": ["城堡舞会", "城堡"],
+        "贵族婚宴": ["贵族婚宴", "贵族"],
+        "奢华宴会": ["奢华宴会", "奢华"],
+        "王室盛宴": ["王室盛宴", "王室"],
+    }
+    # 数字列 ROI（含左侧小图标，这样“-”号才认得出来）
+    BANQUET_NUMBER_ROI = [600, 555, 120, 700]
+
     def _click_banquet(self, context: Context, banquet: str) -> bool:
-        """在婚礼页面上点掉指定档位的宴会按钮，返回是否点中。"""
-        result = context.run_task(
-            "Event_WeddingTitleButton",
-            pipeline_override={
-                "Event_WeddingTitleEntry": {"expected": [banquet[:2]]}
-            },
-        )
-        status = getattr(result, "status", None)
-        return bool(status is not None and getattr(status, "succeeded", False))
+        """点选婚宴档位：先按标题文字，点不中再按右侧威望数字。"""
+        if self._click_banquet_by_name(context, banquet):
+            return True
+        logger.info("婚宴档位：按标题没点中，改用右侧数字定位")
+        if self._click_banquet_by_number(context, banquet):
+            return True
+        logger.warning(f"婚宴档位：没找到「{banquet}」")
+        return False
+
+    def _click_banquet_by_name(self, context: Context, banquet: str) -> bool:
+        """按卡片标题点档位（短词兜底），点完用「婚宴确认」弹窗验证。"""
+        patterns = self.BANQUET_NAME_PATTERNS.get(banquet) or [banquet]
+        for _ in range(4):
+            context.run_task("Event_WeddingSweepUp")
+
+        override = {"expected": patterns, "next": []}
+        for page in range(8):
+            result = context.run_task(
+                "Event_WeddingTitleEntry",
+                pipeline_override={"Event_WeddingTitleEntry": override},
+            )
+            if self._task_ok(result):
+                text = ""
+                click_y = 0
+                node = (getattr(result, "nodes", None) or [None])[0]
+                recom = getattr(node, "recognition", None) if node else None
+                best = getattr(recom, "best_result", None) if recom else None
+                if best is not None:
+                    text = getattr(best, "text", "") or ""
+                    box = getattr(best, "box", None) or []
+                    if len(box) >= 4:
+                        click_y = int(box[1] + box[3] // 2)
+                time.sleep(0.8)
+                if self._banquet_confirm_visible(context):
+                    logger.info(
+                        f"婚宴档位：已点选「{banquet}」（OCR={text}，第 {page + 1} 页）"
+                    )
+                    return True
+                if click_y:
+                    context.tasker.controller.post_click(360, click_y).wait()
+                    time.sleep(0.8)
+                    if self._banquet_confirm_visible(context):
+                        logger.info(
+                            f"婚宴档位：已点选「{banquet}」（点卡片中间，第 {page + 1} 页）"
+                        )
+                        return True
+                logger.warning(f"婚宴档位：命中「{text}」但没弹出婚宴确认，继续找")
+            context.run_task("Event_WeddingSweepDown")
+
+        return False
+
+    def _click_banquet_by_number(self, context: Context, banquet: str) -> bool:
+        """按右侧威望数字选档位（标题 OCR 失败时兜底）。"""
+        target = self.BANQUET_NUMBERS.get(banquet)
+        if not target:
+            return False
+        want = target.replace("+", "")
+
+        for _ in range(4):
+            context.run_task("Event_WeddingSweepUp")
+
+        override = {
+            "Event_WeddingNumberEntry": {
+                "roi": self.BANQUET_NUMBER_ROI,
+                "expected": ["[-+]?[0-9]{1,6}"],
+                "action": "DoNothing",
+                "next": [],
+            }
+        }
+        for page in range(8):
+            img = context.tasker.controller.post_screencap().wait().get()
+            reco = context.run_recognition(
+                "Event_WeddingNumberEntry", img, pipeline_override=override
+            )
+            for item in getattr(reco, "all_results", None) or []:
+                text = (getattr(item, "text", "") or "").replace("+", "").replace(" ", "")
+                if text.strip() != want:
+                    continue
+                box = getattr(item, "box", None) or [0, 0, 0, 0]
+                x = int(box[0] + box[2] // 2)
+                y = int(box[1] + box[3] // 2)
+                logger.info(
+                    f"婚宴档位：找到数字 {target}（第 {page + 1} 页），点选中「{banquet}」"
+                )
+                context.tasker.controller.post_click(x, y).wait()
+                time.sleep(0.9)
+                if self._banquet_confirm_visible(context):
+                    return True
+                context.tasker.controller.post_click(360, y).wait()
+                time.sleep(0.9)
+                if self._banquet_confirm_visible(context):
+                    return True
+                logger.warning(f"婚宴档位：点了数字 {target} 但没弹出婚宴确认，继续找")
+            context.run_task("Event_WeddingSweepDown")
+
+        return False
+
+    def _banquet_confirm_visible(self, context: Context) -> bool:
+        img = context.tasker.controller.post_screencap().wait().get()
+        return bool(context.run_recognition("Wedding_BanquetConfirm", img).hit)
 
     @staticmethod
     def _task_ok(result) -> bool:
+        """run_task 的返回是否真的命中了节点。"""
         status = getattr(result, "status", None)
         return bool(status is not None and getattr(status, "succeeded", False))
 
     def _handle_banquet_confirm(self, context: Context) -> bool:
-        """处理「婚宴确认」弹窗：缺材料时先点加号补齐，资源齐了才点确定。
+        """处理「婚宴确认」弹窗：缺材料就补齐（加号/购买/提示），最后点确定。
 
-        判定依据是弹窗里有没有加号（加号 = 缺材料，此时确定是灰的、点了没反应）：
-            - 只有一个加号 -> 点它（会弹「购买」窗口，点确定买缺的量）
-            - 多个加号 -> 点最下面那个「快捷补齐缺少资源」的加号（会弹「市场供应充足…」提示）
-            - 没有加号 = 资源齐了，直接点确定
-
-        Returns:
-            是否出现了婚宴确认弹窗
+        - 弹窗里有加号 = 有材料不够
+        - 只有一行加号：点加号 → 弹「购买」→ 确定（花银币）
+        - 多行加号：点最下面那行「快捷补齐缺少资源」→「市场供应充足」→ 确定
+        - 没有加号：直接确定
         """
-        if not self._wait_node(context, "Wedding_BanquetConfirm", 6):
-            logger.info("没有出现婚宴确认弹窗，直接继续确认")
+        img = context.tasker.controller.post_screencap().wait().get()
+        if not context.run_recognition("Wedding_BanquetConfirm", img).hit:
+            logger.info("没有出现「婚宴确认」弹窗，跳过补齐")
             return False
 
-        logger.info("婚宴确认弹窗已出现")
         for _ in range(8):
-            if context.tasker.stopping:
-                return True
             img = context.tasker.controller.post_screencap().wait().get()
 
             if context.run_recognition("Wedding_FillTip", img).hit:
-                logger.info("弹出「市场供应充足」提示，点确定用银币补齐")
+                logger.info("婚宴确认：市场供应充足，点确定用银币补齐")
                 context.run_task("PopUpWindowConfirm")
-                time.sleep(1.2)
+                time.sleep(0.6)
                 continue
 
             if context.run_recognition("Wedding_BuyDialog", img).hit:
-                logger.info("弹出「购买」窗口，点确定买缺的材料")
+                logger.info("婚宴确认：购买弹窗，点确定买齐材料")
                 context.run_task("PopUpWindowConfirm")
-                time.sleep(1.2)
+                time.sleep(0.6)
                 continue
 
-            if not context.run_recognition("Wedding_BanquetConfirm", img).hit:
-                logger.info("婚宴确认弹窗已关闭，婚礼开始")
-                break
+            if context.run_recognition("Wedding_AnyPlus", img).hit:
+                if self._task_ok(context.run_task("Wedding_FillPlus")):
+                    logger.info("婚宴确认：点最下面那行「快捷补齐缺少资源」")
+                else:
+                    logger.info("婚宴确认：只有一个加号，点它打开购买")
+                    context.run_task("Wedding_AnyPlus")
+                time.sleep(0.8)
+                continue
 
-            if self._plus_present(context, img):
-                logger.info("弹窗里有加号（缺材料，确定是灰的），先点加号补齐")
-                self._click_fill_plus(context)
-                time.sleep(1.5)
-            else:
-                logger.info("没有加号，说明资源已齐，点婚宴确认的确定")
-                context.run_task("PopUpWindowConfirm")
-                time.sleep(1.5)
+            logger.info("婚宴确认：材料齐了，点确定开始婚礼")
+            context.run_task("PopUpWindowConfirm")
+            return True
+
+        logger.warning("婚宴确认：补齐循环次数用完，仍点一次确定")
+        context.run_task("PopUpWindowConfirm")
         return True
 
-    def _plus_present(self, context: Context, img) -> bool:
-        """婚宴确认弹窗里有没有加号：有 = 缺材料、确定是灰的。"""
-        return context.run_recognition(
-            "Wedding_AnyPlus",
-            img,
-            pipeline_override={"Wedding_AnyPlus": {"action": "DoNothing"}},
-        ).hit
-
-    def _wait_node(self, context: Context, node: str, times: int) -> bool:
-        """轮询等待某个识别节点命中。"""
-        for _ in range(times):
-            time.sleep(0.4)
-            img = context.tasker.controller.post_screencap().wait().get()
-            if context.run_recognition(node, img).hit:
-                return True
-        return False
-
-    def _click_fill_plus(self, context: Context) -> bool:
-        """点「快捷补齐缺少资源」的加号：优先最下面那个，其次唯一加号，最后固定坐标。"""
-        if self._task_ok(context.run_task("Wedding_FillPlus")):
-            logger.info("已点最下面的加号（快捷补齐）")
-            return True
-        if self._task_ok(context.run_task("Wedding_AnyPlus")):
-            logger.info("弹窗里只有一个加号，已点它")
-            return True
-        logger.warning("没找到加号，按固定坐标点快捷补齐（532, 868）")
-        context.tasker.controller.post_click(532, 868).wait()
-        return False
-
     def _compare_titles(self, left_title: str, right_title: str) -> str:
-        """
-        比较两个爵位，返回最高的爵位
-        Args:
-            left_title: 左侧爵位
-            right_title: 右侧爵位
-        Returns:
-            最高的爵位
-        """
+        """比较左右双方爵位，返回更高的那个。"""
         left_rank = self.title_rank.get(left_title, 0)
         right_rank = self.title_rank.get(right_title, 0)
 
         if left_rank > right_rank:
             return left_title
-        elif right_rank > left_rank:
+        if right_rank > left_rank:
             return right_title
-        else:
-            return left_title
+        return left_title
 
     def _get_target_banquet(self, title: str) -> str:
         """
@@ -1647,14 +2017,14 @@ class WeddingProcessor(CustomAction):
             宴会档位名称
         """
         if title not in self.title_rank:
-            logger.warning(f"未识别的爵位：{title}，使用默认档位：乡村宴会")
-            return "乡村宴会"
+            logger.warning(f"未识别的爵位：{title}，使用默认档位：乡村筵席")
+            return "乡村筵席"
 
         title_level = self.title_rank[title]
         logger.info(f"爵位等级：{title} (等级{title_level})")
 
-        # 公爵 (等级 4) 使用乡村宴会，其他使用祝福婚宴
+        # 公爵 (等级 4) 使用乡村筵席，其他使用祝福婚宴
         if title_level >= 4:
-            return "乡村宴会"
+            return "乡村筵席"
         else:
             return "祝福婚宴"

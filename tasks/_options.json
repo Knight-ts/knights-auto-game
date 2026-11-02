@@ -754,12 +754,12 @@
     },
     "相亲范围": {
         "type": "select",
-        "description": "选择是单角色还是多角色相亲",
+        "description": "逐个娃相亲：单角色=从第一个娃顺序处理；多角色=先扫描整张列表再逐个处理。两种都会读每个娃的血统定种族/国家，直到回信满(8/8)或没有候选",
         "default_case": "多角色相亲",
         "cases": [
             {
                 "name": "多角色相亲",
-                "description": "一次检测识别多位角色进行相亲，每个角色平分相亲次数",
+                "description": "一次扫描列表多位娃，逐个相亲（每个娃都会先读血统判断种族），回信满或没有候选才停",
                 "pipeline_override": {
                     "MarryMultiSelect": {
                         "expected": "multi"
@@ -768,7 +768,7 @@
             },
             {
                 "name": "单角色相亲",
-                "description": "一次一位，当前选择角色直接相亲，一人所有次数",
+                "description": "从列表第一个娃开始逐个处理：每个娃先读血统判断种族→去对应国家→按姓名发一封，回信满或没有候选才停",
                 "pipeline_override": {
                     "MarryMultiSelect": {
                         "expected": "single"
@@ -1262,12 +1262,12 @@
     },
     "婚礼宴会档位": {
         "type": "select",
-        "description": "告白成功后的婚礼用哪个宴会档位。默认按双方最高爵位自动选（公爵→乡村宴会，伯爵及以下→祝福婚宴）；指定档位则固定用该档，找不到时自动回退。",
-        "default_case": "自动（按爵位）",
+        "description": "告白成功后的婚礼用哪个宴会档位。默认「乡村筵席」。右列数字依次是 -600 秘密婚礼 / -150 简约聚会 / -20 祝福婚宴 / -2 乡村筵席 / -1 城堡舞会 / +1500 贵族婚宴 / +5400 奢华宴会 / +16200 王室盛宴，脚本按数字定位卡片，选哪档都会照常补齐材料再确定。",
+        "default_case": "乡村筵席",
         "cases": [
             {
                 "name": "自动（按爵位）",
-                "description": "公爵办乡村宴会，伯爵及以下办祝福婚宴",
+                "description": "公爵→乡村筵席，伯爵及以下→祝福婚宴",
                 "pipeline_override": {
                     "MarryBanquetSelect": {
                         "expected": "auto"
@@ -1276,7 +1276,7 @@
             },
             {
                 "name": "秘密婚礼",
-                "description": "固定用秘密婚礼（最贵的一档，会扣绿币/金币）",
+                "description": "固定用秘密婚礼（-600）",
                 "pipeline_override": {
                     "MarryBanquetSelect": {
                         "expected": "秘密婚礼"
@@ -1285,7 +1285,7 @@
             },
             {
                 "name": "简约聚会",
-                "description": "固定用简约聚会",
+                "description": "固定用简约聚会（-150）",
                 "pipeline_override": {
                     "MarryBanquetSelect": {
                         "expected": "简约聚会"
@@ -1294,7 +1294,7 @@
             },
             {
                 "name": "祝福婚宴",
-                "description": "固定用祝福婚宴",
+                "description": "固定用祝福婚宴（-20）",
                 "pipeline_override": {
                     "MarryBanquetSelect": {
                         "expected": "祝福婚宴"
@@ -1302,15 +1302,72 @@
                 }
             },
             {
-                "name": "乡村宴会",
-                "description": "固定用乡村宴会（列表最下面一档，可能需要下滑）",
+                "name": "乡村筵席",
+                "description": "固定用乡村筵席（-2，默认）",
                 "pipeline_override": {
                     "MarryBanquetSelect": {
-                        "expected": "乡村宴会"
+                        "expected": "乡村筵席"
+                    }
+                }
+            },
+            {
+                "name": "城堡舞会",
+                "description": "固定用城堡舞会（-1）",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "城堡舞会"
+                    }
+                }
+            },
+            {
+                "name": "贵族婚宴",
+                "description": "固定用贵族婚宴（+1500）",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "贵族婚宴"
+                    }
+                }
+            },
+            {
+                "name": "奢华宴会",
+                "description": "固定用奢华宴会（+5400）",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "奢华宴会"
+                    }
+                }
+            },
+            {
+                "name": "王室盛宴",
+                "description": "固定用王室盛宴（+16200）",
+                "pipeline_override": {
+                    "MarryBanquetSelect": {
+                        "expected": "王室盛宴"
                     }
                 }
             }
         ]
+    },
+    "自定义宴会档位": {
+        "type": "input",
+        "description": "八个档位里下拉没有的，直接填游戏婚礼页上显示的档位名（例如 乡村筵席）。填了就优先用它，留空则用上面的下拉选项。",
+        "inputs": [
+            {
+                "name": "档位名称",
+                "description": "游戏里显示的宴会档位名，留空表示不用",
+                "default": "",
+                "pipeline_type": "string",
+                "verify": "^[一-龥]{0,10}$",
+                "pattern_msg": "只能填中文档位名，留空表示不用"
+            }
+        ],
+        "pipeline_override": {
+            "MarryBanquetCustom": {
+                "expected": [
+                    "{档位名称}"
+                ]
+            }
+        }
     },
     "相亲被拒处理": {
         "type": "select",
@@ -1398,21 +1455,333 @@
     },
     "任务失败继续轮数": {
         "type": "input",
-        "description": "同一月份任务失败或月份没推进时，最多重跑几轮。每轮内部仍按「任务失败处理」执行；达到轮数后才会停止年度任务。默认 3，范围 1-10。",
+        "description": "同一月份任务失败或月份没推进时，最多重跑几轮。每轮内部仍按「任务失败处理」执行。填 0 = 不限（一直重试到月份推进或手动停止）；默认 3，可填 0-999。",
         "inputs": [
             {
                 "name": "轮数",
-                "description": "同一月份最多尝试轮数，1-10",
+                "description": "同一月份最多尝试轮数，0-999（0 = 不限）",
                 "default": "3",
                 "pipeline_type": "string",
-                "verify": "^([1-9]|10)$",
-                "pattern_msg": "请填 1-10 的整数"
+                "verify": "^[0-9]{1,3}$",
+                "pattern_msg": "请填 0-999 的整数（0 = 不限）"
             }
         ],
         "pipeline_override": {
             "YearlyMonthRetries": {
                 "expected": [
                     "{轮数}"
+                ]
+            }
+        }
+    },
+    "城堡资源记录月份": {
+        "type": "select",
+        "description": "几月自动记录城堡粮食/银币。0=不记录；选 1-12 时年度任务到该月自动打开城堡记录，并在低于阈值时暂停。手动运行「功能：城堡资源记录」会立即记录，不看这个月份。",
+        "default_case": "不记录",
+        "cases": [
+            {
+                "name": "不记录",
+                "description": "年度任务不自动记录城堡资源",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "0"
+                    }
+                }
+            },
+            {
+                "name": "1月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "1"
+                    }
+                }
+            },
+            {
+                "name": "2月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "2"
+                    }
+                }
+            },
+            {
+                "name": "3月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "3"
+                    }
+                }
+            },
+            {
+                "name": "4月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "4"
+                    }
+                }
+            },
+            {
+                "name": "5月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "5"
+                    }
+                }
+            },
+            {
+                "name": "6月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "6"
+                    }
+                }
+            },
+            {
+                "name": "7月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "7"
+                    }
+                }
+            },
+            {
+                "name": "8月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "8"
+                    }
+                }
+            },
+            {
+                "name": "9月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "9"
+                    }
+                }
+            },
+            {
+                "name": "10月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "10"
+                    }
+                }
+            },
+            {
+                "name": "11月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "11"
+                    }
+                }
+            },
+            {
+                "name": "12月",
+                "pipeline_override": {
+                    "CastleResourceRecordMonth": {
+                        "expected": "12"
+                    }
+                }
+            }
+        ]
+    },
+    "粮食阈值": {
+        "type": "input",
+        "description": "城堡「粮食存量」低于这个值时暂停任务。0 或留空 = 不检查粮食。",
+        "inputs": [
+            {
+                "name": "阈值",
+                "description": "粮食存量下限，0 表示不检查",
+                "default": "0",
+                "pipeline_type": "string",
+                "verify": "^[0-9]*$",
+                "pattern_msg": "只能填数字，0 或留空表示不检查"
+            }
+        ],
+        "pipeline_override": {
+            "CastleFoodThreshold": {
+                "expected": [
+                    "{阈值}"
+                ]
+            }
+        }
+    },
+    "银币阈值": {
+        "type": "input",
+        "description": "城堡「可调配量」（城堡银币）低于这个值时暂停任务。0 或留空 = 不检查银币。",
+        "inputs": [
+            {
+                "name": "阈值",
+                "description": "可调配量下限，0 表示不检查",
+                "default": "0",
+                "pipeline_type": "string",
+                "verify": "^[0-9]*$",
+                "pattern_msg": "只能填数字，0 或留空表示不检查"
+            }
+        ],
+        "pipeline_override": {
+            "CastleSilverThreshold": {
+                "expected": [
+                    "{阈值}"
+                ]
+            }
+        }
+    },
+    "面包购买月份": {
+        "type": "select",
+        "description": "几月自动去城堡市场买面包。0=不购买；选 1-12 时年度任务到该月自动购买。手动运行「功能：市场购买面包」会立即购买，不看这个月份。",
+        "default_case": "不购买",
+        "cases": [
+            {
+                "name": "不购买",
+                "description": "年度任务不自动购买面包",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "0"
+                    }
+                }
+            },
+            {
+                "name": "1月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "1"
+                    }
+                }
+            },
+            {
+                "name": "2月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "2"
+                    }
+                }
+            },
+            {
+                "name": "3月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "3"
+                    }
+                }
+            },
+            {
+                "name": "4月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "4"
+                    }
+                }
+            },
+            {
+                "name": "5月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "5"
+                    }
+                }
+            },
+            {
+                "name": "6月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "6"
+                    }
+                }
+            },
+            {
+                "name": "7月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "7"
+                    }
+                }
+            },
+            {
+                "name": "8月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "8"
+                    }
+                }
+            },
+            {
+                "name": "9月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "9"
+                    }
+                }
+            },
+            {
+                "name": "10月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "10"
+                    }
+                }
+            },
+            {
+                "name": "11月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "11"
+                    }
+                }
+            },
+            {
+                "name": "12月",
+                "pipeline_override": {
+                    "CastleBreadMonth": {
+                        "expected": "12"
+                    }
+                }
+            }
+        ]
+    },
+    "面包购买数量": {
+        "type": "select",
+        "description": "买面包的数量：全部 = 市场当前剩余（弹窗里点 ↑ 最大）；指定数量 = 用 +/− 调到下面的数值。",
+        "default_case": "全部",
+        "cases": [
+            {
+                "name": "全部",
+                "description": "买光市场当前剩余的面包",
+                "pipeline_override": {
+                    "CastleBreadQuantityMode": {
+                        "expected": "all"
+                    }
+                }
+            },
+            {
+                "name": "指定数量",
+                "description": "按「面包指定数量」买固定个数",
+                "pipeline_override": {
+                    "CastleBreadQuantityMode": {
+                        "expected": "num"
+                    }
+                }
+            }
+        ]
+    },
+    "面包指定数量": {
+        "type": "input",
+        "description": "「面包购买数量」选「指定数量」时买几个。超过市场剩余时按剩余封顶。",
+        "inputs": [
+            {
+                "name": "数量",
+                "description": "要购买的面包个数，默认 100",
+                "default": "100",
+                "pipeline_type": "string",
+                "verify": "^[0-9]*$",
+                "pattern_msg": "只能填数字，留空按 0 处理"
+            }
+        ],
+        "pipeline_override": {
+            "CastleBreadQuantityValue": {
+                "expected": [
+                    "{数量}"
                 ]
             }
         }

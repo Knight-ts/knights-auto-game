@@ -158,3 +158,103 @@ select.grade { width: 74px; } input.min { width: 92px; }
 .sh-badge.escalated { color: var(--warn); border-color: #5a4a1f; }
 .sh-badge.stopped { color: var(--muted); }
 .sh-badge.unavailable { color: var(--err); border-color: #7a3434; }
+
+/* 主页：场景处理（月度循环） */
+.scene-card .scene-search { min-width: 220px; }
+.scene-table-wrap {
+  margin-top: 12px; overflow: auto; max-height: 500px;
+  border: 1px solid var(--line); border-radius: 10px;
+  scrollbar-gutter: stable;
+}
+table.scene-table { font-size: 12.5px; }
+table.scene-table thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--panel);
+  white-space: nowrap; border-bottom: 1px solid var(--line);
+}
+table.scene-table td { vertical-align: top; line-height: 1.6; }
+table.scene-table tbody tr:hover td { background: rgba(255, 255, 255, .025); }
+.scene-col-name { width: 180px; }
+.scene-col-task { width: 96px; }
+.scene-name {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-weight: 600; margin-bottom: 4px;
+}
+.scene-row-new td { background: rgba(240, 180, 41, .055); }
+.scene-nodes { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.scene-nodes code {
+  font-size: 11px; padding: 1px 6px; border: 1px solid var(--line);
+  border-radius: 6px; color: var(--muted); background: #12161c;
+}
+.scene-note { margin-top: 4px; color: #c9a94a; }
+.scene-foot { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.scene-recent-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.scene-recent {
+  margin: 6px 0 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 132px; overflow: auto;
+}
+.scene-recent li {
+  font-size: 11.5px; color: var(--muted); font-family: Consolas, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.scene-recent li.empty { font-family: inherit; }
+@media (max-width: 760px) {
+  .scene-col-name { width: 130px; }
+  .scene-col-task { width: 76px; }
+}
+
+/* 场景表：源码定位 + 返回方式 */
+.link-btn {
+  display: inline-block; padding: 0; border: 0; background: none; color: var(--accent);
+  font: inherit; cursor: pointer; text-align: left; line-height: 1.45;
+  text-decoration: underline dotted rgba(79, 140, 255, .55); text-underline-offset: 3px;
+}
+.link-btn:hover { color: #8fc4ff; }
+.link-btn.mono { font-family: Consolas, monospace; font-size: 11.5px; word-break: break-all; }
+.scene-route { margin-top: 4px; color: #7fb6a2; }
+.scene-route code {
+  font-size: 11px; padding: 1px 5px; border: 1px solid var(--line);
+  border-radius: 6px; color: var(--muted); background: #12161c;
+}
+
+/* 未知界面记录 */
+.unknown-block { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.unknown-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.unknown-list {
+  margin-top: 8px; display: flex; flex-direction: column; gap: 8px;
+  max-height: 520px; overflow: auto;
+}
+.unknown-item {
+  display: flex; gap: 12px; padding: 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel2);
+}
+.unknown-shot {
+  width: 104px; height: 185px; object-fit: cover; border-radius: 6px;
+  border: 1px solid var(--line); background: #0b0e13; flex: 0 0 auto;
+}
+.unknown-shot-link { flex: 0 0 auto; display: block; line-height: 0; }
+.unknown-shot.empty {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 12px;
+}
+.unknown-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.unknown-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; }
+.unknown-line select { max-width: 360px; }
+.unknown-note { color: #c9a94a; }
+
+/* 源码弹窗 */
+.source-dialog {
+  width: min(920px, 92vw); max-height: 86vh; padding: 14px 16px;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+.source-dialog::backdrop { background: rgba(4, 6, 9, .62); }
+.source-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.source-code { max-height: 58vh; }
+.source-locations { margin-top: 8px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+@media (max-width: 760px) {
+  .unknown-item { flex-direction: column; }
+  .unknown-shot { width: 100%; height: auto; max-height: 260px; }
+  .unknown-line select { max-width: 100%; }
+}

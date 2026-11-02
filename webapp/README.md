@@ -17,7 +17,7 @@ python\python.exe webapp\server.py
 
 | 页面 | 内容 |
 |---|---|
-| 主页 | 设备选择与连接、资源/Agent/任务状态、最近日志 |
+| 主页 | 设备选择与连接、资源/Agent/任务状态、最近日志、场景处理（含未知界面记录与源码定位） |
 | 任务 | 读取 interface.json 的任务与选项（switch/checkbox/select/input），组合 pipeline_override 后执行 |
 | 推年计划 | 任务组合：选模块、逐步改选项、排序、循环次数、简介、自动处理规则，命名保存（table/task_combos.json）并运行 |
 | 截图 | 设备实时画面（2 秒刷新、可下载） |
@@ -35,6 +35,8 @@ webapp/
   runtime.py         连接、资源、Tasker、Agent、任务执行（失败时回调 error_sink）
   server.py          HTTP 服务与 JSON API（127.0.0.1）
   selfheal.py        问题自纠：报错截图存储、保留/删除、一键清空、REPORT.md
+  unknowns.py        未知界面记录 + 返回方式（与 agent 共用 agent/utils/unknown_store.py）
+  source.py          源码定位：处理函数 / pipeline 节点 → 文件:行，打开编辑器
   repair.py          AI 修复调度（默认关闭，保留代码，不启动线程）
   dsh_bridge.py      通过 DSH 本机 Bridge 起会话（仅 AI 修复启用时使用）
   combos.py          任务组合
@@ -89,10 +91,19 @@ webapp/
 | POST | `/api/selfheal/cleanup` | 立即按设置清理过期 / 超限记录 |
 | POST | `/api/selfheal/clear` | 一键清除全部截图/记录，必须 `{confirm:true}` |
 | POST | `/api/selfheal/config` | 保存 `selfheal` 设置（条数 / 体积 / 天数 / 去重） |
+| GET | `/api/unknowns` | 未知界面记录 + 统计 + 默认路线 + 可选返回方式 |
+| GET | `/api/unknowns/detail?id=` | 单条详情（含调用栈 / 点过什么 / 识别探测） |
+| GET | `/api/unknowns/image?id=` | 未知界面截图 PNG |
+| POST | `/api/unknowns/route` | `{id, route}` 给记录选返回方式，`route=""` 改回默认（写 table/return_routes.json） |
+| POST | `/api/unknowns/note` / `/delete` / `/clear` | 备注 / 删除单条 / 清空全部（清空要 `{confirm:true}`） |
+| GET | `/api/source?symbol=` / `?node=` / `?path=&line=` | 处理函数 / pipeline 节点 → 文件:行 + 代码片段 |
+| POST | `/api/source/open` | `{path, line}` 在 VS Code / Cursor / 资源管理器打开 |
 
 ## 页面补充
 
 - 任务页会记住上次选的任务与各选项（`config/webapp.json`），并显示最近任务记录；
 - 任务页底部有「任务包」卡片：导出 tasks/、重建 interface.json、打包当前任务、导入 zip，改完不用命令行也能用；
 - 「推年计划」页是任务组合编辑器：每个步骤单独存选项（相亲爵位、刷取任务国家、海盗事件处理等），组合可写简介、配自动处理规则（失败重试/跳过/停止、好娃提醒、海盗事件、离线重连、每轮等待），存在 `table/task_combos.json`；
-- 通知页可启用推送、选择飞书/通用 JSON、发送测试消息；webhook 留空时自动复用 `config/config.json` 的飞书地址。
+- 通知页可启用推送、选择飞书/通用 JSON、发送测试消息；webhook 留空时自动复用 `config/config.json` 的飞书地址；
+- 主页「场景处理」的处理函数名可点开源码（AST 现场定位，不是写死行号）；
+- 主页「未知界面」列出认不出的画面：截图、出现位置（文件:行）、点过什么、命中次数；选「返回方式」后写进 `table/return_routes.json`，agent 下次遇到同一画面照着点。详细说明见 [docs/zh_cn/未知界面与返回.md](../docs/zh_cn/未知界面与返回.md)。

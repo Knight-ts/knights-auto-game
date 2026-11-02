@@ -1,4 +1,4 @@
-"""离线自检：任务失败处理（retry 真正重试 + 回退继续循环）。
+"""离线自检：任务失败处理（retry 真正重试；失败后交回月度循环重试本月）。
 
 用法：
     python tools/selftest_task_failure.py
@@ -68,7 +68,7 @@ def test_retry_succeeds() -> None:
 
 
 def test_retry_falls_back() -> None:
-    print("[失败处理] retry 全失败后放弃并继续")
+    print("[失败处理] retry 全失败后保留任务，月度循环重试本月")
     context = FakeContext()
     calls = {"fight": 0, "abandon": 0}
 
@@ -90,9 +90,9 @@ def test_retry_falls_back() -> None:
     ):
         result = fight_utils._handle_task_failure(context)
 
-    check("返回 True（不停止月度循环）", result is True, str(result))
+    check("返回 False（交回月度循环重试本月）", result is False, str(result))
     check("重试次数有界", calls["fight"] == fight_utils.TASK_FAILURE_RETRY_ATTEMPTS, str(calls))
-    check("最终放弃任务", calls["abandon"] == 1, str(calls))
+    check("重试失败不放弃任务", calls["abandon"] == 0, str(calls))
 
 
 def test_switch_mode() -> None:
@@ -108,7 +108,7 @@ def test_switch_mode() -> None:
         patch.object(fight_utils, "_process_fight") as fight,
     ):
         result = fight_utils._handle_task_failure(context)
-    check("返回 True", result is True)
+    check("返回 False（交回月度循环重试本月）", result is False)
     check("直接放弃", calls["abandon"] == 1, str(calls))
     check("不重试战斗", not fight.called)
 

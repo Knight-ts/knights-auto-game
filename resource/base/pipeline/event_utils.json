@@ -270,10 +270,10 @@
     },
     "Event_HarvestFestivalDealWith": {
         "next": [
-            "UI_MainWindows",
             "[JumpBack]Event_HarvestFestivalWorship",
             "[JumpBack]Event_HarvestFestivalPrePay",
             "[JumpBack]Event_HarvestFestivalAnnuaClosing",
+            "UI_MainWindows",
             "[JumpBack]Event_HarvestFestival"
         ]
     },
@@ -281,10 +281,10 @@
         "recognition": "OCR",
         "expected": "年度结算",
         "roi": [
-            42,
-            70,
-            121,
-            332
+            20,
+            140,
+            280,
+            500
         ],
         "timeout": 2000,
         "next": [
@@ -295,15 +295,92 @@
         "recognition": "OCR",
         "expected": "口粮预交",
         "roi": [
-            28,
-            266,
-            153,
-            144
+            0,
+            150,
+            720,
+            850
         ],
         "timeout": 2000,
         "next": [
-            "Event_HarvestFestivalConfirm"
+            "Event_RationPrepayHandle"
         ]
+    },
+    "Event_RationPrepayHandle": {
+        "attach": {
+            "description": "口粮预交：只有确认「粮食充足」才点确定，不足/读不到就暂停等补粮"
+        },
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "RationPrepayTask",
+        "post_delay": 500,
+        "timeout": 30000
+    },
+    "Event_RationPrepayEnough": {
+        "attach": {
+            "description": "口粮预交面板：出现「粮食充足」= 可以点确定"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "粮食充足"
+        ],
+        "roi": [
+            0,
+            500,
+            720,
+            700
+        ],
+        "timeout": 1500
+    },
+    "Event_RationPrepayShort": {
+        "attach": {
+            "description": "口粮预交面板/提示：出现「粮食不足」= 不能点确定"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "粮食不足",
+            "预交粮食不足"
+        ],
+        "roi": [
+            0,
+            500,
+            720,
+            700
+        ],
+        "timeout": 1500
+    },
+    "Event_RationPrepayAmount": {
+        "attach": {
+            "description": "口粮预交面板：读取「拥有 / 消耗」数字对（如 69449 / 5232），作为「粮食充足」读不到时的兜底"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "[0-9][0-9,，.kKmM万]*\\s*/\\s*[0-9][0-9,，.kKmM万]*"
+        ],
+        "roi": [
+            0,
+            500,
+            720,
+            700
+        ],
+        "timeout": 1500
+    },
+    "Event_RationPrepayConfirm": {
+        "attach": {
+            "description": "口粮预交面板：确定"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            150,
+            650,
+            450,
+            500
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
     },
     "Event_HarvestFestivalConfirm": {
         "recognition": "OCR",
@@ -471,13 +548,14 @@
     "Event_ConfessionFail": {
         "recognition": "OCR",
         "roi": [
-            195,
-            176,
-            351,
-            164
+            120,
+            200,
+            520,
+            120
         ],
         "expected": [
-            "表白失败"
+            "表白失败",
+            "告白失败"
         ],
         "action": "Click",
         "post_delay": 500,
@@ -1050,5 +1128,41 @@
         ],
         "timeout": 1000,
         "enabled": true
+    },
+    "Event_WeddingNumberEntry": {
+        "attach": {
+            "description": "婚宴卡片右侧的威望数字（-600/-150/-20/-2/-1/+1500/+5400/+16200），用来按数字选档位"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "[-+]?[0-9]{1,5}"
+        ],
+        "roi": [
+            655,
+            555,
+            65,
+            700
+        ],
+        "action": "Click",
+        "post_delay": 500,
+        "timeout": 2000
+    },
+    "Event_ConfessionFailInfo": {
+        "attach": {
+            "description": "表白失败弹窗右下「获取对象信息」按钮（点了之后才能用金币保留）"
+        },
+        "recognition": "OCR",
+        "roi": [
+            370,
+            1085,
+            350,
+            120
+        ],
+        "expected": [
+            "获取对象信息"
+        ],
+        "action": "Click",
+        "post_delay": 800,
+        "timeout": 2000
     }
 }

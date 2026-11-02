@@ -1,0 +1,428 @@
+{
+    "Func_CastleResource": {
+        "attach": {
+            "description": "功能：城堡资源记录（粮食存量 / 可调配量），低于阈值时可暂停任务"
+        },
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "CastleResourceProcessor",
+        "post_delay": 500,
+        "timeout": 180000
+    },
+    "Func_BuyBread": {
+        "attach": {
+            "description": "功能：市场购买面包（全部 / 指定数量）"
+        },
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "BreadPurchaseProcessor",
+        "post_delay": 500,
+        "timeout": 600000
+    },
+    "CastleResourceRecordMonth": {
+        "attach": {
+            "description": "城堡资源记录月份：0=不记录，1-12=年度任务到该月自动记录"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "0"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "CastleFoodThreshold": {
+        "attach": {
+            "description": "粮食阈值：城堡「粮食存量」低于该值时暂停年度任务，0=不检查"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "0"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "CastleSilverThreshold": {
+        "attach": {
+            "description": "银币阈值：城堡「可调配量」低于该值时暂停年度任务，0=不检查"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "0"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "CastleBreadMonth": {
+        "attach": {
+            "description": "面包购买月份：0=不购买，1-12=年度任务到该月自动购买"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "0"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "CastleBreadQuantityMode": {
+        "attach": {
+            "description": "面包购买数量模式：all=全部（市场剩余），num=指定数量"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "all"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "CastleBreadQuantityValue": {
+        "attach": {
+            "description": "面包指定数量（num 模式下生效）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "100"
+        ],
+        "roi": [
+            0,
+            0,
+            1,
+            1
+        ],
+        "timeout": 1000,
+        "enabled": true
+    },
+    "Castle_PageCheck": {
+        "attach": {
+            "description": "城堡页：右上角资源面板的「粮食存量」标签"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "粮食存量"
+        ],
+        "roi": [
+            340,
+            118,
+            210,
+            40
+        ],
+        "timeout": 1000
+    },
+    "Castle_FoodStock": {
+        "attach": {
+            "description": "城堡页：粮食存量的数值（右对齐）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "[0-9][0-9,，.]{0,12}"
+        ],
+        "roi": [
+            545,
+            120,
+            165,
+            38
+        ],
+        "timeout": 1500
+    },
+    "Castle_SilverPool": {
+        "attach": {
+            "description": "城堡页：可调配量的数值（右对齐，作为城堡银币）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "[0-9][0-9,，.]{0,12}"
+        ],
+        "roi": [
+            520,
+            152,
+            190,
+            40
+        ],
+        "timeout": 1500
+    },
+    "Castle_MarketEntry": {
+        "attach": {
+            "description": "城堡页：市场入口"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "市场"
+        ],
+        "roi": [
+            260,
+            628,
+            320,
+            92
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 900,
+        "timeout": 3000
+    },
+    "Castle_MarketBuyTab": {
+        "attach": {
+            "description": "市场页：购买页签"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "购买"
+        ],
+        "roi": [
+            250,
+            505,
+            220,
+            110
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 900,
+        "timeout": 3000
+    },
+    "Castle_MarketBuyPageCheck": {
+        "attach": {
+            "description": "市场购买页：表头「市场库存 / 购买价格」"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "市场库存",
+            "购买价格"
+        ],
+        "roi": [
+            240,
+            378,
+            320,
+            58
+        ],
+        "timeout": 1000
+    },
+    "Castle_BreadRow": {
+        "attach": {
+            "description": "市场购买页：面包所在行（点行内名字选中）"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "面包"
+        ],
+        "roi": [
+            40,
+            415,
+            320,
+            95
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 700,
+        "timeout": 2000
+    },
+    "Castle_BreadRowStock": {
+        "attach": {
+            "description": "市场购买页：面包行的「(剩余 N)」市场库存"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "[0-9]{1,7}"
+        ],
+        "roi": [
+            285,
+            482,
+            240,
+            42
+        ],
+        "timeout": 1000
+    },
+    "Castle_BreadBuyOpen": {
+        "attach": {
+            "description": "市场购买页：右下角「购买」按钮，打开数量弹窗"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "购买"
+        ],
+        "roi": [
+            560,
+            1192,
+            160,
+            88
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 900,
+        "timeout": 3000
+    },
+    "Castle_BuyDialogCheck": {
+        "attach": {
+            "description": "购买弹窗：数量行左侧的「数量」标签"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "数量"
+        ],
+        "roi": [
+            165,
+            788,
+            90,
+            55
+        ],
+        "timeout": 1000
+    },
+    "Castle_BuyQuantity": {
+        "attach": {
+            "description": "购买弹窗：当前数量"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "[0-9]{1,7}"
+        ],
+        "roi": [
+            285,
+            788,
+            170,
+            50
+        ],
+        "timeout": 1000
+    },
+    "Castle_BuyRemaining": {
+        "attach": {
+            "description": "购买弹窗：（剩余 N）市场剩余"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "[0-9]{1,7}"
+        ],
+        "roi": [
+            240,
+            840,
+            260,
+            42
+        ],
+        "timeout": 1000
+    },
+    "Castle_BuyBalance": {
+        "attach": {
+            "description": "购买弹窗：银币 花费/余额 一行"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "[0-9][0-9,，.]*\\s*/\\s*[0-9][0-9,，.kKmM]*"
+        ],
+        "roi": [
+            285,
+            690,
+            265,
+            50
+        ],
+        "timeout": 1000
+    },
+    "Castle_BuyMinus": {
+        "attach": {
+            "description": "购买弹窗：数量 -"
+        },
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [
+            247,
+            796,
+            32,
+            32
+        ],
+        "post_delay": 50,
+        "timeout": 1000
+    },
+    "Castle_BuyPlus": {
+        "attach": {
+            "description": "购买弹窗：数量 +"
+        },
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [
+            439,
+            796,
+            32,
+            32
+        ],
+        "post_delay": 50,
+        "timeout": 1000
+    },
+    "Castle_BuyMax": {
+        "attach": {
+            "description": "购买弹窗：数量最大（↑，等于市场剩余）"
+        },
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [
+            509,
+            796,
+            32,
+            32
+        ],
+        "post_delay": 150,
+        "timeout": 1000
+    },
+    "Castle_BuyConfirm": {
+        "attach": {
+            "description": "购买弹窗：确定"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "确定"
+        ],
+        "roi": [
+            430,
+            902,
+            150,
+            75
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 700,
+        "timeout": 3000
+    },
+    "Castle_BuyCancel": {
+        "attach": {
+            "description": "购买弹窗：取消"
+        },
+        "recognition": "OCR",
+        "expected": [
+            "取消"
+        ],
+        "roi": [
+            135,
+            902,
+            150,
+            75
+        ],
+        "action": "Click",
+        "target": true,
+        "post_delay": 500,
+        "timeout": 3000
+    }
+}

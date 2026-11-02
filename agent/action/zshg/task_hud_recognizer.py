@@ -409,6 +409,7 @@ class TaskHudRecognizer:
         )
         items: List[dict] = []
         eligible: List[HudTaskInfo] = []
+        non_combat: List[str] = []
         for task in tasks:
             ok, reason = self.evaluate_task(
                 task,
@@ -417,18 +418,26 @@ class TaskHudRecognizer:
                 blacklist=names,
                 city=city,
             )
+            keyword = self.non_combat_keyword(task)
             items.append(
                 {
                     "name": task.task_name,
                     "type": task.task_type,
                     "level": task.task_level,
                     "description": task.task_description,
+                    "non_combat": keyword is not None,
                     "eligible": ok,
                     "reason": reason,
                 }
             )
+            if keyword is not None:
+                non_combat.append(f"{task.task_name}（{keyword}）")
             if ok:
                 eligible.append(task)
+        if non_combat:
+            # 采购/配送任务按描述关键词分类排除，不进入候选，也不接取；
+            # 网页「任务接取」面板里同样显示为「非战斗任务」。
+            logger.info("任务板分类：排除采购/配送任务 " + "、".join(non_combat))
         logger.debug(
             f"任务板扫描：{len(tasks)} 条，可接 {len(eligible)} 条"
             f"（城市={city or '未知'}，等级 {min_level}-{max_level}，"

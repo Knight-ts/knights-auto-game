@@ -19,6 +19,8 @@
         "Event_PirateRaid_Dispatch",
         "PopUpWindowTip",
         "Auto_SailingFestivalEvent",
+        "Func_CastleResource",
+        "Func_BuyBread",
         "Func_MapSwitch",
         "AutoFight_Start",
         "Event_CastleDefense",

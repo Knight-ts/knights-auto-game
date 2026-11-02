@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "updated": "2026-10-30",
+  "note": "返回路线表：认不出的画面先按 default 点几次安全位置（点完就重新截图比对），画面还是没变化才记录到 debug/unknown；记录过的画面按 unknown:<key> 的路线返回。网页「主页 → 未知界面」可以给每条记录选返回方式，选完写回本文件，agent 下次直接套用。",
+  "settings": {
+    "enabled": true,
+    "maxClicks": 3,
+    "clickGapSeconds": 0.7,
+    "changeThreshold": 2.0,
+    "matchThreshold": 3.0,
+    "recordLimit": 80,
+    "probeOnRecord": true
+  },
+  "probeNodes": [
+    "UI_MainWindows",
+    "BackButton_500ms",
+    "PopUpWindowTip",
+    "TravelDialog",
+    "FightStart",
+    "FightEndRound",
+    "FightVictory",
+    "FightFail",
+    "Event_HarvestFestivalPrePay",
+    "Event_HarvestFestivalAnnuaClosing",
+    "Event_ConfessionSuccess",
+    "Event_ConfessionFail",
+    "Event_WeddingPage",
+    "Event_PirateRaid",
+    "Event_MercenaryJoin",
+    "Event_MercenaryBaby"
+  ],
+  "primitives": {
+    "click_bottom": {
+      "label": "点屏幕下方（「确定 / 继续」常见位置）",
+      "kind": "click",
+      "x": 360,
+      "y": 1010
+    },
+    "click_center": {
+      "label": "点屏幕中心",
+      "kind": "click",
+      "x": 360,
+      "y": 640
+    },
+    "back_key": {
+      "label": "安卓返回键（keycode 4）",
+      "kind": "key",
+      "keycode": 4
+    },
+    "back_button": {
+      "label": "点游戏右上角返回箭头",
+      "kind": "task",
+      "task": "BackButton_500ms"
+    },
+    "popup": {
+      "label": "点提示弹窗「确定」",
+      "kind": "task",
+      "task": "PopUpWindowTip"
+    },
+    "wait": {
+      "label": "等待 0.8 秒再看画面",
+      "kind": "wait",
+      "seconds": 0.8
+    }
+  },
+  "default": {
+    "id": "",
+    "label": "默认：下方 → 返回键 → 中心",
+    "steps": [
+      "click_bottom",
+      "back_key",
+      "click_center"
+    ],
+    "note": "三个位置都只点一下、点完立刻截图比对：先试「确定 / 继续」最常见的位置，再按安卓返回，最后点屏幕中心。任何一步让画面变了就停手，交给上层重新识别；三步都没变化才记录。"
+  },
+  "routes": [
+    {
+      "id": "popup_tip",
+      "scene": "popup_tip",
+      "label": "提示弹窗：点「确定」关闭",
+      "steps": [
+        "popup"
+      ],
+      "symbol": "handle_interrupt_scene",
+      "note": "通用提示弹窗只有「确定」，点掉即可；旅行确认不走这条。"
+    },
+    {
+      "id": "annual_closing",
+      "scene": "annual_closing",
+      "label": "年度结算：点「确定」",
+      "steps": [
+        "task:Event_HarvestFestivalAnnuaClosing"
+      ],
+      "symbol": "_recover_yearly_to_bigmap",
+      "note": "年度结算页只有确定，不点掉会一直卡住并最终被当成未知画面。"
+    },
+    {
+      "id": "travel_dialog",
+      "scene": "travel_dialog",
+      "label": "旅行确认：步行兜底",
+      "steps": [
+        "task:TravelDialog_ChooseSlow"
+      ],
+      "symbol": "_recover_yearly_to_bigmap",
+      "note": "只走已知的步行兜底，避免交通资源状态不明时重复购买 / 消耗。"
+    },
+    {
+      "id": "child_death",
+      "scene": "child_death",
+      "label": "孩子夭折：点确认",
+      "steps": [
+        "task:事件_孩子夭折了"
+      ],
+      "symbol": "handle_interrupt_scene",
+      "note": "夭折弹窗会盖住大地图，点确定后继续原流程。"
+    },
+    {
+      "id": "mercenary_retire",
+      "scene": "mercenary_retire",
+      "label": "佣兵退休：同意 → 完成 → 确定",
+      "steps": [
+        "task:Event_MercenarieRetire"
+      ],
+      "symbol": "",
+      "note": "退休弹窗按节点链走完再回大地图。"
+    }
+  ]
+}

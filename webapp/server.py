@@ -22,6 +22,9 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from webapp import scenes as scene_rules
+from webapp import source as source_view
+from webapp import unknowns as unknown_view
 from webapp.combos import ComboRunner, load as load_combos, normalize as normalize_combo
 from webapp.combos import save as save_combos, validate as validate_combos
 from webapp.repair import DEFAULTS as REPAIR_DEFAULTS, RepairManager
@@ -77,6 +80,42 @@ def load_config() -> dict:
 def save_config(data: dict) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+# 「场景处理」卡片里展示最近命中的场景日志；只做关键词筛选，不解析格式。
+SCENE_LOG_HINTS = (
+    "场景确认",
+    "口粮预交",
+    "年度结算",
+    "检测到佣兵",
+    "检测到孩子",
+    "检测到提示",
+    "检测到海盗",
+    "检测到城堡",
+    "检测到丰收",
+    "检测到告白",
+    "检测到婚礼",
+    "事件处理完成",
+    "好娃提醒",
+    "任务失败",
+    "未知画面",
+    "未知界面",
+)
+
+
+def _scene_recent_logs(limit: int = 8) -> list[str]:
+    try:
+        lines = runtime.tail_logs(500)
+    except Exception:  # noqa: BLE001
+        return []
+    hits: list[str] = []
+    for line in reversed(lines):
+        text = (line or "").strip()
+        if text and any(hint in text for hint in SCENE_LOG_HINTS):
+            hits.append(text)
+        if len(hits) >= limit:
+            break
+    return list(reversed(hits))
 
 
 # 月度循环是基础配置；这三项最早只存在于「战斗任务主动」。
@@ -351,6 +390,42 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/combos/status":
                 self._json(200, {"ok": True, "running": combo_runner.status()})
+            elif path == "/api/scenes":
+                payload = scene_rules.load()
+                payload["ok"] = True
+                payload["guard"] = scene_rules.guard()
+                payload["recent"] = _scene_recent_logs()
+                self._json(200, payload)
+            elif path == "/api/unknowns":
+                payload = unknown_view.state()
+                payload["ok"] = True
+                self._json(200, payload)
+            elif path == "/api/unknowns/detail":
+                sid = (parse_qs(parsed.query).get("id") or [""])[0]
+                record = unknown_view.detail(sid)
+                if record is None:
+                    self._json(404, {"ok": False, "error": "没有这条未知界面记录"})
+                else:
+                    self._json(200, {"ok": True, **record})
+            elif path == "/api/unknowns/image":
+                sid = (parse_qs(parsed.query).get("id") or [""])[0]
+                data = unknown_view.image_bytes(sid)
+                if data is None:
+                    self._json(404, {"ok": False, "error": "没有截图"})
+                else:
+                    self._send(200, data, "image/png")
+            elif path == "/api/source":
+                query = parse_qs(parsed.query)
+                symbol = (query.get("symbol") or [""])[0]
+                node = (query.get("node") or [""])[0]
+                rel = (query.get("path") or [""])[0]
+                try:
+                    line = int((query.get("line") or ["0"])[0])
+                except ValueError:
+                    line = 0
+                payload = source_view.lookup(symbol=symbol, node=node, path=rel, line=line)
+                payload["ok"] = bool(payload.get("ok"))
+                self._json(200, payload)
             elif path == "/api/taskpack":
                 self._json(200, taskpack.status())
             elif path == "/api/screenshot":
@@ -720,6 +795,43 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 reload_interface(result)
                 self._json(200, result)
+            elif path == "/api/unknowns/route":
+                sid = str(payload.get("id") or "")
+                try:
+                    record = unknown_view.save_route(sid, str(payload.get("route") or ""))
+                except ValueError as exc:
+                    self._json(400, {"ok": False, "error": str(exc)})
+                    return
+                if record is None:
+                    self._json(404, {"ok": False, "error": "没有这条未知界面记录"})
+                else:
+                    self._json(200, {"ok": True, "item": record})
+            elif path == "/api/unknowns/note":
+                sid = str(payload.get("id") or "")
+                record = unknown_view.note(sid, str(payload.get("note") or ""))
+                if record is None:
+                    self._json(404, {"ok": False, "error": "没有这条未知界面记录"})
+                else:
+                    self._json(200, {"ok": True, "item": record})
+            elif path == "/api/unknowns/delete":
+                sid = str(payload.get("id") or "")
+                removed = unknown_view.remove(sid)
+                self._json(
+                    200,
+                    {"ok": removed, "removed": bool(removed), "stats": unknown_view.store().stats()},
+                )
+            elif path == "/api/unknowns/clear":
+                if not payload.get("confirm"):
+                    self._json(400, {"ok": False, "error": "清空未知界面记录需要 confirm=true"})
+                    return
+                self._json(200, {"ok": True, **unknown_view.clear()})
+            elif path == "/api/source/open":
+                rel = str(payload.get("path") or "")
+                try:
+                    line = int(payload.get("line") or 1)
+                except (TypeError, ValueError):
+                    line = 1
+                self._json(200, source_view.open_in_editor(rel, line))
             elif path == "/api/selfheal/frontend":
                 message = str(payload.get("message") or "").strip()
                 if not message:

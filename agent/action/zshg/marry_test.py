@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
-"""城堡相亲界面操作：筛选公爵、按年龄从大到小排序。
+"""城堡相亲界面操作：筛选爵位、按年龄排序。
 
 单项测试动作 CastleMarryTest 会在此基础上选第一个候选人并点联姻/速配；
 自动相亲流程（MarryProcessor）也会先调用 ensure_filter_and_sort()，
 避免两边各写一份坐标。
+
+筛选勾选是**开关**：爵位已经勾着再点一次会取消，导致骑士等也进入候选。
+所以这里先用模板匹配读复选框状态（Marry/check_on.png / check_off.png），
+只有「未勾选」才点击；状态读不出来时按未勾选处理并复检一次。
 """
 
 from __future__ import annotations
@@ -35,6 +39,18 @@ TITLE_BOXES = {
 }
 ALL_TITLES = (292, 265)      # 筛选弹窗「全部」
 
+# 复选框 ROI（x, y, w, h；模板 36x36，留 4px 余量）——用来读「勾没勾」
+CHECKBOX_ROI = {
+    "全部": [545, 237, 44, 44],
+    "公爵": [277, 937, 44, 44],
+    "伯爵": [545, 872, 44, 44],
+    "男爵": [277, 872, 44, 44],
+    "骑士": [545, 807, 44, 44],
+    "平民": [277, 807, 44, 44],
+}
+# 点击点用复选框中心（比点标签更稳）
+CHECKBOX_CLICK = {name: (roi[0] + 22, roi[1] + 22) for name, roi in CHECKBOX_ROI.items()}
+
 
 def _click(context: Context, x: int, y: int, wait: float = 0.5) -> None:
     context.tasker.controller.post_click(x, y).wait()
@@ -60,29 +76,78 @@ def _text(context: Context, roi, expected=None) -> str:
     return ""
 
 
+def checkbox_state(context: Context, label: str) -> str:
+    """读筛选面板里某个爵位勾没勾：on / off / unknown。"""
+    roi = CHECKBOX_ROI.get(label)
+    if roi is None:
+        return "unknown"
+    img = context.tasker.controller.post_screencap().wait().get()
+    on = context.run_recognition(
+        "MarryCheckOn", img, pipeline_override={"MarryCheckOn": {"roi": roi}}
+    )
+    if on.hit:
+        return "on"
+    off = context.run_recognition(
+        "MarryCheckOff", img, pipeline_override={"MarryCheckOff": {"roi": roi}}
+    )
+    if off.hit:
+        return "off"
+    return "unknown"
+
+
+def reset_title_filter(context: Context) -> None:
+    """兜底清空爵位勾选：点两次「全部」（先全选、再取消），所有爵位都变未选中。
+
+    模板读数不可靠时用这招，避免“已经勾着又点一下”变成取消。
+    """
+    point = CHECKBOX_CLICK["全部"]
+    logger.info("筛选：点「全部」两次清空爵位勾选")
+    _click(context, *point, wait=0.3)
+    _click(context, *point, wait=0.3)
+
+
+def ensure_title_checked(context: Context, label: str) -> None:
+    """确保某爵位处于勾选状态；已经勾着就不再点（避免点成取消）。"""
+    state = checkbox_state(context, label)
+    if state == "on":
+        logger.info(f"筛选：{label} 已经勾选，跳过点击")
+        return
+
+    point = CHECKBOX_CLICK.get(label) or TITLE_BOXES.get(label) or ALL_TITLES
+    if state == "unknown":
+        logger.warning(f"筛选：{label} 勾选状态没识别出来，先清空再勾选")
+        reset_title_filter(context)
+        _click(context, *point, wait=0.35)
+        return
+
+    _click(context, *point, wait=0.35)
+    after = checkbox_state(context, label)
+    logger.info(f"筛选：勾选{label}（{state} → {after}）")
+    if after == "off":
+        logger.warning(f"筛选：{label} 点一次还是没勾上，再点一次")
+        _click(context, *point, wait=0.35)
+
+
 def ensure_filter_and_sort(
     context: Context, title: str = "公爵", age_pref: str = "older"
 ) -> None:
     """在联姻界面执行：筛选爵位 → 确定 → 按年龄排序 → 关掉排序面板。"""
-    logger.info(f"联姻界面：点击筛选（爵位={title}，年龄={age_pref}）")
+    label = "全部" if title == "不限" else title
+    logger.info(f"联姻界面：点击筛选（爵位={label}，年龄={age_pref}）")
     _click(context, *FILTER_BTN, wait=0.8)
 
-    if title == "不限":
-        logger.info("联姻界面：勾选“全部”爵位")
-        _click(context, *ALL_TITLES, wait=0.3)
-    else:
-        box = TITLE_BOXES.get(title, TITLE_BOXES["公爵"])
-        logger.info(f"联姻界面：勾选{title}")
-        _click(context, *box, wait=0.3)
+    ensure_title_checked(context, label)
+
     logger.info("联姻界面：点击确定")
     _click(context, *CONFIRM_BTN, wait=1.0)
 
     count = _text(context, [230, 630, 260, 40])
     logger.info(f"筛选后数量：{count or '未识别'}")
-    if count.startswith("0/") and title != "不限":
-        logger.warning(f"筛选后没有{title}对象，重新勾选")
+    if label != "全部" and count.startswith("0/"):
+        logger.warning(f"筛选后没有{label}对象，清空后重新勾选")
         _click(context, *FILTER_BTN, wait=0.8)
-        _click(context, *TITLE_BOXES.get(title, TITLE_BOXES["公爵"]), wait=0.3)
+        reset_title_filter(context)
+        _click(context, *CHECKBOX_CLICK.get(label, ALL_TITLES), wait=0.35)
         _click(context, *CONFIRM_BTN, wait=1.0)
 
     logger.info("联姻界面：打开排序面板")

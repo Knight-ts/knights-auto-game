@@ -2,21 +2,25 @@ from maa.agent.agent_server import AgentServer
 from maa.context import Context
 from maa.custom_action import CustomAction
 from utils import logger
+from utils import game_state
 import json
 import os
+import re
 import time
 from typing import Any, Optional
 
 import action.fight.fight_utils as fight_utils
+import action.fight.scene_return as scene_return
 
-
-# 这些月度流程会进入其他城市或独立场景，返回大地图后当前城市可能改变。
-CITY_CHANGING_FESTIVAL_MONTHS = frozenset({3, 5})
 
 # 年度任务是长流程：任何“看起来点击成功”的动作都必须在有限时间内
 # 重新观察到一个支持的状态，否则停止而不是继续消耗任务/资源。
 YEARLY_MONTH_RETRIES = 3
 YEARLY_RECOVERY_STEPS = 12
+
+# 口粮预交：粮食不足时点「确定」会扣士气、让孩子带上营养不良等负面特性，
+# 所以只有确认「粮食充足」才点；否则暂停等玩家补粮。
+RATION_SHORT_MARKER = "ration_short.json"
 
 
 def _yearly_month_retries(context: Context) -> int:
@@ -31,7 +35,13 @@ def _yearly_month_retries(context: Context) -> int:
         value = int(str(expected).strip())
     except (TypeError, ValueError):
         value = YEARLY_MONTH_RETRIES
-    return min(10, max(1, value))
+    # 0 = 不限（一直重试到月份推进或手动停止）；负数/脏数据按默认值；
+    # 超过 999 视为旧配置里“填个超大数表示不限”的写法，也按不限处理
+    if value < 0:
+        value = YEARLY_MONTH_RETRIES
+    if value > 999:
+        return 0
+    return value
 YEARLY_MONTH_WAIT_SECONDS = 8.0
 
 
@@ -56,9 +66,10 @@ def _recovery_state(context: Context, img: Any = None) -> str:
 
 
 def _recover_yearly_to_bigmap(context: Context, max_steps: int = YEARLY_RECOVERY_STEPS) -> bool:
-    """有界恢复年度入口/月份间断点，未知状态直接停止。"""
+    """有界恢复年度入口/月份间断点；未知画面先按返回路线点几次，仍不动才记录并停止。"""
     last_event = None
     repeated_event_count = 0
+    unknown_rounds = 0
     for step in range(max_steps):
         img = fight_utils._screencap(context)
         if img is None:
@@ -79,6 +90,19 @@ def _recover_yearly_to_bigmap(context: Context, max_steps: int = YEARLY_RECOVERY
             result = context.run_task("Event_PirateRaid_Dispatch")
             if not fight_utils._task_succeeded(result):
                 logger.error("年度流程恢复海盗事件失败")
+                return False
+            time.sleep(0.5)
+            continue
+
+        # 年末/丰收节「年度结算」只有确定按钮，必须先点掉；否则后续
+        # _recovery_state 会把它判成未知画面并停止整个年度任务。
+        if context.run_recognition("Event_HarvestFestivalAnnuaClosing", img).hit:
+            logger.info(
+                f"年度流程恢复状态: annual_closing ({step + 1}/{max_steps})"
+            )
+            result = context.run_task("Event_HarvestFestivalAnnuaClosing")
+            if not fight_utils._task_succeeded(result):
+                logger.error("年度结算页点击确定失败")
                 return False
             time.sleep(0.5)
             continue
@@ -143,7 +167,55 @@ def _recover_yearly_to_bigmap(context: Context, max_steps: int = YEARLY_RECOVERY
                 return False
             time.sleep(0.5)
             continue
-        logger.error("年度流程处于未知画面，停止恢复以避免盲点")
+
+        # 未知画面：先按 table/return_routes.json 的路线点几次安全位置
+        # （下方 → 返回键 → 中心），每点一步都重新截图比对；画面一变就
+        # 回到循环顶部重新识别。三步都没变化才记录，避免“盲点”或空转。
+        unknown_rounds += 1
+        if unknown_rounds > 2:
+            logger.error("未知画面连续出现，停止恢复（已记录到 debug/unknown 供分析）")
+            return False
+        try:
+            handled = scene_return.handle_unknown(
+                context,
+                img,
+                source="_recover_yearly_to_bigmap",
+                reason="年度流程停在无法识别的画面，按返回路线点了几次仍没有变化",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(f"未知画面处理失败：{exc}")
+            return False
+        clicked = " → ".join(
+            f"{item.get('step')}"
+            + ("（变了）" if item.get("changed") else "（没变）" if item.get("changed") is False else "")
+            for item in handled.get("attempts") or []
+        ) or "未点击"
+        status = handled.get("status")
+        if status == "changed":
+            logger.info(
+                f"未知画面：{clicked}；画面已变化，继续恢复（返回方式：{handled.get('route') or '默认'}）"
+            )
+            time.sleep(0.4)
+            continue
+        if status == "recorded":
+            record = handled.get("record") or {}
+            logger.error(
+                f"未知画面：{clicked}；画面没有变化，已记录 {record.get('id', '')}"
+                f"（来源 {scene_return.primary_source(handled) or '未知'}）。"
+                "停止恢复；可在网页「场景处理 → 未知界面」里看截图并选返回方式"
+            )
+            return False
+        if status == "stuck":
+            record = handled.get("record") or {}
+            logger.error(
+                f"未知画面：{clicked}；历史记录 {record.get('id', '')} 的返回方式没有生效，"
+                "已累加命中次数，停止恢复等分析"
+            )
+            return False
+        if status == "stopped":
+            logger.info("未知画面处理被手动停止")
+            return False
+        logger.error(f"未知画面处理结果：{status}（{clicked}），停止恢复以避免盲点")
         return False
     logger.error("年度流程恢复超过有界步数，停止")
     return False
@@ -366,6 +438,12 @@ def handle_confession_fail(context: Context) -> str:
     """
     if _confession_fail_mode(context) == "keep":
         result = context.run_task("Event_ConfessionFailKeepGold")
+        if not fight_utils._task_succeeded(result):
+            # 常见界面：右下是「获取对象信息」，点了才出现用金币保留的选项
+            logger.info("告白失败：先点「获取对象信息」，再找金币保留")
+            if fight_utils._task_succeeded(context.run_task("Event_ConfessionFailInfo")):
+                time.sleep(1.0)
+                result = context.run_task("Event_ConfessionFailKeepGold")
         if fight_utils._task_succeeded(result):
             time.sleep(0.8)
             img = context.tasker.controller.post_screencap().wait().get()
@@ -490,6 +568,16 @@ def detect_and_manage_event(context: Context, screenshot) -> str:
         logger.info("检测到孩子夭折事件")
         context.run_task("事件_孩子夭折了")
         return "child_death"
+    elif context.run_recognition("Event_HarvestFestivalPrePay", screenshot).hit:
+        logger.info("检测到口粮预交面板")
+        event = handle_ration_prepay(context, screenshot)
+        return event or "ration_prepay"
+    elif context.run_recognition("Event_HarvestFestivalAnnuaClosing", screenshot).hit:
+        # 丰收节 / 年末的年度结算：默认点「确定」结清训练所支出与工资，
+        # 页面上的「银币充足 / 银币不足」只作提示，不做额外判断。
+        logger.info("检测到丰收节年度结算界面，默认点击「确定」")
+        context.run_task("Event_HarvestFestivalAnnuaClosing")
+        return "annual_closing"
     elif context.run_recognition("Event_HarvestFestival", screenshot).hit:
         logger.info("检测到丰收节事件")
         context.run_task("Event_HarvestFestivalDealWith")
@@ -713,6 +801,135 @@ def handle_marry_festival(context: Context, month: int = 4) -> bool:
     return True
 
 
+def _parse_ration_amount(text: str) -> Optional[tuple[int, int]]:
+    """把「拥有 / 消耗」解析成 (拥有, 消耗)。
+
+    实际面板：``粮食 69449 / 5232``，左边是当前粮食、右边是每年消耗；
+    所以左边 >= 右边时显示「粮食充足」。
+    """
+    match = re.search(r"([0-9][0-9,，.kKmM万]*)\s*/\s*([0-9][0-9,，.kKmM万]*)", text or "")
+    if not match:
+        return None
+    from action.fight.castle_resource_processor import parse_number
+
+    have = parse_number(match.group(1))
+    need = parse_number(match.group(2))
+    if have is None or need is None:
+        return None
+    return have, need
+
+
+def _ration_condition(context: Context, img: Any) -> tuple[str, dict]:
+    """判断口粮预交面板里的粮食够不够。
+
+    返回 (state, detail)，state = enough / short / unknown。
+    优先认面板上的「粮食充足」；读不到再用「消耗 / 拥有」数字兜底，
+    拥有 >= 消耗才算充足。两者都没有就返回 unknown，由调用方按不足处理。
+    """
+    if context.run_recognition("Event_RationPrepayEnough", img).hit:
+        return "enough", {"reason": "面板显示「粮食充足」"}
+    if context.run_recognition("Event_RationPrepayShort", img).hit:
+        return "short", {"reason": "面板显示「粮食不足」"}
+
+    detail = context.run_recognition("Event_RationPrepayAmount", img)
+    if detail and detail.hit:
+        texts = []
+        if detail.best_result is not None and detail.best_result.text:
+            texts.append(detail.best_result.text)
+        for item in detail.filtered_results or []:
+            text = getattr(item, "text", "")
+            if text and text not in texts:
+                texts.append(text)
+        for text in texts:
+            pair = _parse_ration_amount(text)
+            if pair is None:
+                continue
+            have, need = pair
+            return (
+                "enough" if have >= need else "short",
+                {
+                    "reason": f"数值判断：拥有 {have} / 消耗 {need}",
+                    "need": need,
+                    "have": have,
+                    "text": text.strip(),
+                },
+            )
+    return "unknown", {"reason": "没有识别到「粮食充足」，也没有读到可用的数字"}
+
+
+def _pause_for_ration(context: Context, state: str, detail: dict) -> None:
+    """口粮不够/判断不了：不点确定，留标记、推送并暂停等补粮。"""
+    payload = {
+        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "state": state,
+        "action": "pause",
+        "reason": detail.get("reason", ""),
+        "note": "口粮预交未确认粮食充足，已暂停；请先补粮/调配后再继续",
+    }
+    for key in ("need", "have", "text"):
+        if key in detail:
+            payload[key] = detail[key]
+
+    marker = os.path.join(os.getcwd(), "temp", RATION_SHORT_MARKER)
+    try:
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        with open(marker, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+    except OSError as exc:  # noqa: BLE001
+        logger.warning(f"口粮预交：写暂停标记失败：{exc}")
+
+    content = (
+        "口粮预交：没有确认粮食充足，已暂停任务。"
+        "请先在城堡调配或购买粮食，再重新运行。"
+    )
+    try:
+        from utils.notifier import notify
+
+        notify("口粮预交", content)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"口粮预交：推送失败：{exc}")
+    try:
+        context.run_task(
+            "UI_PopInform",
+            pipeline_override={"Node.Action.Succeeded": {"content": content}},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"口粮预交：弹窗失败：{exc}")
+    context.tasker.post_stop()
+
+
+def handle_ration_prepay(context: Context, img: Any = None) -> str:
+    """口粮预交：只有检测到粮食充足才点「确定」，否则暂停等补粮。
+
+    返回事件名；当前画面不是口粮预交时返回空串。
+    """
+    if img is None:
+        img = fight_utils._screencap(context)
+    if img is None:
+        return ""
+    if not context.run_recognition("Event_HarvestFestivalPrePay", img).hit:
+        return ""
+
+    state, detail = _ration_condition(context, img)
+    logger.info(f"口粮预交：粮食判定 = {state}（{detail.get('reason', '')}）")
+
+    if state == "enough":
+        result = context.run_task("Event_RationPrepayConfirm")
+        if not fight_utils._task_succeeded(result):
+            logger.error("口粮预交：粮食充足，但点「确定」失败")
+            return "ration_prepay_failed"
+        logger.info("口粮预交：粮食充足，已点「确定」提交")
+        return "ration_prepay"
+
+    if state == "unknown":
+        logger.warning("口粮预交：没能确认粮食是否充足，按不足处理，不点「确定」")
+    else:
+        logger.warning(f"口粮预交：粮食不足（{detail.get('reason', '')}），不点「确定」")
+    _pause_for_ration(context, state, detail)
+    return "ration_short"
+
+
 def handle_harvest_festival(context: Context) -> bool:
     """处理丰收节（8月）"""
     logger.info("处理丰收节")
@@ -725,12 +942,99 @@ def handle_warrior_festival(context: Context) -> bool:
     return True
 
 
+_CASTLE_FEATURE_STATE = "castle_features_state.json"
+
+
+def _castle_feature_state_path() -> str:
+    return os.path.join(os.getcwd(), "temp", _CASTLE_FEATURE_STATE)
+
+
+def _load_castle_feature_state() -> dict:
+    try:
+        with open(_castle_feature_state_path(), "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_castle_feature_state(state: dict) -> None:
+    path = _castle_feature_state_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(tmp, path)
+    except OSError as exc:  # noqa: BLE001
+        logger.warning(f"城堡附加功能：写月份状态失败：{exc}")
+
+
+def _run_castle_features(context: Context, month: int) -> bool:
+    """按月份执行城堡资源记录 / 市场购买面包。
+
+    这两个功能是“附加动作”：识别失败只记日志，不拖垮整个月度流程；
+    只有「资源低于阈值」会通过 post_stop 主动暂停年度任务。
+
+    同一轮年度任务里，同一年月只执行一次（月份失败重试不会重复买面包）。
+    """
+    try:
+        from action.fight.castle_resource_processor import (
+            configured_record_month,
+            maybe_record_castle_resources,
+        )
+        from action.fight.bread_purchase_processor import (
+            configured_buy_month,
+            maybe_buy_bread,
+        )
+
+        year, _state_month = game_state.year_month()
+        stamp = f"{year}-{month}"
+        state = _load_castle_feature_state()
+
+        if configured_record_month(context) == month:
+            if state.get("resource") == stamp:
+                logger.info(f"城堡资源记录：{stamp} 本轮已执行过，跳过重复记录")
+            else:
+                maybe_record_castle_resources(context, month)
+                state["resource"] = stamp
+                _save_castle_feature_state(state)
+                if context.tasker.stopping:
+                    logger.info("城堡资源低于阈值：月度流程按要求暂停")
+                    return False
+
+        if configured_buy_month(context) == month:
+            if state.get("bread") == stamp:
+                logger.info(f"购买面包：{stamp} 本轮已执行过，跳过重复购买")
+            else:
+                maybe_buy_bread(context, month)
+                state["bread"] = stamp
+                _save_castle_feature_state(state)
+                if context.tasker.stopping:
+                    logger.info("购买面包过程中任务被停止")
+                    return False
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"城堡附加功能执行失败（不影响主流程）：{exc}")
+    return True
+
+
 def process_single_month(context: Context) -> bool:
     """处理单个月份的完整流程"""
 
     if not preprocess_events(context):
         logger.error("月度任务前置事件未能在有界轮次内收敛")
         return False
+
+    # 城堡资源记录 / 购买面包：按配置月份在每月流程最前面执行。
+    month = check_current_month(context)
+    if month is None:
+        return False
+    if not _run_castle_features(context, month):
+        return False
+    if context.tasker.stopping:
+        return False
+
     EnableGrothTrial = context.get_node_data("Flag_GrowthTrialMode").get("enabled")
     if EnableGrothTrial:
         month = check_current_month(context)
@@ -779,27 +1083,12 @@ def process_single_month(context: Context) -> bool:
         if not handle_festival_by_month(context, month):
             return False
 
-        if month in CITY_CHANGING_FESTIVAL_MONTHS:
-            logger.info("月度节日可能改变当前城市，接取任务前重新确认目标城市")
-            if not fight_utils.ensure_at_bigmap(context):
-                logger.error("节日结束后无法回到大地图界面")
-                return False
+        # 月度节日不会改变当前城市，节日处理完直接接任务，
+        # 不再重复确认/切换目标城市。
 
-            reached, traveled = _ensure_at_target_city(context, target_city)
-            if not reached:
-                logger.error(f"节日结束后无法回到目标城市: {target_city}")
-                return False
-
-            if traveled:
-                if not preprocess_events(context):
-                    return False
-                if not fight_utils.ensure_at_bigmap(context):
-                    logger.error("重新到达目标城市后无法回到大地图界面")
-                    return False
-
-        if not fight_utils.abandon_noncombat_accepted_task(context):
-            logger.error("无法安全校验或放弃已接取的非战斗任务")
-            return False
+        # 采购/配送等非战斗任务在扫描任务板时已按描述关键词分类排除，
+        # 不会再被接取；已接取的任务也不再额外打开任务板“校验类型”。
+        # 万一接到的任务进不了战斗，_process_pre 会按「放弃」按钮兜底。
 
         # 选择进入的关卡
         return fight_utils.start_task(context)
@@ -829,6 +1118,15 @@ class YearlyTaskProcessor(CustomAction):
         self, context: Context, argv: CustomAction.RunArg
     ) -> CustomAction.RunResult:
         logger.info("开始年度任务处理")
+
+        # 新一轮年度任务：清掉上一轮的城堡功能月份标记，
+        # 让配置月份在本轮重新执行（轮内重试仍然只执行一次）。
+        try:
+            state_path = _castle_feature_state_path()
+            if os.path.exists(state_path):
+                os.remove(state_path)
+        except OSError as exc:  # noqa: BLE001
+            logger.warning(f"清理城堡功能月份状态失败：{exc}")
 
         # 读取用户自定义的任务黑名单
         blacklist_data: dict = context.get_node_data("CustomTaskBlacklist")
@@ -868,14 +1166,22 @@ class YearlyTaskProcessor(CustomAction):
             return CustomAction.RunResult(success=False)
 
         month_retries = _yearly_month_retries(context)
-        logger.info(f"任务失败继续轮数：{month_retries}（可在设置里调整）")
+        logger.info(
+            f"任务失败继续轮数：{month_retries if month_retries > 0 else '不限'}"
+            "（可在设置里调整）"
+        )
         for month_offset in range(total_months):
             if context.tasker.stopping:
                 logger.info(f"已停止处理第 {month_offset + 1}/{total_months} 个月")
                 return CustomAction.RunResult(success=False)
             logger.info(f"开始处理第 {month_offset + 1}/{total_months} 个月")
             completed = False
-            for attempt in range(month_retries):
+            attempt = 0
+            while month_retries <= 0 or attempt < month_retries:
+                attempt += 1
+                if context.tasker.stopping:
+                    logger.info("任务已停止，年度任务结束")
+                    return CustomAction.RunResult(success=True)
                 if not _recover_yearly_to_bigmap(context):
                     logger.error(
                         f"第 {month_offset + 1}/{total_months} 个月恢复失败，停止年度任务"
@@ -894,9 +1200,15 @@ class YearlyTaskProcessor(CustomAction):
                         )
                         completed = True
                         break
+                if context.tasker.stopping:
+                    logger.info(
+                        "任务已按要求暂停（城堡资源低于阈值或手动停止），"
+                        "年度任务正常结束"
+                    )
+                    return CustomAction.RunResult(success=True)
                 logger.warning(
                     f"第 {month_offset + 1}/{total_months} 个月未确认进度 "
-                    f"({attempt + 1}/{month_retries})"
+                    f"({attempt}/{month_retries if month_retries > 0 else '不限'})"
                 )
                 time.sleep(0.5)
             if not completed:
@@ -968,7 +1280,12 @@ class ConfessionFailTask(CustomAction):
 
 @AgentServer.custom_action("SceneGuardTask")
 class SceneGuardTask(CustomAction):
-    """组合步骤失败后再次确认场景：只在识别到短事件时处理，不盲点。"""
+    """组合步骤失败后再次确认场景：只在识别到短事件时处理，不盲点。
+
+    没有短事件时再看一眼是不是「认不出来的画面」：按返回路线点几次，
+    画面变了算恢复（组合可以重试这一步）；还是没变化就记录并返回失败，
+    让组合按失败规则停下来，而不是反复重试同一个卡点。
+    """
 
     def run(
         self, context: Context, argv: CustomAction.RunArg
@@ -983,6 +1300,45 @@ class SceneGuardTask(CustomAction):
                 break
             events.append(name)
             time.sleep(0.5)
+
+        if not events:
+            img = fight_utils._screencap(context)
+            if (
+                img is not None
+                and not context.run_recognition("UI_MainWindows", img).hit
+                # 战斗页（准备 / 回合 / 结算）不是「未知画面」，乱点可能
+                # 变成撤退或误操作；交给战斗流程自己处理。
+                and fight_utils._detect_battle_state(context, img) == "unknown"
+            ):
+                try:
+                    handled = scene_return.handle_unknown(
+                        context,
+                        img,
+                        source="SceneGuardTask",
+                        reason="场景确认后仍停在无法识别的画面",
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(f"场景确认：未知画面处理失败 {exc}")
+                    handled = {"status": "error"}
+                status = handled.get("status")
+                clicked = " → ".join(
+                    str(item.get("step"))
+                    + ("（变了）" if item.get("changed") else "（没变）" if item.get("changed") is False else "")
+                    for item in handled.get("attempts") or []
+                ) or "未点击"
+                if status == "changed":
+                    events.append("unknown_recovered")
+                    logger.info(f"场景确认：未知画面 {clicked}，画面已变化")
+                elif status in ("recorded", "stuck"):
+                    events.append("unknown_recorded")
+                    record = handled.get("record") or {}
+                    logger.error(
+                        f"场景确认：未知画面 {clicked}，画面没有变化，"
+                        f"记录 {record.get('id', '')}（来源 "
+                        f"{scene_return.primary_source(handled) or '未知'}）"
+                    )
+                else:
+                    logger.info(f"场景确认：未知画面处理结果 {status}")
 
         marker = os.path.join(os.getcwd(), "temp", "scene_guard.json")
         try:
@@ -1003,7 +1359,23 @@ class SceneGuardTask(CustomAction):
             logger.info(f"场景确认：已处理打断事件 {events}")
         else:
             logger.info("场景确认：当前没有需要处理的短事件")
-        return CustomAction.RunResult(success=bool(events))
+        # unknown_recorded 表示「记录下来但没恢复」，不能算场景已确认，
+        # 否则组合会重试同一步并再次卡在同一个画面上。
+        return CustomAction.RunResult(
+            success=any(event != "unknown_recorded" for event in events)
+        )
+
+
+@AgentServer.custom_action("RationPrepayTask")
+class RationPrepayTask(CustomAction):
+    """口粮预交面板：粮食充足才点确定，不足/读不到就暂停等补粮。"""
+
+    def run(
+        self, context: Context, argv: CustomAction.RunArg
+    ) -> CustomAction.RunResult:
+        logger.info("场景处理：口粮预交")
+        event = handle_ration_prepay(context)
+        return CustomAction.RunResult(success=bool(event))
 
 
 @AgentServer.custom_action("SailingFestivalTask")
