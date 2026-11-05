@@ -729,6 +729,22 @@ class Handler(BaseHTTPRequestHandler):
                             "summary": battle_memory.memory().summary(),
                         },
                     )
+            elif path == "/api/battle-memory/opening":
+                key = str(payload.get("key") or "").strip()
+                opening = payload.get("opening")
+                if "/" not in key or not isinstance(opening, dict):
+                    self._json(400, {"ok": False, "error": "缺少任务键或走位方案"})
+                else:
+                    city, task = key.split("/", 1)
+                    ok = battle_memory.memory().save_opening(city, task, opening)
+                    self._json(
+                        200,
+                        {
+                            "ok": ok,
+                            "error": "" if ok else "任务不存在",
+                            "summary": battle_memory.memory().summary(),
+                        },
+                    )
             elif path == "/api/battle-memory/policy/delete":
                 name = str(payload.get("name") or "").strip()
                 deleted = battle_memory.memory().delete_policy(name)

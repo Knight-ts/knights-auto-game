@@ -622,6 +622,39 @@
       <textarea id="bmemMapJson" spellcheck="false"
         style="width:100%;height:170px;margin-top:10px;font-family:Consolas,monospace;font-size:12px;line-height:1.5"></textarea>
       <div class="hint" id="bmemMapNote"></div>
+
+      <div class="row" style="margin-top:14px;align-items:flex-end">
+        <strong>首回合走位</strong>
+        <label class="field" style="flex-direction:row;align-items:center;gap:6px">
+          <input type="checkbox" id="bmemOpeningEnabled"> 启用
+        </label>
+        <label class="field">范围
+          <select id="bmemOpeningTarget">
+            <option value="all">全部棋子</option>
+            <option value="one">单个棋子</option>
+          </select>
+        </label>
+        <label class="field">棋子名（单个时可选）
+          <input type="text" id="bmemOpeningPiece" placeholder="留空 = 第一个可行动棋子">
+        </label>
+        <label class="field">方向
+          <select id="bmemOpeningDirection">
+            <option value="N">北 N</option>
+            <option value="NE">东北 NE</option>
+            <option value="E">东 E</option>
+            <option value="SE">东南 SE</option>
+            <option value="S">南 S</option>
+            <option value="SW">西南 SW</option>
+            <option value="W">西 W</option>
+            <option value="NW">西北 NW</option>
+          </select>
+        </label>
+        <label class="field">格数
+          <input type="number" id="bmemOpeningCells" min="1" max="6" style="width:70px">
+        </label>
+        <button class="btn primary" id="btnBmemOpeningSave">保存走位</button>
+      </div>
+      <div class="hint" id="bmemRelation">上次敌我相对位置：-</div>
     </div>
   </section>
 

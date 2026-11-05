@@ -1440,7 +1440,7 @@ function renderBmemTasks() {
     ).join("");
     return `<tr>
       <td>${esc(item.city)}</td>
-      <td>${esc(item.task)}</td>
+      <td>${esc(item.task)}${item.relation && item.relation.direction ? `<br><span class="hint">敌在${esc(item.relation.label || item.relation.direction)} · ${item.relation.distance || 0}格</span>` : ""}</td>
       <td>${item.runs}</td>
       <td>${rate}%</td>
       <td>${item.avg_rounds == null ? "-" : item.avg_rounds}</td>
@@ -1474,6 +1474,16 @@ function editBmemMap(key) {
     ? `${task.city} / ${task.task} · 地图 ${state.bmemory.map.rows} × ${state.bmemory.map.cols}`
     : key;
   renderBmemMap();
+  const plan = (task && task.opening_plan) || {};
+  $("bmemOpeningEnabled").checked = !!plan.enabled;
+  $("bmemOpeningTarget").value = plan.target === "one" ? "one" : "all";
+  $("bmemOpeningPiece").value = plan.piece || "";
+  $("bmemOpeningDirection").value = plan.direction || "E";
+  $("bmemOpeningCells").value = plan.cells || 1;
+  const relation = (task && task.relation) || {};
+  $("bmemRelation").textContent = relation.direction
+    ? `上次敌我相对位置：敌在${relation.label || relation.direction}（约 ${relation.distance || 0} 格，${relation.allies || 0} 我方 / ${relation.enemies || 0} 敌方）`
+    : "上次敌我相对位置：暂无记录";
 }
 
 function renderBmemMap() {
@@ -1554,6 +1564,31 @@ function applyBmemMapJson() {
   $("bmemMapRows").value = map.rows;
   $("bmemMapCols").value = map.cols;
   renderBmemMap();
+}
+
+async function saveBmemOpening() {
+  const map = state.bmemory.map;
+  if (!map) return;
+  const opening = {
+    enabled: $("bmemOpeningEnabled").checked,
+    target: $("bmemOpeningTarget").value || "all",
+    piece: ($("bmemOpeningPiece").value || "").trim(),
+    direction: $("bmemOpeningDirection").value || "E",
+    cells: Math.max(1, Math.min(6, Number($("bmemOpeningCells").value) || 1)),
+    round: 1,
+  };
+  try {
+    const data = await post("/api/battle-memory/opening", { key: map.key, opening });
+    if (!data.ok) {
+      banner("err", [data.error || "保存失败"]);
+      return;
+    }
+    state.bmemory.data = data.summary;
+    renderBmemTasks();
+    banner("ok", ["首回合走位已保存"]);
+  } catch (error) {
+    banner("err", ["保存首回合走位失败：" + error.message]);
+  }
 }
 
 async function saveBmemMap() {
@@ -2227,6 +2262,7 @@ $("bmemMapGrid").addEventListener("click", (event) => {
 $("btnBmemMapApplySize").addEventListener("click", applyBmemMapSize);
 $("btnBmemMapApplyJson").addEventListener("click", applyBmemMapJson);
 $("btnBmemMapSave").addEventListener("click", saveBmemMap);
+$("btnBmemOpeningSave").addEventListener("click", saveBmemOpening);
 
 $("selfhealList").addEventListener("click", (e) => {
   const item = e.target.closest(".sh-item[data-id]");

@@ -47,6 +47,49 @@ EIGHT_DIRECTIONS: Tuple[Direction, ...] = (
     (-1, -1),
 )
 
+# 八方向命名：row 增大 = 南，col 增大 = 东。
+DIRECTION_DELTAS: Dict[str, Direction] = {
+    "N": (-1, 0),
+    "NE": (-1, 1),
+    "E": (0, 1),
+    "SE": (1, 1),
+    "S": (1, 0),
+    "SW": (1, -1),
+    "W": (0, -1),
+    "NW": (-1, -1),
+}
+DIRECTION_LABELS: Dict[str, str] = {
+    "N": "北",
+    "NE": "东北",
+    "E": "东",
+    "SE": "东南",
+    "S": "南",
+    "SW": "西南",
+    "W": "西",
+    "NW": "西北",
+}
+
+
+def direction_code(row_delta: int, col_delta: int) -> Optional[str]:
+    """把任意位移量化成八方向代码（N/NE/...）；零位移返回 None。"""
+    if not row_delta and not col_delta:
+        return None
+    if abs(row_delta) >= 2 * abs(col_delta):
+        return "S" if row_delta > 0 else "N"
+    if abs(col_delta) >= 2 * abs(row_delta):
+        return "E" if col_delta > 0 else "W"
+    return (
+        "S" if row_delta > 0 else "N"
+    ) + ("E" if col_delta > 0 else "W")
+
+
+def direction_label(code: Optional[str]) -> str:
+    return DIRECTION_LABELS.get(code or "", "")
+
+
+def direction_delta(code: str) -> Optional[Direction]:
+    return DIRECTION_DELTAS.get((code or "").upper())
+
 
 @dataclass
 class UnitObservation:

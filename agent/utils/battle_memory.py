@@ -52,6 +52,40 @@ LOSS_PENALTY_ROUNDS = 40.0
 UNKNOWN_ROUNDS = 18.0
 EXPLORE_FACTOR = 1.15
 
+# 八方向命名：row 增大 = 南，col 增大 = 东。
+DIRECTION_DELTAS = {
+    "N": (-1, 0),
+    "NE": (-1, 1),
+    "E": (0, 1),
+    "SE": (1, 1),
+    "S": (1, 0),
+    "SW": (1, -1),
+    "W": (0, -1),
+    "NW": (-1, -1),
+}
+DIRECTION_LABELS = {
+    "N": "北",
+    "NE": "东北",
+    "E": "东",
+    "SE": "东南",
+    "S": "南",
+    "SW": "西南",
+    "W": "西",
+    "NW": "西北",
+}
+
+
+def direction_code(row_delta: int, col_delta: int) -> Optional[str]:
+    if not row_delta and not col_delta:
+        return None
+    if abs(row_delta) >= 2 * abs(col_delta):
+        return "S" if row_delta > 0 else "N"
+    if abs(col_delta) >= 2 * abs(row_delta):
+        return "E" if col_delta > 0 else "W"
+    return ("S" if row_delta > 0 else "N") + (
+        "E" if col_delta > 0 else "W"
+    )
+
 
 # ------------------------------------------------------------------ 默认策略
 
@@ -441,6 +475,7 @@ class BattleMemory:
                 "started": _now(),
                 "initial": None,
                 "initial_world": None,
+                "initial_relation": None,
                 "map_bounds": None,
                 "blocked_world": [],
                 "occupancy": [],
@@ -539,11 +574,100 @@ class BattleMemory:
                         "blocked": list(trace.get("blocked_world") or []),
                         "round": record["round"],
                     }
+                relation = self._compute_relation(
+                    record.get("allies_world") or [],
+                    record.get("enemies_world") or [],
+                )
+                if relation:
+                    record["relation"] = relation
+                    if trace.get("initial_relation") is None:
+                        trace["initial_relation"] = relation
             if trace["initial"] is None:
                 trace["initial"] = record
             trace["snapshots"] = _to_int(trace.get("snapshots")) + 1
             if len(trace["occupancy"]) < 12:
                 trace["occupancy"].append(record)
+
+    @staticmethod
+    def _compute_relation(
+        allies: Sequence[Any], enemies: Sequence[Any]
+    ) -> Optional[dict]:
+        """按八方向记录敌我相对位置（中心点、方向、大致格数）。"""
+        if not allies or not enemies:
+            return None
+        ally_row = sum(_to_float(p[0]) for p in allies) / len(allies)
+        ally_col = sum(_to_float(p[1]) for p in allies) / len(allies)
+        enemy_row = sum(_to_float(p[0]) for p in enemies) / len(enemies)
+        enemy_col = sum(_to_float(p[1]) for p in enemies) / len(enemies)
+        row_delta = int(round(enemy_row - ally_row))
+        col_delta = int(round(enemy_col - ally_col))
+        code = direction_code(row_delta, col_delta)
+        if code is None:
+            code = "S"
+        return {
+            "allies": len(allies),
+            "enemies": len(enemies),
+            "ally_center": [round(ally_row, 1), round(ally_col, 1)],
+            "enemy_center": [round(enemy_row, 1), round(enemy_col, 1)],
+            "vector": [row_delta, col_delta],
+            "direction": code,
+            "label": DIRECTION_LABELS.get(code, code),
+            "distance": max(abs(row_delta), abs(col_delta)),
+        }
+
+    def relation_for(self, city: str, task: str) -> dict:
+        """读取该任务上一次战斗记录的敌我相对位置。"""
+        self.reload()
+        entry = (self._memory.get("tasks") or {}).get(task_key(city, task)) or {}
+        return entry.get("last_relation") or {}
+
+    def opening_for(self, city: str, task: str) -> dict:
+        """读取首回合走位方案（没有则返回 disabled 默认值）。"""
+        self.reload()
+        entry = (self._memory.get("tasks") or {}).get(task_key(city, task)) or {}
+        saved = entry.get("opening_plan") or {}
+        plan = {
+            "enabled": False,
+            "target": "all",
+            "piece": "",
+            "direction": "E",
+            "cells": 1,
+            "round": 1,
+        }
+        plan.update(saved if isinstance(saved, dict) else {})
+        plan["enabled"] = bool(plan.get("enabled"))
+        plan["target"] = "one" if plan.get("target") == "one" else "all"
+        plan["direction"] = (
+            str(plan.get("direction") or "E").upper()
+            if str(plan.get("direction") or "E").upper() in DIRECTION_DELTAS
+            else "E"
+        )
+        plan["cells"] = max(1, min(6, _to_int(plan.get("cells"), 1)))
+        plan["round"] = max(1, min(3, _to_int(plan.get("round"), 1)))
+        plan["piece"] = str(plan.get("piece") or "")
+        return plan
+
+    def save_opening(self, city: str, task: str, plan: dict) -> bool:
+        with self._lock:
+            self.reload(force=True)
+            key = task_key(city, task)
+            entry = (self._memory.get("tasks") or {}).get(key)
+            if not isinstance(entry, dict):
+                return False
+            plan = plan if isinstance(plan, dict) else {}
+            direction = str(plan.get("direction") or "E").upper()
+            entry["opening_plan"] = {
+                "enabled": bool(plan.get("enabled")),
+                "target": "one" if plan.get("target") == "one" else "all",
+                "piece": str(plan.get("piece") or ""),
+                "direction": (
+                    direction if direction in DIRECTION_DELTAS else "E"
+                ),
+                "cells": max(1, min(6, _to_int(plan.get("cells"), 1))),
+                "round": max(1, min(3, _to_int(plan.get("round"), 1))),
+            }
+            self._save_memory()
+            return True
 
     def decision(
         self,
@@ -593,6 +717,7 @@ class BattleMemory:
                 "result": "胜利" if win else "失败",
                 "policy": trace.get("policy") or "balanced",
                 "initial": trace.get("initial"),
+                "relation": trace.get("initial_relation"),
                 "occupancy": trace.get("occupancy") or [],
                 "decisions": trace.get("decisions") or [],
                 "pieces": pieces or {},
@@ -616,6 +741,12 @@ class BattleMemory:
                 entry["type"] = trace["type"]
             if trace.get("level") and not entry.get("level"):
                 entry["level"] = trace["level"]
+            relation = trace.get("initial_relation")
+            if relation:
+                entry["last_relation"] = relation
+                relations = entry.setdefault("relations", [])
+                relations.append({"time": run["time"], **relation})
+                entry["relations"] = relations[-20:]
             entry["runs"] = (entry.get("runs") or [])[-(MAX_RUNS_PER_TASK - 1):] + [run]
             entry["stats"] = self._update_stats(entry.get("stats") or {}, run)
             entry["opening"] = self._merge_opening(
@@ -972,6 +1103,11 @@ class BattleMemory:
                     "assigned": (self._policies.get("tasks") or {}).get(key, ""),
                     "opening": entry.get("opening") or {},
                     "map": entry.get("map") or {},
+                    "relation": entry.get("last_relation") or {},
+                    "relations": entry.get("relations") or [],
+                    "opening_plan": self.opening_for(
+                        entry.get("city", ""), entry.get("task", "")
+                    ),
                     "policies": stats.get("policies") or {},
                     "recent": (entry.get("runs") or [])[-5:],
                 }

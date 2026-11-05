@@ -41,6 +41,13 @@ MODE_LABELS = {
 }
 
 
+def _int_value(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @AgentServer.custom_action("AutoFightProcessor")
 class AutoFightProcessor(CustomAction):
     """混合战斗处理器：待机模式等待反击，追击模式主动建图与追击。
@@ -137,6 +144,13 @@ class AutoFightProcessor(CustomAction):
         self._policy = battle_memory.BattlePolicy({})
         self._battle_city = ""
         self._battle_task = ""
+        # 首回合走位方案（玩家在网页里配置）
+        self._opening_plan: dict = {}
+        self._opening_moved: Set[Tuple[int, int]] = set()
+        self._opening_one_done = False
+        self._opening_piece_warned = False
+        # 上次战斗记录的敌我相对方向（不随回合衰减，仅作无线索时的兜底）
+        self._recorded_enemy_direction: Optional[Tuple[int, int]] = None
 
     # 大地图关卡下敌我可能长期不在同一视野。超过该回合数仍未观察到
     # 敌人方向记忆时，主动丢弃记忆并切回纯螺旋搜索，避免绕远路。
@@ -280,6 +294,41 @@ class AutoFightProcessor(CustomAction):
                 f"战斗记忆：任务={self._battle_task or '未知'}，"
                 f"策略=「{self._policy.name}」({self._policy.move_mode})"
             )
+            self._opening_plan = battle_memory.memory().opening_for(
+                self._battle_city, self._battle_task
+            )
+            self._opening_moved = set()
+            self._opening_one_done = False
+            self._opening_piece_warned = False
+            self._recorded_enemy_direction = None
+            if self._opening_plan.get("enabled"):
+                logger.info(
+                    "首回合走位："
+                    f"{'全部棋子' if self._opening_plan.get('target') == 'all' else '单个棋子'} "
+                    f"向 {self._opening_plan.get('direction')} "
+                    f"移动 {self._opening_plan.get('cells')} 格"
+                    + (
+                        f"（棋子 {self._opening_plan.get('piece')}）"
+                        if self._opening_plan.get("piece")
+                        else ""
+                    )
+                )
+            # 上一次战斗记录的敌我相对方向：主动模式没有视野时作为默认推进方向。
+            relation = battle_memory.memory().relation_for(
+                self._battle_city, self._battle_task
+            )
+            if relation.get("direction"):
+                delta = battle_memory.DIRECTION_DELTAS.get(relation["direction"])
+                if delta:
+                    self._recorded_enemy_direction = (delta[1], delta[0])
+                    if self._last_known_enemy_direction is None:
+                        self._set_enemy_direction((delta[1], delta[0]))
+                    logger.info(
+                        "战斗记忆：上次敌我相对位置为 "
+                        f"{relation.get('label') or relation['direction']}"
+                        f"（约 {relation.get('distance', 0)} 格），"
+                        "主动模式将优先向该方向推进"
+                    )
 
         while self._session.action_cycles < self.MAX_ACTION_CYCLES:
             if context.tasker.stopping:
@@ -414,6 +463,14 @@ class AutoFightProcessor(CustomAction):
                     f"已确认待机 {standby_rounds} 回合且战斗未结束，"
                     "开始追击模式"
                 )
+                if self._last_known_enemy_direction is not None:
+                    col_dir, row_dir = self._last_known_enemy_direction
+                    code = battle_memory.direction_code(row_dir, col_dir)
+                    logger.info(
+                        "主动模式：记录的敌我相对方向为 "
+                        f"{battle_memory.DIRECTION_LABELS.get(code, code)}，"
+                        "视野内没有敌人时朝该方向推进"
+                    )
 
             world = self._session.world
             if not world.has_allies() or not self._world_has_fresh_targets():
@@ -904,6 +961,12 @@ class AutoFightProcessor(CustomAction):
             return MODE_PURSUIT
         if self._session is None:
             return MODE_STANDBY
+        plan = self._opening_plan or {}
+        if plan.get("enabled") and (
+            self._session.confirmed_rounds + 1 == _int_value(plan.get("round"), 1)
+        ):
+            # 玩家指定了这一回合走位，必须进入主动模式才能选人/移动。
+            return MODE_PURSUIT
         if self._session.confirmed_rounds < self._standby_rounds:
             return MODE_STANDBY
         return MODE_PURSUIT
@@ -1015,6 +1078,11 @@ class AutoFightProcessor(CustomAction):
             direction = self._last_known_enemy_direction
             if direction is not None:
                 logger.info(f"粗方向：沿用上一回合敌人方向 {direction}")
+        if direction is None and self._recorded_enemy_direction is not None:
+            direction = self._recorded_enemy_direction
+            logger.info(
+                f"粗方向：使用战斗记忆记录的敌我相对方向 {direction}"
+            )
         if direction is None:
             direction = self._frontier_direction()
             if direction is not None:
@@ -1330,6 +1398,76 @@ class AutoFightProcessor(CustomAction):
         )
         return target
 
+    def _opening_move_target(
+        self, grid: BattleGrid, ally: Cell
+    ) -> Optional[Cell]:
+        """首回合玩家走位：返回该棋子应移动到的蓝格。"""
+        plan = self._opening_plan or {}
+        if not plan.get("enabled") or self._session is None:
+            return None
+        game_round = self._session.confirmed_rounds + 1
+        if game_round != _int_value(plan.get("round"), 1):
+            return None
+        if plan.get("target") == "one":
+            if self._opening_one_done:
+                return None
+            wanted = str(plan.get("piece") or "").strip()
+            if wanted:
+                current = (
+                    self._active_piece.name if self._active_piece else ""
+                )
+                if current != wanted:
+                    if not self._opening_piece_warned and not current:
+                        logger.warning(
+                            f"首回合走位：未识别到棋子名（目标「{wanted}」），"
+                            "本次跳过该走位；可开启棋子识别或留空棋子名"
+                        )
+                        self._opening_piece_warned = True
+                    return None
+        elif (ally.row, ally.col) in self._opening_moved:
+            return None
+
+        delta = battle_memory.DIRECTION_DELTAS.get(
+            str(plan.get("direction") or "E").upper()
+        )
+        if delta is None:
+            return None
+        row_delta, col_delta = delta
+        max_cells = max(1, _int_value(plan.get("cells"), 1))
+        ideal_row = ally.row + row_delta * max_cells
+        ideal_col = ally.col + col_delta * max_cells
+
+        candidates = []
+        for row in grid.cells:
+            for cell in row:
+                if not cell.is_moveable or cell.is_attackable:
+                    continue
+                if cell.cell_type != CellType.NONE:
+                    continue
+                dr = cell.row - ally.row
+                dc = cell.col - ally.col
+                projection = dr * row_delta + dc * col_delta
+                if projection <= 0 or projection > max_cells:
+                    continue
+                perpendicular = abs(dr * col_delta - dc * row_delta)
+                if perpendicular > max(1, max_cells // 2 + 1):
+                    continue
+                candidates.append((cell, projection))
+        if not candidates:
+            return None
+        target = min(
+            candidates,
+            key=lambda item: (
+                abs(item[0].row - ideal_row) + abs(item[0].col - ideal_col),
+                -item[1],
+            ),
+        )[0]
+        logger.info(
+            f"首回合走位：({ally.row}, {ally.col}) -> "
+            f"({target.row}, {target.col})，方向 {plan.get('direction')}"
+        )
+        return target
+
     def _apply_move_policy(
         self, move_targets: List[Cell], ally: Cell, grid: BattleGrid
     ) -> List[Cell]:
@@ -1382,6 +1520,35 @@ class AutoFightProcessor(CustomAction):
         hidden_enemy_cell: Optional[Tuple[int, int]],
     ) -> Tuple[bool, Optional[Tuple[int, int]], bool]:
         """返回 ``(是否生效, 移动后的格子, 是否已经换回合)``。"""
+        opening_target = self._opening_move_target(grid, ally)
+        if opening_target is not None:
+            if not self._click_cell(context, opening_target, "首回合走位"):
+                return False, None, False
+            accepted, advanced = self._verify_action_result(
+                context,
+                before_img,
+                round_reference,
+                "移动（首回合走位）",
+                ally,
+                opening_target,
+            )
+            self._trace_decision(
+                "opening_move",
+                ally,
+                opening_target,
+                "accepted" if accepted else "rejected",
+            )
+            if accepted:
+                self._opening_moved.add((ally.row, ally.col))
+                if (self._opening_plan or {}).get("target") == "one":
+                    self._opening_one_done = True
+                if self._session is not None:
+                    self._session.record_progress()
+                return True, (opening_target.row, opening_target.col), advanced
+            logger.warning("首回合走位未被游戏接受，取消后按正常逻辑行动")
+            self._cancel_selection(context)
+            return False, None, False
+
         attack_targets = [
             cell
             for cell in grid.enemy_units

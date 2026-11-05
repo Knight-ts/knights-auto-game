@@ -249,6 +249,39 @@ def main() -> int:
         quick.record_round_activity(1)
         check("第 1 回合击杀记 1 回合", quick.total_rounds() == 1)
 
+        print("[八方向] 相对位置与首回合走位")
+        check(
+            "八方向量化",
+            [
+                battle_memory.direction_code(-1, 0),
+                battle_memory.direction_code(-1, 1),
+                battle_memory.direction_code(0, 1),
+                battle_memory.direction_code(1, 1),
+                battle_memory.direction_code(1, 0),
+                battle_memory.direction_code(1, -1),
+                battle_memory.direction_code(0, -1),
+                battle_memory.direction_code(-1, -1),
+                battle_memory.direction_code(0, 0),
+            ]
+            == ["N", "NE", "E", "SE", "S", "SW", "W", "NW", None],
+        )
+        relation = battle_memory.BattleMemory._compute_relation(
+            [[5, 5]], [[1, 8]]
+        )
+        check(
+            "敌我相对方向=东北",
+            relation
+            and relation["direction"] == "NE"
+            and relation["label"] == "东北"
+            and relation["distance"] == 4,
+            str(relation),
+        )
+        check(
+            "八方向位移表",
+            battle_memory.DIRECTION_DELTAS["NE"] == (-1, 1)
+            and battle_memory.DIRECTION_DELTAS["SW"] == (1, -1),
+        )
+
         class FakeWorld:
             rows = 10
             cols = 6
@@ -273,6 +306,11 @@ def main() -> int:
         check("地图大于单屏时标记", entry["map"]["screen_limited"] is True, str(entry["map"]))
         check("初始我方位置归一化", entry["map"]["allies"] == [[2, 3]], str(entry["map"]["allies"]))
         check("初始敌方位置归一化", entry["map"]["enemies"] == [[1, 1]], str(entry["map"]["enemies"]))
+        check(
+            "战斗记录保存八方向相对位置",
+            (entry["relation"] or {}).get("direction") == "W",
+            str(entry.get("relation")),
+        )
 
         saved = memory.save_map(
             "暮角城",
@@ -285,6 +323,80 @@ def main() -> int:
         check("用户修正可保存", saved and after["map"]["source"] == "user", str(after["map"]))
         check("用户修正地图尺寸 13×15", (after["map"]["rows"], after["map"]["cols"]) == (13, 15))
         check("用户修正敌方位置", after["map"]["enemies"] == [[12, 14]])
+
+        saved_opening = memory.save_opening(
+            "暮角城",
+            "任务M",
+            {
+                "enabled": True,
+                "target": "all",
+                "direction": "E",
+                "cells": 2,
+                "round": 1,
+            },
+        )
+        plan = memory.opening_for("暮角城", "任务M")
+        check(
+            "首回合走位可保存/读取",
+            saved_opening
+            and plan["enabled"]
+            and plan["direction"] == "E"
+            and plan["cells"] == 2,
+            str(plan),
+        )
+
+        import types
+
+        from action.zshg.auto_fight_processor import AutoFightProcessor
+        from action.zshg.battle_grid import Cell
+
+        processor = AutoFightProcessor()
+        processor._opening_plan = plan
+        processor._opening_moved = set()
+        processor._opening_one_done = False
+        processor._session = types.SimpleNamespace(confirmed_rounds=0)
+        processor._active_piece = None
+        ally = Cell(row=5, col=5)
+        east_one = Cell(row=5, col=6)
+        east_one.is_moveable = True
+        east_two = Cell(row=5, col=7)
+        east_two.is_moveable = True
+        side = Cell(row=4, col=6)
+        side.is_moveable = True
+        fake_grid = types.SimpleNamespace(
+            cells=[[east_one, east_two], [side]]
+        )
+        target = processor._opening_move_target(fake_grid, ally)
+        check(
+            "首回合走位选择向东 2 格",
+            target is east_two,
+            str(target),
+        )
+        processor._opening_plan = dict(
+            plan, target="one", direction="N", cells=1
+        )
+        north = Cell(row=4, col=5)
+        north.is_moveable = True
+        fake_grid.cells = [[north]]
+        check(
+            "单棋子向北 1 格",
+            processor._opening_move_target(fake_grid, ally) is north,
+        )
+        processor._mode_option = "auto"
+        processor._standby_rounds = 20
+        processor._opening_plan = dict(plan, enabled=True)
+        processor._session.confirmed_rounds = 0
+        check(
+            "配了首回合走位则强制主动模式",
+            processor._resolve_mode() == "pursuit",
+            processor._resolve_mode(),
+        )
+        processor._opening_plan = {"enabled": False}
+        check(
+            "未配走位仍按待机回合数",
+            processor._resolve_mode() == "standby",
+            processor._resolve_mode(),
+        )
 
         print("[失败] 全败任务按惩罚回合")
         memory.start_trace("暮角城", "任务C", policy=memory.policy_by_name("balanced"))
