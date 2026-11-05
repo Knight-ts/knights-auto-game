@@ -26,6 +26,7 @@ table/task_pool.json
 table/piece_observations.json
 table/castle_resources.*
 table/bread_purchases.*
+table/battle_memory.json
 *.bak
 
 # 打包产物
