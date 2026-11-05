@@ -7,7 +7,7 @@ from maa.agent.agent_server import AgentServer
 from maa.context import Context
 from maa.custom_action import CustomAction
 
-from utils import logger
+from utils import logger, battle_memory, task_records
 
 from .battle_grid import (
     BattleGrid,
@@ -133,6 +133,10 @@ class AutoFightProcessor(CustomAction):
         # 跨回合敌人方向记忆（(col_dir, row_dir)）
         self._last_known_enemy_direction: Optional[Tuple[int, int]] = None
         self._last_known_enemy_age = 0
+        # 战斗记忆 / 玩家可编辑策略
+        self._policy = battle_memory.BattlePolicy({})
+        self._battle_city = ""
+        self._battle_task = ""
 
     # 大地图关卡下敌我可能长期不在同一视野。超过该回合数仍未观察到
     # 敌人方向记忆时，主动丢弃记忆并切回纯螺旋搜索，避免绕远路。
@@ -246,6 +250,37 @@ class AutoFightProcessor(CustomAction):
             logger.info("场景确认：当前已经是战斗胜利结算页，跳过战斗")
             return CustomAction.RunResult(success=True)
 
+        # 战斗记忆：新一场战斗（或进程重启后的续战）开始时记录任务、策略，
+        # 后续每回合记录敌我位置与动作，结束时由 fight_utils._finish 落盘。
+        pending = task_records.get_pending() or {}
+        self._battle_city = (pending.get("city") or "").strip()
+        self._battle_task = (pending.get("task") or "").strip()
+        if self._session.action_cycles == 0 or not battle_memory.memory().has_trace():
+            policy_choice = str(
+                self._node_expected(context, "BattlePolicySelect", "auto") or "auto"
+            ).strip()
+            forced_policy = battle_memory.memory().policy_by_name(policy_choice)
+            if forced_policy is not None:
+                self._policy = forced_policy
+                logger.info(
+                    f"战斗记忆：任务选项指定策略「{self._policy.name}」"
+                )
+            else:
+                self._policy = battle_memory.memory().policy_for(
+                    self._battle_city, self._battle_task
+                )
+            battle_memory.start(
+                self._battle_city,
+                self._battle_task,
+                pending.get("type", ""),
+                pending.get("level", ""),
+                self._policy,
+            )
+            logger.info(
+                f"战斗记忆：任务={self._battle_task or '未知'}，"
+                f"策略=「{self._policy.name}」({self._policy.move_mode})"
+            )
+
         while self._session.action_cycles < self.MAX_ACTION_CYCLES:
             if context.tasker.stopping:
                 logger.info("任务执行被停止")
@@ -336,6 +371,22 @@ class AutoFightProcessor(CustomAction):
                 logger.debug(
                     f"第 {game_round} 回合：待机模式，结束回合等待反击"
                 )
+                # 待机模式不建图，但第一次进入仍需测量地图和敌我初始位置。
+                if not battle_memory.memory().has_snapshot():
+                    try:
+                        initial_grid = BattleGrid()
+                        self.scanner.scan_grid(
+                            initial_grid, context, round_reference
+                        )
+                        self._merge_world_view(
+                            initial_grid,
+                            self._session.confirmed_rounds,
+                            replace_visible=True,
+                        )
+                        self._trace_snapshot(initial_grid, game_round)
+                        logger.info("待机模式：已记录首回合地图与敌我位置")
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug(f"待机模式首回合测量失败：{exc}")
                 passive_result = self._end_round(
                     context, round_reference, "待机模式"
                 )
@@ -414,6 +465,7 @@ class AutoFightProcessor(CustomAction):
             )
             if recentered and recentered_img is not None:
                 round_reference = recentered_img
+            self._trace_snapshot(round_grid, game_round)
             if not round_grid.enemy_units:
                 refreshed = self._refresh_local_threat_map(
                     context, self._session.confirmed_rounds
@@ -1158,6 +1210,167 @@ class AutoFightProcessor(CustomAction):
             )
         return promoted
 
+    # ------------------------------------------------------------------
+    # 战斗记忆 / 玩家可编辑策略
+    # ------------------------------------------------------------------
+
+    def _trace_snapshot(self, grid: BattleGrid, round_no: int) -> None:
+        """记录本回合敌我/环境位置（每场最多保留 12 个快照）。"""
+        try:
+            if not battle_memory.memory().has_trace():
+                return
+            world = self._session.world if self._session is not None else None
+            if world is not None:
+                battle_memory.observe_world(world)
+            battle_memory.snapshot(
+                round_no,
+                [(cell.row, cell.col) for cell in grid.self_units],
+                [(cell.row, cell.col) for cell in grid.enemy_units],
+                [(cell.row, cell.col) for cell in grid.environment_units],
+                world=world,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"战斗记忆：位置快照失败：{exc}")
+
+    def _trace_decision(
+        self,
+        action: str,
+        ally: Cell,
+        target: Optional[Cell] = None,
+        note: str = "",
+    ) -> None:
+        """记录一次攻击/移动决策，供复盘与学习。"""
+        try:
+            if not battle_memory.memory().has_trace():
+                return
+            round_no = (
+                self._session.confirmed_rounds + 1 if self._session else 0
+            )
+            piece = self._active_piece.name if self._active_piece else ""
+            battle_memory.decision(
+                round_no,
+                action,
+                (ally.row, ally.col),
+                (target.row, target.col) if target is not None else None,
+                (target.row, target.col) if target is not None else None,
+                piece=piece,
+                note=note,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"战斗记忆：决策记录失败：{exc}")
+
+    def _target_hp_pixels(self, img: Any, cell: Cell) -> int:
+        """粗略估计目标血量：在人物头顶上下扫几条窄带，取红色像素最多的一条。
+
+        血条画在立绘上方，而 ``target_center`` 是人物/格子的点击点，直接
+        用它量不到血条；上下偏移几条带取最大值更稳。
+        """
+        point = (
+            cell.target_center
+            if cell.target_center != (0, 0)
+            else cell.safe_click_point()
+        )
+        center_x, center_y = point
+        best = 0
+        for offset in (0, -20, -40, -60, -80):
+            try:
+                best = max(
+                    best,
+                    self._red_bar_pixels(img, (center_x, center_y + offset)),
+                )
+            except Exception:  # noqa: BLE001
+                continue
+        return best
+
+    def _pick_attack_target(
+        self, targets: List[Cell], ally: Cell, img: Any
+    ) -> Optional[Cell]:
+        """按玩家策略给攻击目标打分；没有权重时回退到“最近”。"""
+        if not targets:
+            return None
+        policy = self._policy
+        if policy is None or not policy.target_weights:
+            return min(
+                targets,
+                key=lambda cell: self._screen_distance(cell, ally, "attack"),
+            )
+
+        hp_pixels: dict = {}
+        for cell in targets:
+            hp_pixels[(cell.row, cell.col)] = self._target_hp_pixels(img, cell)
+        max_hp = max(hp_pixels.values(), default=0)
+
+        def features(cell: Cell) -> dict:
+            distance = self._screen_distance(cell, ally, "attack") / 100.0
+            ratio = (
+                hp_pixels[(cell.row, cell.col)] / max_hp if max_hp > 0 else 1.0
+            )
+            return {
+                "distance": distance,
+                "hp_ratio": ratio,
+                "threat": 0.0,
+                "is_environment": 1.0 if cell.is_environment_object else 0.0,
+            }
+
+        def score(cell: Cell) -> float:
+            return policy.score_target(features(cell))
+
+        target = max(
+            targets,
+            key=lambda cell: (
+                score(cell),
+                -self._screen_distance(cell, ally, "attack"),
+                -cell.row,
+                -cell.col,
+            ),
+        )
+        logger.info(
+            f"策略「{policy.name}」选择攻击目标 "
+            f"({target.row}, {target.col}) 评分={score(target):.2f}"
+        )
+        return target
+
+    def _apply_move_policy(
+        self, move_targets: List[Cell], ally: Cell, grid: BattleGrid
+    ) -> List[Cell]:
+        """按策略过滤移动候选（稳守/待机/探索）。"""
+        policy = self._policy
+        if policy is None or not move_targets:
+            return move_targets
+        mode = policy.move_mode
+        if mode == "hold" and grid.enemy_units:
+            logger.info(f"策略「{policy.name}」为原地待机，有敌人时不移动")
+            return []
+        if mode == "defensive" and grid.enemy_units:
+            enemy_cells = [(cell.row, cell.col) for cell in grid.enemy_units]
+            safe = [
+                cell
+                for cell in move_targets
+                if min(
+                    max(abs(cell.row - row), abs(cell.col - col))
+                    for row, col in enemy_cells
+                )
+                >= 2
+            ]
+            if safe and len(safe) < len(move_targets):
+                logger.info(
+                    f"策略「{policy.name}」避开敌人贴身格："
+                    f"{len(move_targets)} -> {len(safe)}"
+                )
+            if safe:
+                move_targets = safe
+        if mode == "explore" and self._session is not None:
+            world = self._session.world
+            fresh = [
+                cell
+                for cell in move_targets
+                if world.local_to_world(cell.row, cell.col)
+                not in world.observed
+            ]
+            if fresh:
+                move_targets = fresh
+        return move_targets
+
     def _decide_and_act(
         self,
         context: Context,
@@ -1196,10 +1409,9 @@ class AutoFightProcessor(CustomAction):
             + str([(cell.row, cell.col) for cell in attack_targets])
         )
         if attack_targets:
-            target = min(
-                attack_targets,
-                key=lambda cell: self._screen_distance(cell, ally, "attack"),
-            )
+            target = self._pick_attack_target(attack_targets, ally, before_img)
+            if target is None:
+                return False, None, False
             logger.info(f"攻击目标格子: ({target.row}, {target.col})")
             if not self._click_cell(context, target, "攻击"):
                 return False, None, False
@@ -1210,6 +1422,9 @@ class AutoFightProcessor(CustomAction):
                 "攻击",
                 ally,
                 target,
+            )
+            self._trace_decision(
+                "attack", ally, target, "accepted" if accepted else "rejected"
             )
             if accepted or advanced:
                 if accepted and self._session is not None:
@@ -1263,6 +1478,12 @@ class AutoFightProcessor(CustomAction):
                 ally,
                 hidden_target,
             )
+            self._trace_decision(
+                "attack_hidden",
+                ally,
+                hidden_target,
+                "accepted" if accepted else "rejected",
+            )
             if accepted or advanced:
                 if accepted and self._session is not None:
                     self._session.record_progress()
@@ -1283,6 +1504,7 @@ class AutoFightProcessor(CustomAction):
             and cell.cell_type == CellType.NONE
         ]
         move_targets = self._without_ally_occlusion(move_targets, ally)
+        move_targets = self._apply_move_policy(move_targets, ally, grid)
         logger.debug(
             "可移动空白位置(2): "
             + str([(cell.row, cell.col) for cell in move_targets])
@@ -1412,6 +1634,12 @@ class AutoFightProcessor(CustomAction):
                     ally,
                     hidden_target,
                 )
+                self._trace_decision(
+                    "attack_hidden",
+                    ally,
+                    hidden_target,
+                    "accepted" if accepted else "rejected",
+                )
                 if accepted or advanced:
                     if accepted and self._session is not None:
                         self._session.record_progress()
@@ -1461,6 +1689,9 @@ class AutoFightProcessor(CustomAction):
             "移动",
             ally,
             target,
+        )
+        self._trace_decision(
+            "move", ally, target, "accepted" if accepted else "rejected"
         )
         destination = (target.row, target.col) if accepted else None
         if accepted:
@@ -1876,6 +2107,15 @@ class AutoFightProcessor(CustomAction):
         range_count = self._action_range_count(context, img)
         card = context.run_recognition("Battle_SelectedRoleCard", img)
         if range_count == 0 and not (card and card.hit):
+            return True
+        # 没有人物卡片时，黄色攻击范围/技能护盾/争夺点边界都可能被
+        # 范围扫描误认成“残留选择”。真实选中一定会带人物卡片，所以
+        # 这里以卡片为准：没有卡片就直接继续建图，不能因此中止战斗。
+        if not (card and card.hit):
+            logger.info(
+                f"未发现人物卡片，{range_count} 个范围格按技能/地形特效忽略，"
+                "继续建图"
+            )
             return True
         logger.warning(
             f"建图前发现残留选择状态: 行动范围={range_count}, "
@@ -3225,7 +3465,8 @@ class AutoFightProcessor(CustomAction):
             return
         self._session.record_round_advance()
         logger.info(
-            f"整场战斗回合进度 +1: {self._session.confirmed_rounds} "
+            f"第 {self._session.confirmed_rounds} 回合结束，"
+            f"进入第 {self._session.confirmed_rounds + 1} 回合 "
             f"(source={source})"
         )
 
@@ -3252,6 +3493,10 @@ class AutoFightProcessor(CustomAction):
                 return False
 
             logger.debug(f"{phase}点击结束回合 ({attempt}/2)")
+            if self._session is not None:
+                self._session.record_round_activity(
+                    self._session.confirmed_rounds + 1
+                )
             result = context.run_task("FightEndRound")
             if not self._task_result_has_hit(result, {"FightEndRound"}):
                 logger.warning(f"{phase}第 {attempt} 次结束回合节点未命中")
@@ -3289,6 +3534,10 @@ class AutoFightProcessor(CustomAction):
     ) -> Tuple[bool, bool]:
         """确认具体动作结果，不能把“范围消失”误当成攻击/移动成功。"""
         is_move = "移动" in label
+        if self._session is not None:
+            self._session.record_round_activity(
+                self._session.confirmed_rounds + 1
+            )
         last_frame_score = 0.0
         target_bar_point = (
             target.target_center

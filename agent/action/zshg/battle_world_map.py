@@ -354,6 +354,10 @@ class BattleSessionState:
     key: str
     created_at: float = field(default_factory=time.monotonic)
     confirmed_rounds: int = 0
+    # 真正发生过行动（攻击/移动/结束回合）的最大回合号。战斗可能在
+    # “刚进入下一回合、还没人行动”时因持续伤害结算胜利，这种回合不计入
+    # 实际花费回合数；否则 20 回合的战斗会记成 21。
+    last_active_round: int = 0
     action_cycles: int = 0
     no_progress_cycles: int = 0
     exploration_passes: int = 0
@@ -370,8 +374,28 @@ class BattleSessionState:
         return self.confirmed_rounds >= passive_rounds
 
     def record_round_advance(self) -> None:
+        self.record_round_activity(self.confirmed_rounds + 1)
         self.confirmed_rounds += 1
         self.world.decay_dynamic_units(self.confirmed_rounds)
+
+    def record_round_activity(self, round_no: int) -> None:
+        """记录某回合确实执行过动作（结束回合、攻击、移动都算）。"""
+        self.last_active_round = max(self.last_active_round, int(round_no))
+
+    def total_rounds(self) -> int:
+        """本场战斗实际花费的回合数。
+
+        以「发生过行动的最后一回合」为准：
+        第 20 回合结束后进入第 21 回合时因持续伤害胜利，仍记 20 回合；
+        第 1 回合就打完则记 1 回合。没有行动记录时退回 confirmed+1。
+        """
+        if self.last_active_round > 0:
+            return self.last_active_round
+        return max(1, self.confirmed_rounds + 1)
+
+    def reached_round(self) -> int:
+        """结算时到达过的最大回合号（含未行动的最后一回合）。"""
+        return max(1, self.confirmed_rounds + 1)
 
     def record_progress(self) -> None:
         self.no_progress_cycles = 0
@@ -591,8 +615,17 @@ def choose_move_candidate(
 
 
 def session_key(context: object) -> str:
-    """Build a stable process-local key for one bound Maa tasker/controller."""
+    """Return a stable process-local battle session key.
 
-    tasker = getattr(context, "tasker", None)
-    controller = getattr(tasker, "controller", None)
-    return f"tasker:{id(tasker)}:controller:{id(controller)}"
+    Maa 给每个 CustomAction 回调的 Context / tasker / controller 都是新的
+    Python 包装对象，``id(tasker)``、``id(controller)`` 在嵌套
+    ``run_task("AutoFight_Start")`` 里会变。以前用 id 拼 key，导致
+    ``_process_fighting`` 和 AutoFightProcessor 各拿一个会话：
+    自动战斗那个会话累计了 20 回合，收尾读到的却是另一个 0 回合会话，
+    任务记录就变成 1 回合。
+
+    Agent 进程同一时间只打一场仗，因此用进程级固定 key；开新战斗时
+    ``force_new`` 会替换旧会话，不会串场。
+    """
+    return "battle"
+

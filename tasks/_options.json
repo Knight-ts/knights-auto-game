@@ -83,6 +83,92 @@
             }
         ]
     },
+    "任务选择策略": {
+        "type": "select",
+        "description": "接任务时怎么选：最高等级（原来行为）/ 回合最少（按战斗记忆的预计回合）/ 均衡（回合为主、等级为辅）",
+        "default_case": "最高等级",
+        "cases": [
+            {
+                "name": "最高等级",
+                "description": "保持原逻辑：可接任务里等级最高的",
+                "pipeline_override": {
+                    "TaskSelectSelect": {
+                        "expected": "level"
+                    }
+                }
+            },
+            {
+                "name": "回合最少",
+                "description": "优先接历史平均回合更少的任务；未知任务按探索估计参与排序",
+                "pipeline_override": {
+                    "TaskSelectSelect": {
+                        "expected": "fastest"
+                    }
+                }
+            },
+            {
+                "name": "均衡（回合+等级）",
+                "description": "预计回合为主，等级高略有加成，避免只挑低级任务",
+                "pipeline_override": {
+                    "TaskSelectSelect": {
+                        "expected": "balanced"
+                    }
+                }
+            }
+        ]
+    },
+    "战斗策略": {
+        "type": "select",
+        "description": "本任务使用的攻击策略（table/battle_policies.json；网页「战斗记忆」可编辑权重）。默认跟随任务分配。",
+        "default_case": "跟随任务分配",
+        "cases": [
+            {
+                "name": "跟随任务分配",
+                "description": "使用战斗记忆里为该任务/全局设置的策略",
+                "pipeline_override": {
+                    "BattlePolicySelect": {
+                        "expected": "auto"
+                    }
+                }
+            },
+            {
+                "name": "均衡",
+                "description": "优先近处目标，其次残血",
+                "pipeline_override": {
+                    "BattlePolicySelect": {
+                        "expected": "balanced"
+                    }
+                }
+            },
+            {
+                "name": "集火残血",
+                "description": "优先血量最低的敌人",
+                "pipeline_override": {
+                    "BattlePolicySelect": {
+                        "expected": "focus_weak"
+                    }
+                }
+            },
+            {
+                "name": "稳守反打",
+                "description": "移动时避开敌人贴身格",
+                "pipeline_override": {
+                    "BattlePolicySelect": {
+                        "expected": "defensive"
+                    }
+                }
+            },
+            {
+                "name": "原地待机",
+                "description": "有敌人时不主动移动，只打进入攻击范围的目标",
+                "pipeline_override": {
+                    "BattlePolicySelect": {
+                        "expected": "hold"
+                    }
+                }
+            }
+        ]
+    },
     "待机回合数": {
         "type": "input",
         "description": "自动模式下先待机的回合数，0 = 立刻进入追击模式。回合数按整场战斗累计，恢复调用不会重新计数。",

@@ -27,6 +27,7 @@
     <button data-tab="records">孩子记录</button>
     <button data-tab="mercs">佣兵记录</button>
     <button data-tab="tprec">任务接取</button>
+    <button data-tab="bmemory">战斗记忆</button>
     <button data-tab="notify">通知</button>
   </nav>
 </header>
@@ -548,8 +549,79 @@
     </div>
 
     <div class="card" style="margin-bottom:14px">
-      <div class="row"><strong>任务记录（按城市）</strong><span class="hint">数据来自 table/task_records.json，明细 table/task_records.jsonl</span></div>
+      <div class="row"><strong>任务记录（按城市）</strong><span class="hint">数据来自 table/task_records.json，明细 table/task_records.jsonl；2026-11-03 前旧记录的回合数受会话 bug 影响（0/1），新记录按实际发生行动的回合计数</span></div>
       <div id="tprecBody"></div>
+    </div>
+  </section>
+
+  <!-- 战斗记忆：任务统计 / 攻击策略 -->
+  <section id="tab-bmemory" class="hidden">
+    <div class="card" style="margin-bottom:14px">
+      <div class="row">
+        <strong>战斗记忆</strong>
+        <span class="hint" id="bmemHint"></span>
+        <button class="btn" id="btnBmemReload">刷新</button>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        每场战斗记录敌我位置、格子占领、攻击/移动决策、回合数与胜负（<code>table/battle_memory.json</code>）；
+        攻击逻辑在这里改（<code>table/battle_policies.json</code>）。统计会自动推荐打得最快的策略。
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="row">
+        <label class="field">已保存策略
+          <select id="bmemPolicySelect"></select>
+        </label>
+        <label class="field grow">策略名
+          <input type="text" id="bmemPolicyName" placeholder="保存/新建时使用">
+        </label>
+        <button class="btn" id="btnBmemPolicyNew">新建副本</button>
+        <button class="btn primary" id="btnBmemPolicySave">保存</button>
+        <button class="btn" id="btnBmemPolicyActive">设为全局</button>
+        <button class="btn danger" id="btnBmemPolicyDelete">删除</button>
+      </div>
+      <textarea id="bmemPolicyJson" spellcheck="false"
+        style="width:100%;height:280px;margin-top:10px;font-family:Consolas,monospace;font-size:12px;line-height:1.5"></textarea>
+      <div class="hint" style="margin-top:6px">
+        可改 <code>target.weights</code>（distance / hp_ratio / threat / is_environment）与
+        <code>move.mode</code>（approach 接近 / defensive 避开贴身 / hold 原地 / explore 优先未探索）。
+        权重越大越偏好；距离、血量比例通常用负权重。
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row"><strong>任务统计</strong><span class="hint" id="bmemStats"></span></div>
+      <table style="margin-top:8px">
+        <thead><tr><th>城市</th><th>任务</th><th>场次</th><th>胜率</th><th>平均回合</th><th>最佳</th><th>推荐策略</th><th>任务策略</th><th>初始位置</th></tr></thead>
+        <tbody id="bmemTasks"></tbody>
+      </table>
+      <div class="hint" style="margin-top:8px">「任务策略」选「自动（推荐/全局）」时优先用自动学习出的推荐策略，没有推荐再用左侧设为全局的策略；选具体策略只影响该任务。</div>
+    </div>
+
+    <div class="card" id="bmemMapCard" style="margin-top:14px">
+      <div class="row">
+        <strong>初始位置（可修正）</strong>
+        <span class="hint" id="bmemMapHint">先在上表点「编辑位置」选择任务</span>
+      </div>
+      <div class="row" style="margin-top:8px;align-items:flex-end">
+        <label class="field">行
+          <input type="number" id="bmemMapRows" min="1" max="40" style="width:80px">
+        </label>
+        <label class="field">列
+          <input type="number" id="bmemMapCols" min="1" max="40" style="width:80px">
+        </label>
+        <button class="btn" id="btnBmemMapApplySize">应用尺寸</button>
+        <button class="btn" id="btnBmemMapApplyJson">应用 JSON</button>
+        <button class="btn primary" id="btnBmemMapSave">保存初始位置</button>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        点击格子循环：空 → 我方 → 敌方 → 障碍 → 空。地图大于手机单屏视野时，按实际格子数显示（例如 13 × 15）。
+      </div>
+      <div id="bmemMapGrid" style="display:grid;gap:2px;margin-top:8px;max-width:760px"></div>
+      <textarea id="bmemMapJson" spellcheck="false"
+        style="width:100%;height:170px;margin-top:10px;font-family:Consolas,monospace;font-size:12px;line-height:1.5"></textarea>
+      <div class="hint" id="bmemMapNote"></div>
     </div>
   </section>
 

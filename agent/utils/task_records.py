@@ -102,7 +102,10 @@ def clear_pending() -> None:
 
 
 def finish(
-    rounds: int, result: str = "胜利", task_name: Optional[str] = None
+    rounds: int,
+    result: str = "胜利",
+    task_name: Optional[str] = None,
+    rounds_reached: Optional[int] = None,
 ) -> Optional[dict]:
     """战斗结束：把当前任务连同回合数落盘，并更新按城市分组的汇总。
 
@@ -120,6 +123,9 @@ def finish(
         "type": _pending["type"],
         "level": _pending["level"],
         "rounds": max(0, int(rounds or 0)),
+        "rounds_reached": max(
+            max(0, int(rounds or 0)), int(rounds_reached or 0)
+        ),
         "result": result,
     }
     _pending = None
@@ -133,9 +139,15 @@ def finish(
         return record
 
     _update_summary(record)
+    reached = record.get("rounds_reached", 0)
+    detail = (
+        f"（结算于第 {reached} 回合）"
+        if reached and reached != record["rounds"]
+        else ""
+    )
     logger.info(
         f"任务记录：{record['city'] or '未知城市'}「{record['task'] or '未知任务'}」"
-        f"{record['result']}，{record['rounds']} 回合"
+        f"{record['result']}，{record['rounds']} 回合{detail}"
     )
     return record
 

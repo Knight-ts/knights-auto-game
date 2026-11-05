@@ -6,7 +6,7 @@ import time
 from typing import Any, Optional, Set
 
 from utils import logger
-from utils import task_records, task_rules
+from utils import task_records, task_rules, battle_memory
 from utils.game_state import update as update_game_state
 from action.zshg.battle_world_map import BattleSessionRegistry, session_key
 from action.zshg.task_hud_recognizer import TaskHudRecognizer
@@ -525,6 +525,7 @@ BATTLE_OPTION_NODES = (
     "FightModeSelect",
     "FightStandbyRounds",
     "FightPieceRecognition",
+    "BattlePolicySelect",
 )
 
 
@@ -571,7 +572,8 @@ def battle_option_override(context: Context) -> dict:
             "战斗选项：模式="
             f"{values.get('FightModeSelect', '默认')}，待机回合数="
             f"{values.get('FightStandbyRounds', '默认')}，棋子识别="
-            f"{values.get('FightPieceRecognition', '默认')}"
+            f"{values.get('FightPieceRecognition', '默认')}，战斗策略="
+            f"{values.get('BattlePolicySelect', '默认')}"
         )
     return override
 
@@ -593,6 +595,7 @@ def finalize_task_record(context: Context) -> None:
         rounds=info.get("rounds", 0),
         result=info.get("result", "胜利"),
         task_name=name,
+        rounds_reached=info.get("rounds_reached", 0),
     )
 
 
@@ -886,106 +889,78 @@ def _preprocess_accept_task(context: Context) -> bool:
 
 def _accept_new_task(context: Context) -> bool:
     """
-    接取新任务 - 默认使用HUD动态识别模式
+    接取新任务 - 只看当前任务板这一屏，不滑动、不刷新任务池。
 
     按当前城市读取 ``table/task_accept_rules.json`` 的等级区间与城市黑名单，
     每次扫描任务板都会把结果写入 ``table/task_pool.json``，供网页「任务接取」
     面板显示每条任务是否可接以及原因。
-
-    Args:
-        context: MAA 上下文对象
-
-    Returns:
-        bool: 接取成功返回 True
     """
-    max_swipe_times = 5
-
     hud_recognizer = TaskHudRecognizer()
     city = _current_city(context)
     rule = task_rules.city_rule(city)
     hud_min_level = rule["min_level"]
     hud_max_level = rule["max_level"]
     blacklist = set(task_rules.effective_blacklist(city))
+    strategy = (
+        _node_expected_value(context.get_node_data("TaskSelectSelect"))
+        or "level"
+    )
+    if strategy not in ("level", "fastest", "balanced"):
+        strategy = "level"
     logger.info(
         f"任务规则：城市={city or '未知'}，可接等级 "
         f"{hud_min_level}~{hud_max_level}，黑名单 {len(blacklist)} 个"
-        f"（全局 + 城市）"
+        f"（全局 + 城市），选择策略={strategy}"
     )
 
-    def scan_current_pool() -> bool:
-        # 任务板会保留上一个月的滚动位置。如果上次扫到了列表底部，
-        # 继续单向下滑只会在原地重复识别。每轮先有界地回到顶部，
-        # 再按既有方向扫到底，保证 HUD 覆盖整个任务池。
-        for _ in range(max_swipe_times):
-            context.run_task("FindCityTask_SwipeUp")
+    screenshot = context.tasker.controller.post_screencap().wait().get()
+    items, eligible = hud_recognizer.scan_pool(
+        context,
+        screenshot,
+        min_level=hud_min_level,
+        max_level=hud_max_level,
+        city=city,
+        blacklist=blacklist,
+    )
+    if items:
+        task_rules.save_pool(city, items)
 
-        # 任务板分屏显示：把每次下滑看到的任务合并起来，网页上才能看到
-        # 整块任务池，而不是最后一屏。
-        seen_items: dict = {}
-        for swipe_count in range(max_swipe_times + 1):
-            screenshot = context.tasker.controller.post_screencap().wait().get()
-            items, eligible = hud_recognizer.scan_pool(
-                context,
-                screenshot,
-                min_level=hud_min_level,
-                max_level=hud_max_level,
-                city=city,
-                blacklist=blacklist,
+    best_task = None
+    if eligible and strategy in ("fastest", "balanced"):
+        ranked = battle_memory.memory().rank_tasks(city, eligible, strategy)
+        if ranked:
+            best_task, estimate, reason = ranked[0]
+            logger.info(
+                f"任务选择策略={strategy}：优先 "
+                f"「{best_task.task_name}」（{reason}）"
             )
-            for item in items:
-                key = (item.get("name"), item.get("level"), item.get("type"))
-                seen_items[key] = item
-            if seen_items:
-                task_rules.save_pool(city, list(seen_items.values()))
-            best_task = hud_recognizer.pick_best(eligible)
+    if best_task is None:
+        best_task = hud_recognizer.pick_best(eligible)
 
-            if best_task and best_task.accept_button_box:
-                accept_box = best_task.accept_button_box
-                accept_x = accept_box[0] + accept_box[2] // 2
-                accept_y = accept_box[1] + accept_box[3] // 2
-                context.tasker.controller.post_click(accept_x, accept_y).wait()
-                time.sleep(0.5)
-                task_records.set_pending(
-                    city=city,
-                    task_name=best_task.task_name,
-                    task_type=best_task.task_type,
-                    task_level=best_task.task_level,
-                )
-                logger.info(
-                    f"接取任务：{best_task.task_name}"
-                    f"（{best_task.task_type} / {best_task.task_level} / "
-                    f"{city or '未知城市'}）"
-                )
-                return True
-
-            if seen_items:
-                reason = _pool_reason_summary(list(seen_items.values()))
-                if reason:
-                    logger.info(f"任务板无候选：{reason}")
-
-            if swipe_count < max_swipe_times:
-                logger.info(
-                    f"HUD未识别到有效任务，正在滑动刷新... "
-                    f"({swipe_count + 1}/{max_swipe_times})"
-                )
-                context.run_task("FindCityTask_SwipeDown")
-        return False
-
-    if scan_current_pool():
+    if best_task and best_task.accept_button_box:
+        accept_box = best_task.accept_button_box
+        accept_x = accept_box[0] + accept_box[2] // 2
+        accept_y = accept_box[1] + accept_box[3] // 2
+        context.tasker.controller.post_click(accept_x, accept_y).wait()
+        time.sleep(0.5)
+        task_records.set_pending(
+            city=city,
+            task_name=best_task.task_name,
+            task_type=best_task.task_type,
+            task_level=best_task.task_level,
+        )
+        logger.info(
+            f"接取任务：{best_task.task_name}"
+            f"（{best_task.task_type} / {best_task.task_level} / "
+            f"{city or '未知城市'}）"
+        )
         return True
 
-    # 整个列表只有黑名单、保护或非战斗任务时，使用页面提供的
-    # 10 水晶刷新一次，然后从顶部重新扫描。单次调用最多消耗一次，
-    # 年度层仍保留自己的两次月度上限，不会无界刷新。
-    logger.warning("HUD扫完整个任务池仍无候选，尝试水晶刷新一次")
-    refresh_result = context.run_task("FindCityTask_Refresh")
-    if not _task_succeeded(refresh_result):
-        logger.error("任务池刷新节点执行失败")
-        return False
-    if scan_current_pool():
-        return True
-
-    logger.error("刷新任务池后仍未检测到可接取的任务")
+    reason = _pool_reason_summary(items)
+    logger.warning(
+        "当前任务板没有可接任务（按要求不刷新任务板）"
+        + (f"：{reason}" if reason else "")
+    )
     return False
 
 
@@ -1116,13 +1091,28 @@ def _process_fighting(context: Context) -> bool:
     def _finish(ok: bool) -> bool:
         """收尾：结束战斗会话，暂存胜负与回合数（真正写盘在 finalize_task_record）。"""
         global _last_fight_result
-        session = session_ref.get("session") or BattleSessionRegistry.end(
-            battle_session_key
-        )
+        # 同时看本地引用和注册表：早期版本 key 不稳时会各拿一个会话，
+        # 取回合数更多的那个，避免把整场战斗记成 0/1 回合。
+        registered = BattleSessionRegistry.end(battle_session_key)
+        session = session_ref.get("session")
+        if session is None or (
+            registered is not None
+            and registered.confirmed_rounds > session.confirmed_rounds
+        ):
+            session = registered or session
+        total_rounds = session.total_rounds() if session else 0
         _last_fight_result = {
-            "rounds": session.confirmed_rounds if session else 0,
+            "rounds": total_rounds,
+            "rounds_active": session.last_active_round if session else 0,
+            "rounds_reached": session.reached_round() if session else 0,
             "result": "胜利" if ok else "失败",
         }
+        if session is not None:
+            logger.info(
+                f"本场战斗回合：{total_rounds} 回合"
+                f"（行动到第 {session.last_active_round or total_rounds} 回合，"
+                f"结算于第 {session.reached_round()} 回合）"
+            )
         if session is not None and session.pieces:
             # 棋子识别结果：整场战斗里每名棋子只保留最后一次识别。
             summary = "、".join(
@@ -1131,6 +1121,16 @@ def _process_fighting(context: Context) -> bool:
                 for name, record in session.pieces.items()
             )
             logger.info(f"本场棋子识别: {summary}")
+        # 战斗记忆：回合/胜负/位置/决策写入 table/battle_memory.json，
+        # 并更新该任务的推荐策略与预计回合数。
+        try:
+            battle_memory.finish(
+                total_rounds,
+                "胜利" if ok else "失败",
+                session.pieces if session else None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"战斗记忆写入失败：{exc}")
         return ok
 
     if initial_state == "victory":
@@ -1182,9 +1182,11 @@ def _process_fighting(context: Context) -> bool:
         return _finish(False)
     if not _task_succeeded(auto_result):
         logger.error("AutoFightProcessor 执行失败，且未出现胜负结算页")
+        BattleSessionRegistry.end(battle_session_key)
         return False
 
     logger.error("AutoFightProcessor 返回成功，但未识别到胜利结算页")
+    BattleSessionRegistry.end(battle_session_key)
     return False
 
 

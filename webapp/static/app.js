@@ -89,7 +89,7 @@ function banner(kind, lines) {
 function switchTab(name) {
   state.activeTab = name;
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  ["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "tprec", "notify"].forEach((tab) => {
+  ["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "tprec", "bmemory", "notify"].forEach((tab) => {
     $("tab-" + tab).classList.toggle("hidden", tab !== name);
   });
   clearInterval(timers.shot);
@@ -124,6 +124,7 @@ function switchTab(name) {
     timers.tprec = setInterval(() => { if (state.activeTab === "tprec") loadTaskRecords(true); }, 5000);
   }
   if (name === "notify") loadNotify();
+  if (name === "bmemory") loadBattleMemory();
 }
 
 /* ------------------------------------------------------------ 状态 */
@@ -1304,14 +1305,15 @@ function renderTprecRecords() {
     const tasks = all[city] || {};
     const rows = Object.keys(tasks).sort().map((name) => {
       const t = tasks[name] || {};
-      const avg = typeof t.rounds_avg === "number" ? t.rounds_avg.toFixed(1) : "-";
+      const avg = typeof t.rounds_avg === "number" && t.rounds_avg >= 2 ? t.rounds_avg.toFixed(1) : "-";
+      const lastRounds = t.last_rounds >= 2 ? t.last_rounds : "-";
       return `<tr>
         <td>${esc(name)}</td>
         <td>${esc(t.type || "")}</td>
         <td>${esc(t.level || "")}</td>
         <td>${t.count || 0}</td>
         <td>${avg}</td>
-        <td>${t.last_rounds === undefined ? "-" : t.last_rounds}</td>
+        <td>${lastRounds}</td>
         <td class="mono">${esc(t.last || "")}</td>
         <td><button class="btn danger" data-black="${esc(name)}">拉黑</button></td>
       </tr>`;
@@ -1372,6 +1374,283 @@ async function unblacklistTask(name, scope) {
     await loadTaskRecords();
   } catch (error) {
     banner("err", ["解除失败：" + error.message]);
+  }
+}
+
+/* ------------------------------------------------------------ 战斗记忆 */
+
+state.bmemory = { data: null, name: "" };
+
+function bmemPolicies() {
+  return (state.bmemory.data && state.bmemory.data.policies
+    && state.bmemory.data.policies.policies) || {};
+}
+
+async function loadBattleMemory() {
+  try {
+    const data = await api("/api/battle-memory");
+    state.bmemory.data = data;
+    const tasks = data.tasks || [];
+    const runs = tasks.reduce((sum, item) => sum + (item.runs || 0), 0);
+    $("bmemHint").textContent =
+      `任务 ${tasks.length} 个 · 战斗 ${runs} 场 · 全局策略：${data.active || "-"}`;
+    $("bmemStats").textContent = data.updated ? `更新：${data.updated}` : "";
+    renderBmemPolicyOptions();
+    renderBmemPolicyJson();
+    renderBmemTasks();
+    const preset = new URLSearchParams(window.location.search).get("bmem");
+    if (preset && tasks.some((item) => item.key === preset)) editBmemMap(preset);
+  } catch (error) {
+    banner("err", ["读取战斗记忆失败：" + error.message]);
+  }
+}
+
+function renderBmemPolicyOptions() {
+  const policies = bmemPolicies();
+  const select = $("bmemPolicySelect");
+  const current = state.bmemory.name && policies[state.bmemory.name]
+    ? state.bmemory.name
+    : (state.bmemory.data && state.bmemory.data.active) || "balanced";
+  select.innerHTML = Object.keys(policies).map((id) =>
+    `<option value="${esc(id)}">${esc((policies[id] && policies[id].name) || id)}</option>`
+  ).join("");
+  if (policies[current]) select.value = current;
+  state.bmemory.name = select.value;
+  $("bmemPolicyName").value = (policies[select.value] && policies[select.value].name) || select.value;
+}
+
+function renderBmemPolicyJson() {
+  const policy = bmemPolicies()[state.bmemory.name];
+  $("bmemPolicyJson").value = policy ? JSON.stringify(policy, null, 2) : "{}";
+}
+
+function renderBmemTasks() {
+  const tasks = (state.bmemory.data && state.bmemory.data.tasks) || [];
+  const policies = bmemPolicies();
+  if (!tasks.length) {
+    $("bmemTasks").innerHTML = '<tr><td colspan="9" class="hint">还没有战斗记录，先跑一场战斗</td></tr>';
+    return;
+  }
+  $("bmemTasks").innerHTML = tasks.map((item) => {
+    const rate = item.runs ? Math.round((item.win_rate || 0) * 100) : 0;
+    const options = ['<option value="">自动（推荐/全局）</option>'].concat(
+      Object.keys(policies).map((id) =>
+        `<option value="${esc(id)}" ${item.assigned === id ? "selected" : ""}>${esc((policies[id] && policies[id].name) || id)}</option>`
+      )
+    ).join("");
+    return `<tr>
+      <td>${esc(item.city)}</td>
+      <td>${esc(item.task)}</td>
+      <td>${item.runs}</td>
+      <td>${rate}%</td>
+      <td>${item.avg_rounds == null ? "-" : item.avg_rounds}</td>
+      <td>${item.best_rounds == null ? "-" : item.best_rounds}</td>
+      <td>${esc(item.recommended || "-")}</td>
+      <td><select data-bmem-assign="${esc(item.key)}">${options}</select></td>
+      <td><button class="btn" data-bmem-map="${esc(item.key)}">编辑位置</button></td>
+    </tr>`;
+  }).join("");
+}
+
+state.bmemory.map = null;
+
+function editBmemMap(key) {
+  const tasks = (state.bmemory.data && state.bmemory.data.tasks) || [];
+  const task = tasks.find((item) => item.key === key);
+  const map = (task && task.map) || {};
+  state.bmemory.map = {
+    key,
+    rows: Math.max(1, Math.min(40, Number(map.rows) || 13)),
+    cols: Math.max(1, Math.min(40, Number(map.cols) || 15)),
+    allies: (map.allies || []).map((p) => [Number(p[0]), Number(p[1])]),
+    enemies: (map.enemies || []).map((p) => [Number(p[0]), Number(p[1])]),
+    blocked: (map.blocked || []).map((p) => [Number(p[0]), Number(p[1])]),
+    screen_limited: !!map.screen_limited,
+    view: map.view || [10, 6],
+  };
+  $("bmemMapRows").value = state.bmemory.map.rows;
+  $("bmemMapCols").value = state.bmemory.map.cols;
+  $("bmemMapHint").textContent = task
+    ? `${task.city} / ${task.task} · 地图 ${state.bmemory.map.rows} × ${state.bmemory.map.cols}`
+    : key;
+  renderBmemMap();
+}
+
+function renderBmemMap() {
+  const map = state.bmemory.map;
+  if (!map) return;
+  const grid = $("bmemMapGrid");
+  grid.style.gridTemplateColumns = `repeat(${map.cols}, minmax(0, 1fr))`;
+  const ally = new Set(map.allies.map((p) => `${p[0]},${p[1]}`));
+  const enemy = new Set(map.enemies.map((p) => `${p[0]},${p[1]}`));
+  const blocked = new Set(map.blocked.map((p) => `${p[0]},${p[1]}`));
+  let html = "";
+  for (let row = 0; row < map.rows; row += 1) {
+    for (let col = 0; col < map.cols; col += 1) {
+      const key = `${row},${col}`;
+      const type = ally.has(key) ? "ally" : enemy.has(key) ? "enemy" : blocked.has(key) ? "blocked" : "empty";
+      html += `<button class="bmem-cell bmem-${type}" data-r="${row}" data-c="${col}" title="${row},${col}"></button>`;
+    }
+  }
+  grid.innerHTML = html;
+  const view = map.view || [10, 6];
+  $("bmemMapNote").textContent =
+    `地图 ${map.rows} × ${map.cols}（行 × 列）· 手机单屏视野 ${view[0]} × ${view[1]} 格` +
+    (map.screen_limited ? " · 地图大于屏幕，按实际格子显示" : "");
+  $("bmemMapJson").value = JSON.stringify(
+    { rows: map.rows, cols: map.cols, allies: map.allies, enemies: map.enemies, blocked: map.blocked },
+    null,
+    2
+  );
+}
+
+function clickBmemMapCell(row, col) {
+  const map = state.bmemory.map;
+  if (!map) return;
+  const key = `${row},${col}`;
+  const lists = ["allies", "enemies", "blocked"];
+  let next = "allies";
+  for (let index = 0; index < lists.length; index += 1) {
+    if (map[lists[index]].some((p) => p[0] === row && p[1] === col)) {
+      next = index + 1 < lists.length ? lists[index + 1] : "";
+      break;
+    }
+  }
+  for (const name of lists) {
+    map[name] = map[name].filter((p) => !(p[0] === row && p[1] === col));
+  }
+  if (next) map[next].push([row, col]);
+  renderBmemMap();
+}
+
+function applyBmemMapSize() {
+  const map = state.bmemory.map;
+  if (!map) return;
+  map.rows = Math.max(1, Math.min(40, Number($("bmemMapRows").value) || 13));
+  map.cols = Math.max(1, Math.min(40, Number($("bmemMapCols").value) || 15));
+  for (const name of ["allies", "enemies", "blocked"]) {
+    map[name] = map[name].filter((p) => p[0] < map.rows && p[1] < map.cols);
+  }
+  renderBmemMap();
+}
+
+function applyBmemMapJson() {
+  const map = state.bmemory.map;
+  if (!map) return;
+  let data;
+  try {
+    data = JSON.parse($("bmemMapJson").value || "{}");
+  } catch (error) {
+    banner("err", ["位置 JSON 解析失败：" + error.message]);
+    return;
+  }
+  map.rows = Math.max(1, Math.min(40, Number(data.rows) || map.rows));
+  map.cols = Math.max(1, Math.min(40, Number(data.cols) || map.cols));
+  for (const name of ["allies", "enemies", "blocked"]) {
+    map[name] = (Array.isArray(data[name]) ? data[name] : [])
+      .map((p) => [Number(p[0]), Number(p[1])])
+      .filter((p) => p[0] >= 0 && p[0] < map.rows && p[1] >= 0 && p[1] < map.cols);
+  }
+  $("bmemMapRows").value = map.rows;
+  $("bmemMapCols").value = map.cols;
+  renderBmemMap();
+}
+
+async function saveBmemMap() {
+  const map = state.bmemory.map;
+  if (!map) return;
+  const payload = {
+    rows: map.rows,
+    cols: map.cols,
+    allies: map.allies,
+    enemies: map.enemies,
+    blocked: map.blocked,
+  };
+  try {
+    const data = await post("/api/battle-memory/map", { key: map.key, map: payload });
+    if (!data.ok) {
+      banner("err", [data.error || "保存失败"]);
+      return;
+    }
+    state.bmemory.data = data.summary;
+    renderBmemTasks();
+    banner("ok", ["初始位置已保存"]);
+  } catch (error) {
+    banner("err", ["保存初始位置失败：" + error.message]);
+  }
+}
+
+async function saveBmemPolicy() {
+  let policy;
+  try {
+    policy = JSON.parse($("bmemPolicyJson").value || "{}");
+  } catch (error) {
+    banner("err", ["策略 JSON 解析失败：" + error.message]);
+    return;
+  }
+  const name = ($("bmemPolicyName").value || state.bmemory.name || "custom").trim();
+  policy.id = name;
+  policy.name = name;
+  try {
+    const data = await post("/api/battle-memory/policy", { name, policy });
+    state.bmemory.name = name;
+    state.bmemory.data = data.summary;
+    renderBmemPolicyOptions();
+    renderBmemPolicyJson();
+    renderBmemTasks();
+    banner("ok", [`已保存策略：${name}`]);
+  } catch (error) {
+    banner("err", ["保存策略失败：" + error.message]);
+  }
+}
+
+function newBmemPolicy() {
+  const current = bmemPolicies()[state.bmemory.name] || {};
+  const clone = JSON.parse(JSON.stringify(current));
+  const name = `custom_${Date.now().toString(36)}`;
+  clone.id = name;
+  clone.name = name;
+  $("bmemPolicyName").value = name;
+  $("bmemPolicyJson").value = JSON.stringify(clone, null, 2);
+  banner("ok", ["已复制当前策略，改完点「保存」"]);
+}
+
+async function setBmemActive() {
+  try {
+    const data = await post("/api/battle-memory/active", { name: state.bmemory.name });
+    state.bmemory.data = data.summary;
+    await loadBattleMemory();
+    banner("ok", [`全局策略已设为：${state.bmemory.name}`]);
+  } catch (error) {
+    banner("err", ["设置全局策略失败：" + error.message]);
+  }
+}
+
+async function deleteBmemPolicy() {
+  const name = state.bmemory.name;
+  if (!name || !confirm(`删除策略「${name}」？`)) return;
+  try {
+    const data = await post("/api/battle-memory/policy/delete", { name });
+    if (!data.ok) {
+      banner("err", [data.error || "删除失败"]);
+      return;
+    }
+    state.bmemory.name = "";
+    state.bmemory.data = data.summary;
+    await loadBattleMemory();
+    banner("ok", [`已删除策略：${name}`]);
+  } catch (error) {
+    banner("err", ["删除策略失败：" + error.message]);
+  }
+}
+
+async function assignBmemPolicy(key, policy) {
+  try {
+    await post("/api/battle-memory/assign", { key, policy });
+    banner("ok", ["任务策略已更新"]);
+    await loadBattleMemory();
+  } catch (error) {
+    banner("err", ["任务策略保存失败：" + error.message]);
   }
 }
 
@@ -1922,6 +2201,33 @@ $("tprecCityBlack").addEventListener("click", (e) => {
 $("btnNotifySave").addEventListener("click", saveNotify);
 $("btnNotifyTest").addEventListener("click", testNotify);
 
+$("btnBmemReload").addEventListener("click", loadBattleMemory);
+$("bmemPolicySelect").addEventListener("change", () => {
+  state.bmemory.name = $("bmemPolicySelect").value || "";
+  const policy = bmemPolicies()[state.bmemory.name] || {};
+  $("bmemPolicyName").value = policy.name || state.bmemory.name;
+  renderBmemPolicyJson();
+});
+$("btnBmemPolicyNew").addEventListener("click", newBmemPolicy);
+$("btnBmemPolicySave").addEventListener("click", saveBmemPolicy);
+$("btnBmemPolicyActive").addEventListener("click", setBmemActive);
+$("btnBmemPolicyDelete").addEventListener("click", deleteBmemPolicy);
+$("bmemTasks").addEventListener("change", (event) => {
+  const select = event.target.closest("select[data-bmem-assign]");
+  if (select) assignBmemPolicy(select.dataset.bmemAssign, select.value);
+});
+$("bmemTasks").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-bmem-map]");
+  if (button) editBmemMap(button.dataset.bmemMap);
+});
+$("bmemMapGrid").addEventListener("click", (event) => {
+  const cell = event.target.closest("button.bmem-cell");
+  if (cell) clickBmemMapCell(Number(cell.dataset.r), Number(cell.dataset.c));
+});
+$("btnBmemMapApplySize").addEventListener("click", applyBmemMapSize);
+$("btnBmemMapApplyJson").addEventListener("click", applyBmemMapJson);
+$("btnBmemMapSave").addEventListener("click", saveBmemMap);
+
 $("selfhealList").addEventListener("click", (e) => {
   const item = e.target.closest(".sh-item[data-id]");
   if (item) selectSelfheal(item.dataset.id);
@@ -2429,7 +2735,7 @@ async function stopCombo() {
 
 // 支持 #alerts 之类的深链接，方便直接打开某一页
 const startTab = (location.hash || "").replace(/^#/, "");
-if (["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "tprec", "notify"].includes(startTab)) {
+if (["home", "tasks", "combos", "shot", "logs", "selfheal", "alerts", "records", "mercs", "tprec", "bmemory", "notify"].includes(startTab)) {
   switchTab(startTab);
 }
 

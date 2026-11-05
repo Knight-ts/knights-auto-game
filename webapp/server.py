@@ -58,6 +58,9 @@ mercenary_rules = _load_module("mercenary_rules", ROOT / "agent" / "utils" / "me
 mercenary_admit = _load_module("mercenary_admit", ROOT / "agent" / "utils" / "mercenary_admit.py")
 task_records = _load_module("task_records", ROOT / "agent" / "utils" / "task_records.py")
 task_rules = _load_module("task_rules", ROOT / "agent" / "utils" / "task_rules.py")
+battle_memory = _load_module(
+    "battle_memory", ROOT / "agent" / "utils" / "battle_memory.py"
+)
 game_state = _load_module("game_state", ROOT / "agent" / "utils" / "game_state.py")
 taskpack = _load_module("taskpack", ROOT / "tools" / "taskpack.py")
 
@@ -515,6 +518,8 @@ class Handler(BaseHTTPRequestHandler):
                         "cities": sorted(cities),
                     },
                 )
+            elif path == "/api/battle-memory":
+                self._json(200, battle_memory.memory().summary())
             elif path == "/api/mercenary-rules":
                 self._json(200, mercenary_rules.load())
             elif path == "/api/child-name-config":
@@ -680,6 +685,61 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("max_level"),
                 )
                 self._json(200, {"ok": True, "rules": rules})
+            elif path == "/api/battle-memory/policy":
+                name = str(payload.get("name") or "custom").strip()
+                policy = payload.get("policy")
+                if not isinstance(policy, dict):
+                    self._json(400, {"ok": False, "error": "策略必须是 JSON 对象"})
+                else:
+                    saved = battle_memory.memory().save_policy(name, policy)
+                    self._json(
+                        200,
+                        {
+                            "ok": True,
+                            "policy": saved,
+                            "summary": battle_memory.memory().summary(),
+                        },
+                    )
+            elif path == "/api/battle-memory/active":
+                name = str(payload.get("name") or "").strip()
+                battle_memory.memory().set_active(name)
+                self._json(
+                    200, {"ok": True, "summary": battle_memory.memory().summary()}
+                )
+            elif path == "/api/battle-memory/assign":
+                key = str(payload.get("key") or "").strip()
+                policy = str(payload.get("policy") or "").strip()
+                battle_memory.memory().assign_key(key, policy)
+                self._json(
+                    200, {"ok": True, "summary": battle_memory.memory().summary()}
+                )
+            elif path == "/api/battle-memory/map":
+                key = str(payload.get("key") or "").strip()
+                map_data = payload.get("map")
+                if "/" not in key or not isinstance(map_data, dict):
+                    self._json(400, {"ok": False, "error": "缺少任务键或地图数据"})
+                else:
+                    city, task = key.split("/", 1)
+                    ok = battle_memory.memory().save_map(city, task, map_data)
+                    self._json(
+                        200,
+                        {
+                            "ok": ok,
+                            "error": "" if ok else "任务不存在",
+                            "summary": battle_memory.memory().summary(),
+                        },
+                    )
+            elif path == "/api/battle-memory/policy/delete":
+                name = str(payload.get("name") or "").strip()
+                deleted = battle_memory.memory().delete_policy(name)
+                self._json(
+                    200,
+                    {
+                        "ok": deleted,
+                        "error": "" if deleted else "策略不存在或不能删除默认策略",
+                        "summary": battle_memory.memory().summary(),
+                    },
+                )
             elif path == "/api/task-rules/blacklist":
                 city = str(payload.get("city") or "").strip()
                 name = str(payload.get("task") or "").strip()

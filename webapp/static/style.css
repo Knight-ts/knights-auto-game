@@ -258,3 +258,18 @@ table.scene-table tbody tr:hover td { background: rgba(255, 255, 255, .025); }
   .unknown-shot { width: 100%; height: auto; max-height: 260px; }
   .unknown-line select { max-width: 100%; }
 }
+
+/* 战斗记忆初始位置格子 */
+.bmem-cell {
+  aspect-ratio: 1 / 1;
+  border: 1px solid #2b3345;
+  border-radius: 3px;
+  background: #151b26;
+  cursor: pointer;
+  padding: 0;
+  min-width: 0;
+}
+.bmem-cell:hover { border-color: #6ea8ff; }
+.bmem-cell.bmem-ally { background: #3f7cff; border-color: #6ea8ff; }
+.bmem-cell.bmem-enemy { background: #ff5a5a; border-color: #ff8a8a; }
+.bmem-cell.bmem-blocked { background: #5a6270; border-color: #7b8494; }

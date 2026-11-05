@@ -776,8 +776,16 @@ class MarryProcessor(CustomAction):
             if context.tasker.stopping:
                 logger.info("相亲任务已停止")
                 break
-            if self._stop_requested or self._email_full() or not self._should_continue():
-                logger.info("回信已满或流程已结束，停止相亲")
+            if self._stop_requested:
+                logger.info("流程被标记结束（回不到联姻主界面/异常），停止相亲")
+                break
+            if self._email_full():
+                logger.info(
+                    f"回信已满（{self._email_current}/{self._email_total}），停止相亲"
+                )
+                break
+            if not self._should_continue():
+                logger.info("联姻条件不满足，停止相亲")
                 break
             if self._detail_fail_streak >= 3:
                 logger.info("连续 3 次打不开角色详情，列表里没有可相亲的娃了")
@@ -980,7 +988,13 @@ class MarryProcessor(CustomAction):
         self._tap_current_card(context)
         if not self._select_country(context, target_country):
             logger.warning(f"没能进入「{target_country}」的候选列表，跳过这个娃")
-            self._stop_requested = not self._back_to_marry_main(context)
+            # 回列表可能要处理弹窗/气泡，试两次再决定是否结束整轮
+            back_ok = self._back_to_marry_main(context)
+            if not back_ok:
+                back_ok = self._back_to_marry_main(context)
+            if not back_ok:
+                logger.warning("选国家失败后回不到联姻主界面，结束本次相亲")
+                self._stop_requested = True
             return
 
         if self._mode == "trait":
@@ -1024,7 +1038,9 @@ class MarryProcessor(CustomAction):
         for page in range(8):
             img = context.tasker.controller.post_screencap().wait().get()
             if context.run_recognition("CastleMarrySelectReject", img).hit:
-                logger.info("出现「被拒绝啦」提示，本次相亲结束")
+                logger.info("出现「被拒绝啦」提示，点掉并结束这个娃")
+                context.run_task("CastleMarrySelectReject")
+                time.sleep(0.6)
                 return False
             hit = context.run_recognition(
                 "CastleMarrySelectCountry",
@@ -1082,9 +1098,11 @@ class MarryProcessor(CustomAction):
         self._leave_detail(context)
         for _ in range(attempts):
             img = context.tasker.controller.post_screencap().wait().get()
-            if context.run_recognition("CastleMarryObjectsCheck", img).hit and not context.run_recognition(
-                "CastleMarryBusyTip", img
-            ).hit:
+            on_list = (
+                context.run_recognition("CastleMarryObjectsCheck", img).hit
+                or context.run_recognition("CastleMarryWindow", img).hit
+            )
+            if on_list and not context.run_recognition("CastleMarryBusyTip", img).hit:
                 return True
             self._dismiss_marry_busy_tip(context)
             context.run_task("BackButton_500ms")

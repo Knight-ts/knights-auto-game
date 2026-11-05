@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "active": "balanced",
+  "policies": {
+    "balanced": {
+      "id": "balanced",
+      "name": "均衡",
+      "description": "优先近处目标，其次残血；正常 A* 接近",
+      "target": {
+        "weights": {
+          "distance": -1.0,
+          "hp_ratio": -1.5,
+          "threat": 0.4
+        }
+      },
+      "move": {
+        "mode": "approach",
+        "weights": {}
+      },
+      "flags": {
+        "attack_occluded": true
+      }
+    },
+    "focus_weak": {
+      "id": "focus_weak",
+      "name": "集火残血",
+      "description": "优先打血量最低的敌人，距离次之",
+      "target": {
+        "weights": {
+          "distance": -0.4,
+          "hp_ratio": -3.0,
+          "threat": 0.2
+        }
+      },
+      "move": {
+        "mode": "approach",
+        "weights": {}
+      },
+      "flags": {
+        "attack_occluded": true
+      }
+    },
+    "defensive": {
+      "id": "defensive",
+      "name": "稳守反打",
+      "description": "移动时避开敌人贴身格，优先保持距离",
+      "target": {
+        "weights": {
+          "distance": -1.2,
+          "hp_ratio": -1.0,
+          "threat": 0.8
+        }
+      },
+      "move": {
+        "mode": "defensive",
+        "weights": {
+          "danger": -1.2
+        }
+      },
+      "flags": {
+        "attack_occluded": true
+      }
+    },
+    "hold": {
+      "id": "hold",
+      "name": "原地待机",
+      "description": "有敌人时不主动移动，只打进入攻击范围的目标",
+      "target": {
+        "weights": {
+          "distance": -1.0,
+          "hp_ratio": -1.0,
+          "threat": 0.4
+        }
+      },
+      "move": {
+        "mode": "hold",
+        "weights": {}
+      },
+      "flags": {
+        "attack_occluded": true
+      }
+    }
+  },
+  "tasks": {
+    "圣盾堡/海盗入侵": "hold",
+    "圣盾堡/爱之石": "hold",
+    "暮角城/永恒愿望": "hold"
+  },
+  "settings": {
+    "explore_every": 5
+  }
+}

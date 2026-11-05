@@ -166,6 +166,40 @@
 		"timeout": 1000,
 		"enabled": true
 	},
+	"TaskSelectSelect": {
+		"attach": {
+			"description": "接任务策略：level=最高等级 / fastest=预计回合最少 / balanced=回合+等级"
+		},
+		"recognition": "OCR",
+		"expected": [
+			"level"
+		],
+		"roi": [
+			0,
+			0,
+			1,
+			1
+		],
+		"timeout": 1000,
+		"enabled": true
+	},
+	"BattlePolicySelect": {
+		"attach": {
+			"description": "战斗策略：auto=跟随任务分配 / 或 battle_policies.json 里的策略 id"
+		},
+		"recognition": "OCR",
+		"expected": [
+			"auto"
+		],
+		"roi": [
+			0,
+			0,
+			1,
+			1
+		],
+		"timeout": 1000,
+		"enabled": true
+	},
 	"BattlePieceProbe": {
 		"recognition": "DirectHit",
 		"action": "Custom",
